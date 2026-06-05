@@ -1,0 +1,16 @@
+# Agastya API — pin major versions in production; relax locally while iterating.
+fastapi>=0.115.0,<0.117.0
+uvicorn[standard]>=0.32.0,<0.35.0
+pydantic-settings>=2.6.0,<3.0.0
+
+# Used by FastAPI for form bodies / future file uploads from the app.
+python-multipart>=0.0.12,<0.1.0
+
+# Async HTTP client — Supabase REST and other services.
+httpx>=0.27.0,<0.29.0
+
+# OpenAI SDK — Groq-compatible chat completions (optional when GROQ_API_KEY absent).
+openai>=1.60.0,<2.0.0
+
+# Supabase JWT verification for session merge (optional until SUPABASE_JWT_SECRET is set).
+PyJWT>=2.8.0,<3.0.0

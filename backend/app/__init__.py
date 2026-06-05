@@ -1,0 +1,1 @@
+"""Agastya FastAPI application package."""

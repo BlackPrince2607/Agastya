@@ -1,59 +1,103 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import {
+  Inter_400Regular,
+  Inter_500Medium,
+} from '@expo-google-fonts/inter';
+import {
+  NotoSerif_500Medium,
+  NotoSerif_700Bold,
+} from '@expo-google-fonts/noto-serif';
+import { SpaceGrotesk_600SemiBold } from '@expo-google-fonts/space-grotesk';
+import { DarkTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import 'react-native-reanimated';
 
-import { useColorScheme } from '@/components/useColorScheme';
+import '../global.css';
+
+import { cosmicGradients } from '@/constants/theme';
+import { subscribeAuthDeepLinks } from '@/services/authCallback';
+import { subscribeSupabaseSessionMerge } from '@/services/authMerge';
 
 export {
-  // Catch any errors thrown by the Layout component.
   ErrorBoundary,
 } from 'expo-router';
 
-export const unstable_settings = {
-  // Ensure that reloading on `/modal` keeps a back button present.
-  initialRouteName: '(tabs)',
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
+const AgastyaTheme = {
+  ...DarkTheme,
+  colors: {
+    ...DarkTheme.colors,
+    background: cosmicGradients.aurora[0],
+    card: cosmicGradients.aurora[1],
+    text: '#e8e4ff',
+    border: 'rgba(255,255,255,0.08)',
+    primary: '#a78bfa',
+  },
 };
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
-SplashScreen.preventAutoHideAsync();
+export const unstable_settings = {
+  initialRouteName: 'index',
+};
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
-    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
     ...FontAwesome.font,
+    Inter_400Regular,
+    Inter_500Medium,
+    NotoSerif_500Medium,
+    NotoSerif_700Bold,
+    SpaceGrotesk_600SemiBold,
   });
 
-  // Expo Router uses Error Boundaries to catch errors in the navigation tree.
   useEffect(() => {
-    if (error) throw error;
-  }, [error]);
-
-  useEffect(() => {
-    if (loaded) {
-      SplashScreen.hideAsync();
+    if (error) {
+      console.warn('[Agastya] Font load failed — continuing with system fonts', error);
     }
-  }, [loaded]);
+    if (loaded || error) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [loaded, error]);
 
-  if (!loaded) {
-    return null;
-  }
+  /** Never leave users on the native splash if fonts hang on device. */
+  useEffect(() => {
+    const t = setTimeout(() => {
+      SplashScreen.hideAsync().catch(() => {});
+    }, 2000);
+    return () => clearTimeout(t);
+  }, []);
 
-  return <RootLayoutNav />;
-}
-
-function RootLayoutNav() {
-  const colorScheme = useColorScheme();
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const stopDeepLinks = subscribeAuthDeepLinks();
+    const stopMerge = subscribeSupabaseSessionMerge();
+    return () => {
+      stopDeepLinks();
+      stopMerge();
+    };
+  }, []);
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-      </Stack>
-    </ThemeProvider>
+    <SafeAreaProvider>
+      <ThemeProvider value={AgastyaTheme}>
+        <StatusBar style="light" />
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: cosmicGradients.aurora[0] },
+            animation: 'fade',
+          }}>
+          <Stack.Screen name="index" />
+          <Stack.Screen name="welcome" />
+          <Stack.Screen name="onboarding" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="(main)" />
+        </Stack>
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }
