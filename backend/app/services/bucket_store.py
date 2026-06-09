@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app.schemas.palm import PalmAnalysis
+from app.schemas.predictions import PredictionsResponse
 from app.schemas.report import FullReport
 
 
@@ -15,7 +16,11 @@ class SessionBucket:
     preview: FullReport | None = None
     full: FullReport | None = None
     chat_tail: list[dict[str, str]] = field(default_factory=list)
+    # Cached predictions keyed by period ("month" | "3month" | "year").
+    predictions: dict[str, PredictionsResponse] = field(default_factory=dict)
     meta: dict[str, Any] = field(default_factory=dict)
+    # Server-authoritative premium flag — set by RevenueCat webhook, not the client.
+    is_premium: bool = False
 
 
 _BUCKETS: dict[str, SessionBucket] = {}

@@ -1,0 +1,45 @@
+# Fly.io deployment for the Agastya FastAPI backend.
+# Deploy with: fly deploy --dockerfile backend/Dockerfile --config fly.toml
+# First-time: fly launch --no-deploy, then fly secrets set GROQ_API_KEY=... etc.
+
+app = "agastya-api"
+primary_region = "sin"  # Singapore — closest to Indian user base; change as needed
+
+[build]
+  dockerfile = "backend/Dockerfile"
+
+[env]
+  DEBUG = "false"
+  PALM_ANALYSIS_MODE = "groq"
+  API_V1_PREFIX = "/v1"
+  # Set secrets via: fly secrets set GROQ_API_KEY=sk-... SUPABASE_URL=https://...
+  # Required secrets: GROQ_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
+  #                   SUPABASE_JWT_SECRET, REVENUECAT_WEBHOOK_SECRET, SENTRY_DSN
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+  [http_service.concurrency]
+    type = "connections"
+    hard_limit = 100
+    soft_limit = 80
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1
+
+[checks]
+  [checks.health]
+    grace_period = "10s"
+    interval = "30s"
+    method = "get"
+    path = "/v1/health"
+    port = 8000
+    timeout = "5s"
+    type = "http"

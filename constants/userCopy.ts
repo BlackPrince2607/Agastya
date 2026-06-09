@@ -19,7 +19,7 @@ export const SAMPLE_READING_BADGE = 'Sample reading';
 export const GUIDE_FINISH_PALM_FIRST =
   'Complete your palm reading first—then the Guide can personalize answers for you.';
 
-export type HomeShortcutAction = 'guide' | 'compat' | 'dating' | 'report' | 'tasks' | 'paywall';
+export type HomeShortcutAction = 'guide' | 'compat' | 'report' | 'tasks' | 'paywall';
 
 export type HomeShortcut = {
   icon: ComponentProps<typeof FontAwesome>['name'];

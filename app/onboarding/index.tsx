@@ -3,7 +3,7 @@ import { Image, ScrollView, Text, View } from 'react-native';
 
 import { CosmicDotGrid } from '@/components/layout/CosmicDotGrid';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
-import { StitchOnboardingHeader } from '@/components/onboarding/StitchOnboardingHeader';
+import { OnboardingHeader } from '@/components/onboarding/OnboardingHeader';
 import { CosmicButton } from '@/components/primitives';
 import { deferRouterPush } from '@/utils/routerDefer';
 import { ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS } from '@/constants/onboarding';
@@ -19,7 +19,7 @@ export default function TrustOnboardingScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 28, paddingBottom: 112, paddingTop: 8 }}
           keyboardShouldPersistTaps="handled">
-          <StitchOnboardingHeader ritualStep={{ current: ONBOARDING_STEPS.trust, total: ONBOARDING_TOTAL_STEPS }} />
+          <OnboardingHeader step={ONBOARDING_STEPS.trust} total={ONBOARDING_TOTAL_STEPS} showBack={false} />
 
           <View
             className="mb-8 mt-2 w-full max-w-sm self-center overflow-hidden rounded-2xl border border-white/10"
@@ -38,7 +38,7 @@ export default function TrustOnboardingScreen() {
               Guided by AI, rooted in tradition.
             </Text>
             <Text className="max-w-md text-center font-inter text-[17px] leading-7 text-md-on-surface-variant">
-              We analyze your palm lines and behavioral patterns to provide personalized life guidance.
+              We read your palm lines and the goals you share to offer guidance made just for you.
             </Text>
           </View>
 
@@ -54,22 +54,22 @@ export default function TrustOnboardingScreen() {
                   Privacy first
                 </Text>
                 <Text className="mt-2 font-inter text-[13px] leading-5 text-md-on-surface-variant">
-                  Biometric data is encrypted and never shared.
+                  Your palm photo is encrypted and never shared.
                 </Text>
               </View>
             </View>
 
             <View className="flex-row gap-3">
               <View className="min-h-[120px] flex-1 gap-3 rounded-2xl border border-white/10 bg-white/[0.06] p-4">
-                <Ionicons name="pulse" size={24} color="#dbc39f" />
+                <Ionicons name="hand-left-outline" size={24} color="#dbc39f" />
                 <Text className="font-space-grotesk text-[12px] font-semibold uppercase leading-tight tracking-[0.08em] text-mist">
-                  Advanced neural scanning
+                  Detailed palm reading
                 </Text>
               </View>
               <View className="min-h-[120px] flex-1 gap-3 rounded-2xl border border-white/10 bg-white/[0.06] p-4">
-                <Ionicons name="analytics" size={24} color="#c0b3cf" />
+                <Ionicons name="sparkles-outline" size={24} color="#c0b3cf" />
                 <Text className="font-space-grotesk text-[12px] font-semibold uppercase leading-tight tracking-[0.08em] text-mist">
-                  Pattern-first palm read
+                  Guidance made for you
                 </Text>
               </View>
             </View>

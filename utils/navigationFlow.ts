@@ -16,7 +16,7 @@ export function resolveResumeHref(): Href {
   const s = useSessionStore.getState();
 
   if (s.hasEnteredMain) {
-    return '/home';
+    return '/(main)/home';
   }
 
   if (s.previewReading || s.palmAnalysis) {
@@ -40,7 +40,7 @@ export function resolveResumeHref(): Href {
 
 export function enterMainApp() {
   useSessionStore.getState().setEnteredMain(true);
-  deferRouterReplace('/home');
+  deferRouterReplace('/(main)/home');
 }
 
 /** Return to ritual from main (keeps reading data). */
@@ -57,7 +57,7 @@ export async function prepareReturningUser(): Promise<Href> {
   const s = useSessionStore.getState();
 
   if (s.hasEnteredMain) {
-    return '/home';
+    return '/(main)/home';
   }
 
   return resolveResumeHref();
@@ -65,7 +65,7 @@ export async function prepareReturningUser(): Promise<Href> {
 
 export async function routeAfterSignInIntent(): Promise<void> {
   const href = await prepareReturningUser();
-  if (href === '/home') {
+  if (href === '/(main)/home') {
     enterMainApp();
     return;
   }

@@ -3,9 +3,10 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 
 import { persistentStorage } from '@/services/persistentStorage';
 import type { PalmAnalysisDto } from '@/types/palmAnalysis';
+import type { PredictionPeriod, PredictionsByPeriod, PredictionsResponse } from '@/types/predictions';
 import type { SimulatedReading } from '@/types/report';
 
-export type FocusTopic = 'love' | 'career' | 'money' | 'growth' | 'matching' | 'dating';
+export type FocusTopic = 'love' | 'career' | 'money' | 'growth' | 'matching';
 
 export type BillingPeriod = 'monthly' | 'annual';
 
@@ -36,9 +37,8 @@ type SessionStore = {
   previewReading: SimulatedReading | null;
   fullReading: SimulatedReading | null;
 
-  dailyTasks: string[];
-  dailyTasksDate: string | null;
-  dailyTasksVariant: string | null;
+  /** Cached predictions keyed by period (filled incrementally). */
+  predictions: Partial<PredictionsByPeriod> | null;
 
   /** One-time notice when cloud sync fails (shown on home, dismissible). */
   syncNotice: string | null;
@@ -56,7 +56,7 @@ type SessionStore = {
   setPalmAnalysis: (payload: PalmAnalysisDto | null) => void;
   setPreviewReading: (reading: SimulatedReading | null) => void;
   setFullReading: (reading: SimulatedReading | null) => void;
-  setDailyTasks: (tasks: string[], variant: string | null, isoDate: string) => void;
+  setPredictions: (period: PredictionPeriod, payload: PredictionsResponse) => void;
   setSyncNotice: (message: string | null) => void;
   setDismissedUpgradeCard: (v: boolean) => void;
 
@@ -68,9 +68,7 @@ const emptyReadingState = {
   palmAnalysis: null as PalmAnalysisDto | null,
   previewReading: null as SimulatedReading | null,
   fullReading: null as SimulatedReading | null,
-  dailyTasks: [] as string[],
-  dailyTasksDate: null as string | null,
-  dailyTasksVariant: null as string | null,
+  predictions: null as Partial<PredictionsByPeriod> | null,
 };
 
 export const useSessionStore = create<SessionStore>()(
@@ -113,12 +111,8 @@ export const useSessionStore = create<SessionStore>()(
       setPalmAnalysis: (payload) => set({ palmAnalysis: payload }),
       setPreviewReading: (reading) => set({ previewReading: reading }),
       setFullReading: (reading) => set({ fullReading: reading }),
-      setDailyTasks: (tasks, variant, isoDate) =>
-        set({
-          dailyTasks: tasks,
-          dailyTasksVariant: variant,
-          dailyTasksDate: isoDate,
-        }),
+      setPredictions: (period, payload) =>
+        set({ predictions: { ..._get().predictions, [period]: payload } }),
       setSyncNotice: (syncNotice) => set({ syncNotice }),
       setDismissedUpgradeCard: (dismissedUpgradeCard) => set({ dismissedUpgradeCard }),
 
@@ -143,6 +137,8 @@ export const useSessionStore = create<SessionStore>()(
     }),
     {
       name: 'agastya-session-v3',
+      // Manual rehydrate via usePersistHydration — avoids web SSR/client persist races.
+      skipHydration: true,
       storage: createJSONStorage(() => persistentStorage),
       onRehydrateStorage: () => (state, err) => {
         if (err && __DEV__) {
@@ -167,9 +163,7 @@ export const useSessionStore = create<SessionStore>()(
         palmAnalysis: state.palmAnalysis,
         previewReading: state.previewReading,
         fullReading: state.fullReading,
-        dailyTasks: state.dailyTasks,
-        dailyTasksDate: state.dailyTasksDate,
-        dailyTasksVariant: state.dailyTasksVariant,
+        predictions: state.predictions,
         dismissedUpgradeCard: state.dismissedUpgradeCard,
       }),
     },

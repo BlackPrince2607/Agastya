@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MotiView } from '@/components/moti/MotiView';
 import { CosmicDotGrid } from '@/components/layout/CosmicDotGrid';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
-import { StitchOnboardingHeader } from '@/components/onboarding/StitchOnboardingHeader';
+import { OnboardingHeader } from '@/components/onboarding/OnboardingHeader';
 import {
   AuraNebulaCard,
   BlurContainer,
@@ -28,14 +28,13 @@ const FOCUS_LABEL: Record<FocusTopic, string> = {
   career: 'Career',
   money: 'Money',
   growth: 'Growth',
-  matching: 'Matching',
-  dating: 'Dating',
+  matching: 'Compatibility',
 };
 
 const LOCKED_PERKS = [
-  'Full metric orbit & aura spectrum',
-  'Bold prediction filament',
-  'Unlimited guide transmissions',
+  'All life scores and your full aura',
+  'Your complete bold prediction',
+  'Unlimited Guide chats',
 ];
 
 export default function ReportPreviewScreen() {
@@ -67,7 +66,7 @@ export default function ReportPreviewScreen() {
             paddingHorizontal: 24,
             paddingTop: 8,
           }}>
-          <StitchOnboardingHeader ritualStep={{ current: ONBOARDING_STEPS.reportPreview, total: ONBOARDING_TOTAL_STEPS }} />
+          <OnboardingHeader step={ONBOARDING_STEPS.reportPreview} total={ONBOARDING_TOTAL_STEPS} />
 
           <MotiView from={{ opacity: 0, translateY: 12 }} animate={{ opacity: 1, translateY: 0 }}>
             <View className="flex-row flex-wrap items-center gap-2">
@@ -127,7 +126,7 @@ export default function ReportPreviewScreen() {
           {focus.length > 0 ? (
             <View className="gap-2">
               <Text className="font-space-grotesk text-[9px] uppercase tracking-[0.32em] text-md-on-primary-container">
-                Focus threads
+                Your focus areas
               </Text>
               <View className="flex-row flex-wrap gap-2">
                 {focus.map((topic) => (
@@ -161,10 +160,10 @@ export default function ReportPreviewScreen() {
           <View className="relative overflow-hidden rounded-4xl border border-white/10">
             <GlowCard muted className="opacity-40">
               <Text className="font-space-grotesk text-[10px] uppercase tracking-[0.35em] text-md-primary">
-                Life metrics
+                Life scores
               </Text>
               <Text className="mt-2 font-inter text-[12px] text-md-on-primary-container">
-                Symbolic scores for mood-boarding only.
+                Symbolic scores, just for reflection and fun.
               </Text>
               <View className="mt-8 flex-row flex-wrap justify-around gap-x-3 gap-y-8">
                 <MetricDonut label="Love" value={reading.metrics.love} size={72} />
@@ -178,7 +177,7 @@ export default function ReportPreviewScreen() {
                 Included with full access
               </Text>
               <Text className="mt-3 text-center font-inter text-[14px] leading-6 text-mist/90">
-                Sharper metric readouts, aura palette, and the full prediction strand unlock after you subscribe.
+                Your full scores, aura palette, and complete prediction unlock when you upgrade.
               </Text>
             </View>
           </View>
@@ -190,7 +189,7 @@ export default function ReportPreviewScreen() {
 
           <GlowCard className="border-stitch-signal/20">
             <GradientText className="font-space-grotesk text-[10px] uppercase tracking-[0.38em]">
-              Still sealed
+              Locked for now
             </GradientText>
             <Text className="mt-4 font-inter text-[15px] leading-7 text-mist/75" numberOfLines={3}>
               {reading.boldPrediction}
@@ -212,7 +211,7 @@ export default function ReportPreviewScreen() {
           style={{ elevation: 24 }}>
           <View style={{ paddingBottom: Math.max(insets.bottom, 16) }} className="gap-y-2.5">
             {premium ? (
-              <CosmicButton gradient="nebulaMd3" label="Enter your cosmic home" onPress={() => enterMainApp()} />
+              <CosmicButton gradient="nebulaMd3" label="Open Agastya" onPress={() => enterMainApp()} />
             ) : (
               <CosmicButton
                 gradient="nebulaMd3"
@@ -227,7 +226,7 @@ export default function ReportPreviewScreen() {
             )}
             <CosmicButton
               variant="ghost"
-              label="Save & sync account"
+              label="Save & sync my reading"
               onPress={() =>
                 router.push({
                   pathname: '/onboarding/account',
@@ -235,7 +234,7 @@ export default function ReportPreviewScreen() {
                 })
               }
             />
-            <CosmicButton variant="ghost" label="Explore app (preview)" onPress={() => enterMainApp()} />
+            <CosmicButton variant="ghost" label="Browse the app" onPress={() => enterMainApp()} />
             <Text className="mt-2 text-center font-inter text-[11px] leading-5 text-md-on-primary-container">
               Preview mode shows shortened insights. Upgrade anytime from Report or Profile.
             </Text>

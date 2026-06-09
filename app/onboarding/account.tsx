@@ -17,14 +17,14 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-import { CosmicDotGrid } from '@/components/layout/CosmicDotGrid';
+import { GoogleLogo } from '@/components/auth/GoogleLogo';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
-import { StitchOnboardingHeader } from '@/components/onboarding/StitchOnboardingHeader';
-import { BlurContainer, CosmicButton, GradientText } from '@/components/primitives';
+import { OnboardingHeader } from '@/components/onboarding/OnboardingHeader';
+import { GlassCard, Icon, NebulaButton, type IconName } from '@/components/ui';
 import { LEGAL_URLS } from '@/constants/legal';
 import { ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS } from '@/constants/onboarding';
 import { SIGN_IN_UNAVAILABLE } from '@/constants/userCopy';
-import { STITCH_PALM_ART_URI, stitchMd3 } from '@/constants/stitchWelcome';
+import { STITCH_PALM_ART_URI } from '@/constants/stitchWelcome';
 import { track } from '@/services/analytics';
 import { restoreSessionFromServer } from '@/services/sessionRestore';
 import { getSupabase, isSupabaseEnabled } from '@/services/supabase';
@@ -32,10 +32,10 @@ import { useSessionStore } from '@/store/sessionStore';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { enterMainApp as goToMainApp, hasRitualReading, resolveResumeHref } from '@/utils/navigationFlow';
 
-const TRUST_BADGES = [
-  { icon: 'cloud-done-outline' as const, label: 'Secure backup' },
-  { icon: 'shield-checkmark-outline' as const, label: 'Private & safe' },
-  { icon: 'phone-portrait-outline' as const, label: 'Any device' },
+const TRUST_BADGES: { icon: IconName; label: string }[] = [
+  { icon: 'cloud_done', label: 'Secure Backup' },
+  { icon: 'encrypted', label: 'Private & Safe' },
+  { icon: 'devices', label: 'Any Device' },
 ];
 
 export default function SaveJourneyScreen() {
@@ -118,126 +118,141 @@ export default function SaveJourneyScreen() {
     <CosmicScreen variant="stitch">
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1">
         <View className="flex-1">
-          <CosmicDotGrid />
           <ScrollView
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={{
               paddingHorizontal: 24,
               paddingTop: 8,
-              paddingBottom: 220 + insets.bottom,
-              gap: 22,
+              paddingBottom: 230 + insets.bottom,
+              gap: 24,
             }}>
-            <StitchOnboardingHeader ritualStep={{ current: ONBOARDING_STEPS.account, total: ONBOARDING_TOTAL_STEPS }} />
+            <OnboardingHeader step={ONBOARDING_STEPS.account} total={ONBOARDING_TOTAL_STEPS} />
 
-            <View className="overflow-hidden rounded-3xl border border-white/12">
+            {/* Hero */}
+            <View className="overflow-hidden rounded-glass border border-white/10 shadow-aura" style={{ aspectRatio: 4 / 3 }}>
               <Image
                 accessibilityIgnoresInvertColors
                 source={{ uri: STITCH_PALM_ART_URI }}
-                className="h-44 w-full"
+                className="h-full w-full"
                 resizeMode="cover"
               />
               <LinearGradient
-                colors={['transparent', stitchMd3.background]}
-                style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 80 }}
+                colors={['transparent', 'rgba(20,19,21,0.2)', '#141315']}
+                style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '55%' }}
               />
             </View>
 
-            <View>
-              <GradientText className="font-space-grotesk text-[11px] uppercase tracking-[0.38em] text-stitch-signal">
-                {afterPaywall ? 'Almost there' : 'Save your journey'}
-              </GradientText>
-              <Text className="mt-4 font-noto-serif text-[30px] leading-9 tracking-tight text-mist">
-                Save your reading
+            {/* Headline */}
+            <View className="items-center gap-2">
+              <Text className="text-center font-headline text-[30px] leading-9 text-on-surface">
+                Save Your Reading & Continue Your Journey
               </Text>
-              <Text className="mt-3 font-inter text-[15px] leading-6 text-md-on-surface-variant">
-                Create an account to access your palm report, chat, and daily guidance on any device.
+              <Text className="text-center font-body text-[15px] leading-6 text-on-surface-variant">
+                Sign in to save your report, chat history, and daily progress on any device.
               </Text>
-              {isSignedIn ? (
-                <View className="mt-4 rounded-2xl border border-stitch-signal/35 bg-stitch-signal/10 px-4 py-3">
-                  <Text className="font-inter text-[14px] leading-6 text-stitch-signal">
-                    {authEmail ? `Signed in as ${authEmail}.` : 'You’re signed in.'}{' '}
-                    {hasEnteredMain ? 'Return to the app below.' : 'Finish onboarding, then enter the app.'}
-                  </Text>
-                </View>
-              ) : null}
             </View>
 
-            <View className="flex-row gap-2">
+            {isSignedIn ? (
+              <GlassCard className="w-full px-4 py-3" style={{ borderColor: 'rgba(34,211,238,0.35)' }}>
+                <Text className="font-body text-[14px] leading-6" style={{ color: '#22d3ee' }}>
+                  {authEmail ? `Signed in as ${authEmail}.` : 'You’re signed in.'}{' '}
+                  {hasEnteredMain ? 'Return to the app below.' : 'Finish onboarding, then enter the app.'}
+                </Text>
+              </GlassCard>
+            ) : null}
+
+            {/* Trust indicators */}
+            <View className="flex-row gap-3">
               {TRUST_BADGES.map((b) => (
-                <View
-                  key={b.label}
-                  className="min-w-0 flex-1 items-center gap-2 rounded-2xl border border-white/12 bg-white/[0.05] px-2 py-3">
-                  <Ionicons name={b.icon} size={20} color={stitchMd3.primary} />
-                  <Text className="text-center font-inter text-[10px] font-medium leading-4 text-mist">{b.label}</Text>
-                </View>
+                <GlassCard key={b.label} className="min-w-0 flex-1 items-center gap-2 px-2 py-3">
+                  <Icon name={b.icon} size={22} color="#d3beeb" />
+                  <Text className="text-center font-label text-[10px] uppercase tracking-[0.08em] text-on-surface">
+                    {b.label}
+                  </Text>
+                </GlassCard>
               ))}
             </View>
 
-            <CosmicButton gradient="nebulaMd3" label="Continue with Apple" onPress={() => void oauth('apple')} />
+            {/* Social login stack */}
+            <View className="gap-3">
+              <Pressable
+                onPress={() => void oauth('apple')}
+                accessibilityRole="button"
+                accessibilityLabel="Continue with Apple"
+                className="flex-row items-center justify-center gap-3 rounded-pill bg-white py-4 active:opacity-90">
+                <Ionicons name="logo-apple" size={20} color="#000" />
+                <Text className="font-body-medium text-[16px] font-semibold text-black">Continue with Apple</Text>
+              </Pressable>
 
-            <Pressable
-              onPress={() => void oauth('google')}
-              className="flex-row items-center justify-center gap-3 rounded-full border border-white/16 bg-white/[0.06] py-4 active:opacity-90">
-              <Ionicons name="logo-google" size={20} color="#fff" />
-              <Text className="font-inter text-[16px] font-medium text-mist">Continue with Google</Text>
-            </Pressable>
-
-            <View className="flex-row items-center gap-4 py-1">
-              <View className="h-px flex-1 bg-white/12" />
-              <Text className="font-space-grotesk text-[11px] uppercase tracking-[0.28em] text-md-on-primary-container">
-                Or
-              </Text>
-              <View className="h-px flex-1 bg-white/12" />
+              <Pressable
+                onPress={() => void oauth('google')}
+                accessibilityRole="button"
+                accessibilityLabel="Continue with Google"
+                className="flex-row items-center justify-center gap-3 rounded-pill border border-white/10 bg-white/[0.05] py-4 active:opacity-90">
+                <GoogleLogo size={20} />
+                <Text className="font-body-medium text-[16px] font-semibold text-on-surface">Continue with Google</Text>
+              </Pressable>
             </View>
 
-            <View>
-              <Text className="mb-2 font-inter text-[13px] text-md-on-surface-variant">Email address</Text>
+            {/* Divider */}
+            <View className="flex-row items-center gap-4">
+              <View className="h-px flex-1 bg-white/10" />
+              <Text className="font-label text-[10px] uppercase tracking-[0.28em] text-on-surface-variant">Or</Text>
+              <View className="h-px flex-1 bg-white/10" />
+            </View>
+
+            {/* Email form */}
+            <View className="gap-2">
+              <Text className="ml-4 font-label text-[11px] uppercase tracking-[0.1em] text-on-surface-variant">
+                Email Address
+              </Text>
               <TextInput
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
                 placeholder="you@example.com"
-                placeholderTextColor="rgba(255,255,255,0.38)"
+                placeholderTextColor="rgba(255,255,255,0.25)"
                 value={email}
                 onChangeText={setEmail}
-                className="rounded-full border border-white/16 bg-black/50 px-5 py-4 font-inter text-[16px] text-mist"
+                className="rounded-pill border border-white/10 bg-surface-container-lowest/50 px-6 py-4 font-body text-[16px] text-on-surface"
               />
-              <View className="mt-4">
-                <CosmicButton gradient="nebulaMd3" label="Continue with Email" onPress={() => void magicLink()} />
+              <View className="mt-2">
+                <NebulaButton label="Continue with Email" onPress={() => void magicLink()} />
               </View>
             </View>
 
-            <View className="flex-row flex-wrap justify-center gap-x-4 gap-y-2 pt-2">
-              <Pressable onPress={() => openLegal(LEGAL_URLS.terms)}>
-                <Text className="font-inter text-[12px] text-md-on-primary-container underline">Terms of Use</Text>
-              </Pressable>
-              <Pressable onPress={() => openLegal(LEGAL_URLS.privacy)}>
-                <Text className="font-inter text-[12px] text-md-on-primary-container underline">Privacy Policy</Text>
-              </Pressable>
+            {/* Footer */}
+            <View className="items-center gap-2 pt-1">
+              <View className="flex-row justify-center gap-6">
+                <Pressable onPress={() => openLegal(LEGAL_URLS.terms)}>
+                  <Text className="font-label text-[11px] uppercase tracking-[0.08em] text-on-surface-variant">
+                    Terms of Use
+                  </Text>
+                </Pressable>
+                <Pressable onPress={() => openLegal(LEGAL_URLS.privacy)}>
+                  <Text className="font-label text-[11px] uppercase tracking-[0.08em] text-on-surface-variant">
+                    Privacy Policy
+                  </Text>
+                </Pressable>
+              </View>
+              <Text className="font-label text-[10px] uppercase tracking-[0.08em] text-on-surface-variant/70">
+                © {new Date().getFullYear()} Agastya AI Spirituality
+              </Text>
             </View>
-            <Text className="text-center font-inter text-[11px] text-md-on-primary-container/80">
-              © {new Date().getFullYear()} Agastya AI Spirituality
-            </Text>
           </ScrollView>
 
-          <BlurContainer
-            intensity={56}
-            className="absolute bottom-0 left-0 right-0 z-20 rounded-none border-t border-white/14 bg-[#0f0e10]/94 px-6 pt-4"
-            style={{ elevation: 24 }}>
-            <View style={{ paddingBottom: Math.max(insets.bottom, 16) }} className="gap-y-2.5">
+          {/* Continuation dock */}
+          <View
+            className="absolute bottom-0 left-0 right-0 z-20 border-t border-white/10 bg-[#0f0e10]/95 px-6 pt-4"
+            style={{ paddingBottom: Math.max(insets.bottom, 16) }}>
+            <View className="gap-y-2.5">
               {hasRitualReading() ? (
-                <CosmicButton gradient="nebulaMd3" label="Open Agastya" onPress={() => goToMainApp()} />
+                <NebulaButton label="Open Agastya" onPress={() => goToMainApp()} />
               ) : (
-                <CosmicButton
-                  gradient="nebulaMd3"
-                  label="Continue onboarding"
-                  onPress={() => router.replace(resolveResumeHref())}
-                />
+                <NebulaButton label="Continue onboarding" onPress={() => router.replace(resolveResumeHref())} />
               )}
-              <CosmicButton
-                variant="ghost"
-                label={hasRitualReading() ? 'Skip sign-in for now' : 'Back to reading preview'}
+              <Pressable
                 onPress={() => {
                   if (hasRitualReading()) {
                     goToMainApp();
@@ -245,23 +260,22 @@ export default function SaveJourneyScreen() {
                     router.replace('/onboarding/report-preview');
                   }
                 }}
-              />
+                className="items-center py-2 active:opacity-80">
+                <Text className="font-label text-[11px] uppercase tracking-[0.1em] text-on-surface-variant">
+                  {hasRitualReading() ? 'Skip sign-in for now' : 'Back to reading preview'}
+                </Text>
+              </Pressable>
               {!afterPaywall && !premium ? (
                 <Pressable
-                  onPress={() =>
-                    router.push({
-                      pathname: '/onboarding/paywall',
-                      params: { seed: mergedSeed },
-                    })
-                  }
-                  className="py-2">
-                  <Text className="text-center font-inter text-[13px] text-stitch-signal">
+                  onPress={() => router.push({ pathname: '/onboarding/paywall', params: { seed: mergedSeed } })}
+                  className="items-center pb-1">
+                  <Text className="font-body text-[13px]" style={{ color: '#22d3ee' }}>
                     Haven’t unlocked yet? View plans
                   </Text>
                 </Pressable>
               ) : null}
             </View>
-          </BlurContainer>
+          </View>
         </View>
       </KeyboardAvoidingView>
     </CosmicScreen>

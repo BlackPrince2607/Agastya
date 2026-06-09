@@ -6,7 +6,7 @@ import type { FocusTopic, Gender } from '@/store/sessionStore';
 import { useSessionStore } from '@/store/sessionStore';
 import type { PalmAnalysisDto } from '@/types/palmAnalysis';
 
-const FOCUS_SET = new Set<FocusTopic>(['love', 'career', 'money', 'growth', 'matching', 'dating']);
+const FOCUS_SET = new Set<FocusTopic>(['love', 'career', 'money', 'growth', 'matching']);
 
 function parseFocusTopics(raw: string[]): FocusTopic[] {
   const topics = raw.filter((t): t is FocusTopic => FOCUS_SET.has(t as FocusTopic));

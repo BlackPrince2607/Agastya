@@ -1,8 +1,22 @@
 """Daily ritual tasks."""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from app.schemas.palm import PalmAnalysis
+
+
+class Task(BaseModel):
+    id: str
+    text: str
+    description: str
+    category: Literal["love", "career", "money", "growth"]
+    estimated_minutes: int = Field(default=10, alias="estimatedMinutes")
+    difficulty: Literal["easy", "medium", "hard"] = "easy"
+    examples: list[str] = Field(default_factory=list)
+
+    model_config = {"populate_by_name": True}
 
 
 class DailyTasksBody(BaseModel):
@@ -14,5 +28,5 @@ class DailyTasksBody(BaseModel):
 
 
 class DailyTasksResponse(BaseModel):
-    tasks: list[str]
+    tasks: list[Task]
     variant: str

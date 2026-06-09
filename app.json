@@ -3,6 +3,9 @@
     "name": "Agastya",
     "slug": "Agastya",
     "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "agastya",
@@ -14,15 +17,40 @@
       "backgroundColor": "#05020a"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.agastya.app",
+      "associatedDomains": [
+        "applinks:agastya.app",
+        "webcredentials:agastya.app"
+      ],
+      "infoPlist": {
+        "NSCameraUsageDescription": "Allow Agastya to open the ritual camera for your palm choreography.",
+        "UIBackgroundModes": ["remote-notification"]
+      }
     },
     "android": {
+      "package": "com.agastya.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#05020a"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "agastya.app",
+              "pathPrefix": "/"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ],
+      "permissions": ["RECEIVE_BOOT_COMPLETED", "VIBRATE"]
     },
     "web": {
       "bundler": "metro",
@@ -31,14 +59,39 @@
     },
     "plugins": [
       "expo-router",
+      "expo-font",
       [
         "expo-camera",
         {
           "cameraPermission": "Allow Agastya to open the ritual camera for your palm choreography."
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#141315",
+          "sounds": []
+        }
+      ],
+      [
+        "@sentry/react-native/expo",
+        {
+          "url": "https://sentry.io/",
+          "project": "agastya",
+          "organization": "agastya-ai"
+        }
+      ]
     ],
+    "extra": {
+      "eas": {
+        "projectId": "REPLACE_WITH_EAS_PROJECT_ID"
+      }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/REPLACE_WITH_EAS_PROJECT_ID"
+    },
     "experiments": {
       "typedRoutes": true
     }

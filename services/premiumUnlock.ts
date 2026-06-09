@@ -2,7 +2,7 @@ import { generateReport } from '@/services/agastyaApi';
 import { track } from '@/services/analytics';
 import { normalizeFullReport } from '@/services/normalizeReport';
 import {
-  isDevPremiumBypassEnabled,
+  isPremiumBypassEnabled,
   isRevenueCatConfigured,
   purchasePremiumPlan,
   refreshPremiumFromStore,
@@ -47,7 +47,7 @@ export async function unlockPremiumFromStore(options: {
   const { mode, seed } = options;
   const setPremium = useSessionStore.getState().setPremium;
 
-  if (isDevPremiumBypassEnabled()) {
+  if (isPremiumBypassEnabled()) {
     setPremium(true);
     await materializeFullReport(seed);
     track('premium_unlock_dev');

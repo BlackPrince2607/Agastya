@@ -1,14 +1,18 @@
 import { useEffect, useState } from 'react';
+import { Platform } from 'react-native';
 
+import { isServerEnvironment } from '@/services/persistentStorage';
 import { useSessionStore } from '@/store/sessionStore';
+import { useTaskStore } from '@/store/taskStore';
 
-const HYDRATION_TIMEOUT_MS = 2500;
+const HYDRATION_TIMEOUT_MS = Platform.OS === 'web' ? 400 : 2500;
 
 /** Waits for zustand-persist hydration before routing on anonymous IDs. */
 export function usePersistHydration(): boolean {
   const persistApi = useSessionStore.persist;
 
   const [hydrated, setHydrated] = useState(() => {
+    if (isServerEnvironment()) return true;
     try {
       return persistApi.hasHydrated();
     } catch {
@@ -17,6 +21,8 @@ export function usePersistHydration(): boolean {
   });
 
   useEffect(() => {
+    if (isServerEnvironment()) return;
+
     let unsub: (() => void) | undefined;
     let timeout: ReturnType<typeof setTimeout> | undefined;
 
@@ -32,6 +38,7 @@ export function usePersistHydration(): boolean {
       } else {
         setHydrated(true);
       }
+      void useTaskStore.persist.rehydrate();
     } catch {
       setHydrated(true);
     }

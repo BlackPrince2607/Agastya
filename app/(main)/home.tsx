@@ -1,142 +1,214 @@
-import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useMemo } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { SectionHeader, InlineError, StatusPill } from '@/components/feedback';
-import { QuickAccessGrid } from '@/components/home/QuickAccessGrid';
+import { InlineError, StatusPill } from '@/components/feedback';
 import { MainTabScroll } from '@/components/layout/MainTabScroll';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { MainCosmicHeader } from '@/components/layout/MainCosmicHeader';
-import { CosmicButton, GlowCard, InsightCard } from '@/components/primitives';
+import { GlassCard, Icon, NebulaButton, type IconName } from '@/components/ui';
 import {
   buildDailyInsight,
   displayNameOrDefault,
-  HOME_SHORTCUTS,
   JOURNEY_DAY_FOOTNOTE,
   JOURNEY_DAY_LABEL,
   OFFLINE_LIMITED_LABEL,
-  type HomeShortcutAction,
 } from '@/constants/userCopy';
 import { getApiHealth } from '@/services/connectivity';
 import { useSessionStore } from '@/store/sessionStore';
-import { seedDigits } from '@/utils/deterministicNumbers';
+import { useTaskStore } from '@/store/taskStore';
 
-function openShortcut(action: HomeShortcutAction, premium: boolean) {
-  switch (action) {
-    case 'guide':
-      router.push('/guide');
-      break;
-    case 'compat':
-      router.push('/match');
-      break;
-    case 'dating':
-      router.push('/dating');
-      break;
-    case 'tasks':
-      router.push('/tasks');
-      break;
-    case 'report':
-      router.push('/report');
-      break;
-    case 'paywall':
-      router.push(premium ? '/report' : '/onboarding/paywall');
-      break;
-  }
+type Tool = { icon: IconName; label: string; hint?: string; onPress: () => void; wide?: boolean };
+
+function timeGreeting(): string {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good Morning';
+  if (h < 17) return 'Good Afternoon';
+  return 'Good Evening';
+}
+
+/** Calendar days since the reading was first created (based on sessionStore taskDate / history). */
+function calcJourneyDays(history: Record<string, string[]>): number {
+  const dates = Object.keys(history).sort();
+  if (!dates.length) return 1;
+  const first = new Date(`${dates[0]}T00:00:00`);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diffMs = today.getTime() - first.getTime();
+  const diffDays = Math.floor(diffMs / 86_400_000);
+  return Math.max(1, diffDays + 1);
 }
 
 export default function HomeDashboardScreen() {
   const palmAnalysis = useSessionStore((s) => s.palmAnalysis);
   const displayName = useSessionStore((s) => s.userDisplayName);
   const premium = useSessionStore((s) => s.hasUnlockedPremium);
-  const readingSeed = useSessionStore((s) => s.readingSeed);
   const syncNotice = useSessionStore((s) => s.syncNotice);
   const dismissedUpgrade = useSessionStore((s) => s.dismissedUpgradeCard);
   const setSyncNotice = useSessionStore((s) => s.setSyncNotice);
   const setDismissedUpgrade = useSessionStore((s) => s.setDismissedUpgradeCard);
 
+  const streak = useTaskStore((s) => s.streak);
+  const history = useTaskStore((s) => s.history);
+
   const quickInsight = useMemo(() => buildDailyInsight(palmAnalysis), [palmAnalysis]);
-  const journeyDays = useMemo(() => 3 + Math.floor((seedDigits(readingSeed, 1)[0] ?? 0) * 5), [readingSeed]);
+  // Real journey days from task completion history; streak shown as fire icon label
+  const journeyDays = useMemo(() => calcJourneyDays(history), [history]);
   const apiLimited = getApiHealth()?.ok === false;
 
-  const greeting = displayNameOrDefault(displayName);
+  const name = displayNameOrDefault(displayName);
+  const greeting = name === 'Your profile' ? timeGreeting() : `${timeGreeting()}, ${name}`;
+
+  const tools: Tool[] = [
+    { icon: 'front_hand', label: 'Palm Report', onPress: () => router.push('/report') },
+    { icon: 'auto_fix_high', label: 'AI Chat', onPress: () => router.push('/chat') },
+    { icon: 'auto_graph', label: 'Predictions', onPress: () => router.push({ pathname: '/report', params: { tab: 'predictions' } }) },
+    { icon: 'favorite', label: 'Compatibility', onPress: () => router.push('/report/compatibility') },
+    {
+      icon: 'task_alt',
+      label: 'Daily Tasks',
+      hint: 'Rituals to shape your future',
+      onPress: () => router.push('/tasks'),
+      wide: true,
+    },
+  ];
 
   return (
     <CosmicScreen variant="stitch">
       <MainTabScroll>
         <MainCosmicHeader displayName={displayName} onProfilePress={() => router.push('/profile')} />
 
-        <Text className="font-inter-medium text-[22px] text-mist" accessibilityRole="header">
-          {greeting === 'Your profile' ? 'Welcome' : `Hi, ${greeting}`}
-        </Text>
+        <View className="gap-1">
+          <Text className="font-headline text-[26px] leading-8 text-on-surface" accessibilityRole="header">
+            {greeting} <Text className="text-primary">✦</Text>
+          </Text>
+          <Text className="font-body text-[14px] text-on-surface-variant">Ready to shape your future?</Text>
+        </View>
 
         {apiLimited ? <StatusPill label={OFFLINE_LIMITED_LABEL} variant="offline" /> : null}
+        {syncNotice ? <InlineError message={syncNotice} onDismiss={() => setSyncNotice(null)} /> : null}
 
-        {syncNotice ? (
-          <InlineError message={syncNotice} onDismiss={() => setSyncNotice(null)} />
+        {/* Scan CTA when no reading yet */}
+        {!palmAnalysis ? (
+          <GlassCard glow className="w-full p-5">
+            <View className="flex-row items-center gap-3">
+              <View className="h-11 w-11 items-center justify-center rounded-2xl bg-primary/20">
+                <Icon name="front_hand" size={22} color="#d3beeb" />
+              </View>
+              <View className="flex-1">
+                <Text className="font-headline-md text-[18px] text-on-surface">Start your palm reading</Text>
+                <Text className="mt-0.5 font-body text-[13px] leading-5 text-on-surface-variant">
+                  Scan your palm to unlock a personalized report, daily guidance, and your AI Guide.
+                </Text>
+              </View>
+            </View>
+            <View className="mt-4">
+              <NebulaButton label="Scan my palm" onPress={() => router.push('/onboarding/palm-scan')} />
+            </View>
+          </GlassCard>
         ) : null}
 
-        <InsightCard insight={quickInsight} />
+        {/* Daily Insight (Stitch Daily Forecast) */}
+        <GlassCard glow className="w-full p-5">
+          <View pointerEvents="none" className="absolute -right-20 -top-20 h-56 w-56 rounded-full bg-primary/20" />
+          <View className="relative gap-3">
+            <View className="flex-row items-center gap-2">
+              <Icon name="auto_awesome" size={18} color="#d3beeb" />
+              <Text className="font-label text-[12px] uppercase tracking-[0.16em] text-primary">Daily Insight</Text>
+            </View>
+            <Text className="font-headline text-[24px] leading-8 text-on-surface">{quickInsight.title}</Text>
+            <Text className="font-body text-[15px] leading-6 text-on-surface-variant" numberOfLines={4}>
+              {quickInsight.body}
+            </Text>
+          </View>
+        </GlassCard>
 
+        {/* Upgrade nudge */}
         {!premium && !dismissedUpgrade ? (
-          <GlowCard className="w-full border-stitch-violet/30 py-3.5">
+          <GlassCard muted className="w-full p-4">
             <View className="flex-row items-center gap-2">
               <Pressable
                 className="flex-1 active:opacity-90"
                 onPress={() => router.push('/onboarding/paywall')}
                 accessibilityRole="button"
                 accessibilityLabel="Upgrade to Pro">
-                <Text className="font-inter-medium text-[15px] text-mist">Upgrade to Pro</Text>
-                <Text className="mt-0.5 text-[13px] text-md-on-surface-variant">
-                  Full report, compatibility details, and unlimited Guide
+                <Text className="font-headline-md text-[16px] text-on-surface">Unlock your full potential</Text>
+                <Text className="mt-0.5 font-body text-[13px] text-on-surface-variant">
+                  Full report, predictions, compatibility, and unlimited chat
                 </Text>
               </Pressable>
               <Pressable onPress={() => setDismissedUpgrade(true)} hitSlop={12} accessibilityLabel="Dismiss upgrade">
-                <Ionicons name="close" size={16} color="rgba(255,255,255,0.4)" />
+                <Icon name="close" size={16} color="rgba(232,225,229,0.4)" />
               </Pressable>
             </View>
-          </GlowCard>
+          </GlassCard>
         ) : null}
 
-        <SectionHeader title="Explore" subtitle="Jump to what matters today" />
-        <QuickAccessGrid items={HOME_SHORTCUTS} premium={premium} onPress={(a) => openShortcut(a, premium)} />
+        {/* Sacred Tools bento grid */}
+        <Text className="mt-2 px-1 font-headline-md text-[20px] text-on-surface">Sacred Tools</Text>
+        <View className="flex-row flex-wrap justify-between gap-3">
+          {tools.map((tool) =>
+            tool.wide ? (
+              <Pressable
+                key={tool.label}
+                onPress={tool.onPress}
+                className="w-full active:opacity-90"
+                accessibilityRole="button"
+                accessibilityLabel={tool.label}>
+                <GlassCard className="flex-row items-center justify-between p-4">
+                  <View className="flex-row items-center gap-3">
+                    <View className="h-12 w-12 items-center justify-center rounded-full bg-secondary-container">
+                      <Icon name={tool.icon} size={26} color="#d3beeb" />
+                    </View>
+                    <View>
+                      <Text className="font-label text-[12px] uppercase tracking-[0.1em] text-on-surface">
+                        {tool.label}
+                      </Text>
+                      {tool.hint ? (
+                        <Text className="mt-0.5 font-body text-[12px] text-on-surface-variant">{tool.hint}</Text>
+                      ) : null}
+                    </View>
+                  </View>
+                  <Icon name="chevron_right" size={22} color="#d3beeb" />
+                </GlassCard>
+              </Pressable>
+            ) : (
+              <Pressable
+                key={tool.label}
+                onPress={tool.onPress}
+                style={{ width: '48%' }}
+                className="active:opacity-90"
+                accessibilityRole="button"
+                accessibilityLabel={tool.label}>
+                <GlassCard className="aspect-square items-center justify-center gap-2 p-4">
+                  <View className="h-12 w-12 items-center justify-center rounded-full bg-secondary-container">
+                    <Icon name={tool.icon} size={28} color="#d3beeb" />
+                  </View>
+                  <Text className="font-label text-center text-[12px] uppercase tracking-[0.08em] text-on-surface">
+                    {tool.label}
+                  </Text>
+                </GlassCard>
+              </Pressable>
+            ),
+          )}
+        </View>
 
-        <Pressable
-          onPress={() => router.push('/dating')}
-          className="w-full active:opacity-90"
-          accessibilityRole="button"
-          accessibilityLabel="Open dating discover">
-          <GlowCard className="flex-row items-center justify-between py-4">
-            <View className="flex-row items-center gap-3">
-              <View className="h-10 w-10 items-center justify-center rounded-2xl bg-stitch-violet/25">
-                <Ionicons name="people" size={20} color="#d392f6" />
-              </View>
-              <View>
-                <Text className="font-inter-medium text-[15px] text-mist">Discover</Text>
-                <Text className="mt-0.5 text-[13px] text-md-on-surface-variant">Explore connections for fun</Text>
-              </View>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.4)" />
-          </GlowCard>
-        </Pressable>
-
-        <GlowCard muted className="flex-row items-center gap-4 py-4">
+        {/* Streak / Destiny Alignment */}
+        <GlassCard className="flex-row items-center gap-4 p-4">
           <View className="h-12 w-12 items-center justify-center rounded-2xl bg-orange-500/20">
-            <Ionicons name="flame" size={24} color="#fb923c" />
+            <Icon name="local_fire_department" size={24} color="#fb923c" />
           </View>
           <View className="flex-1">
-            <Text className="font-inter-medium text-[16px] text-mist">{JOURNEY_DAY_LABEL(journeyDays)}</Text>
-            <Text className="mt-0.5 text-[13px] text-md-on-surface-variant">{JOURNEY_DAY_FOOTNOTE}</Text>
+            <Text className="font-headline-md text-[16px] text-on-surface">{JOURNEY_DAY_LABEL(journeyDays)}</Text>
+            <Text className="mt-0.5 font-body text-[13px] text-on-surface-variant">{JOURNEY_DAY_FOOTNOTE}</Text>
           </View>
-        </GlowCard>
-
-        {!palmAnalysis ? (
-          <CosmicButton
-            gradient="nebulaMd3"
-            label="Complete your palm reading"
-            onPress={() => router.push('/onboarding/palm-scan')}
-          />
-        ) : null}
+          {streak > 0 ? (
+            <View className="items-center justify-center rounded-2xl bg-orange-500/20 px-3 py-1.5">
+              <Text className="font-space-grotesk text-[18px] font-bold text-orange-400">{streak}</Text>
+              <Text className="font-label text-[9px] uppercase tracking-widest text-orange-300/70">streak</Text>
+            </View>
+          ) : null}
+        </GlassCard>
       </MainTabScroll>
     </CosmicScreen>
   );

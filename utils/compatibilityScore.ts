@@ -31,10 +31,3 @@ export function matchStrengthLabel(pct: number): string {
   if (pct >= 70) return 'Promising match';
   return 'Growing match';
 }
-
-export function datingProfileAffinity(seekerSeed: string, profileId: string): number {
-  const merged = `${seekerSeed.trim()}::${profileId}`.toLowerCase();
-  const digs = seedDigits(merged || 'dating', 3);
-  const base = digs.reduce((acc, n) => acc + (n ?? 0), 0) % 28;
-  return 68 + base;
-}

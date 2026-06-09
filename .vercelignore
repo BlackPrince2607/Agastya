@@ -1,0 +1,12 @@
+backend/
+.expo/
+dist/
+node_modules/
+stitch_ai_palmistry_ux_design/
+store-assets/
+legal/
+supabase/
+ios/
+android/
+.env
+.env*.local

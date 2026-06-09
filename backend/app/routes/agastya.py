@@ -6,8 +6,10 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 
 from app.auth.supabase_jwt import _bearer_token, verify_supabase_access_token
 from app.config import Settings, get_settings
+from app.middleware.rate_limit import check_rate_limit
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.schemas.palm_analyze import PalmAnalyzeBody
+from app.schemas.predictions import PredictionsGenerateBody, PredictionsResponse
 from app.schemas.report import GenerateReportBody
 from app.schemas.session import (
     SessionBootstrapResponse,
@@ -22,10 +24,11 @@ from app.services.ai_interactions import generate_chat_reply, generate_daily_tas
 from app.services.bucket_store import SessionBucket, bucket, has_bucket, link_supabase_user, set_bucket
 from app.services.palm_pipeline import analyze_palm
 from app.services.palm_storage import upload_palm_capture_if_configured
+from app.services.predictions_engine import build_predictions_payload
 from app.services.report_engine import build_report_payload
 from app.services import session_repository
 
-router = APIRouter(tags=["agastya"])
+router = APIRouter(tags=["agastya"], dependencies=[Depends(check_rate_limit)])
 
 
 async def _hydrate(session_id: str, settings: Settings) -> None:
@@ -184,6 +187,8 @@ async def reports_generate(
         bkt.preview = report
     else:
         bkt.full = report
+    if body.seed:
+        bkt.meta["readingSeed"] = body.seed
     await _persist(body.session_id, settings)
     return report.model_dump(by_alias=True)
 
@@ -191,16 +196,51 @@ async def reports_generate(
 @router.post("/chat", response_model=ChatResponse)
 async def cosmic_chat(body: ChatRequest, settings: Annotated[Settings, Depends(get_settings)]) -> ChatResponse:
     await _hydrate(body.session_id, settings)
-    reply = await generate_chat_reply(settings, body)
     bkt = bucket(body.session_id)
+    reply, suggestions = await generate_chat_reply(
+        settings, body, server_is_premium=bkt.is_premium
+    )
     tail = [{"role": m.role, "content": m.content} for m in body.messages]
     tail.append({"role": "guide", "content": reply})
     bkt.chat_tail = tail[-40:]
     await _persist(body.session_id, settings)
-    return ChatResponse(reply=reply)
+    return ChatResponse(reply=reply, suggestions=suggestions)
 
 
-@router.post("/tasks/daily", response_model=DailyTasksResponse)
+@router.post("/tasks/daily", response_model=DailyTasksResponse, response_model_by_alias=True)
 async def daily_tasks(body: DailyTasksBody, settings: Annotated[Settings, Depends(get_settings)]) -> DailyTasksResponse:
+    await _hydrate(body.session_id, settings)
+    bkt = bucket(body.session_id)
+    # Override client-supplied premium flag with the server-authoritative value.
+    if bkt.is_premium:
+        body = body.model_copy(update={"is_premium": True})
     tasks, variant = await generate_daily_tasks(settings, body)
     return DailyTasksResponse(tasks=tasks, variant=variant)
+
+
+@router.post(
+    "/predictions/generate",
+    response_model=PredictionsResponse,
+    response_model_by_alias=True,
+)
+async def predictions_generate(
+    body: PredictionsGenerateBody,
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> PredictionsResponse:
+    await _hydrate(body.session_id, settings)
+    bkt = bucket(body.session_id)
+    palm = body.palm_analysis or bkt.palm
+    if palm is None:
+        raise HTTPException(status_code=400, detail="Run palm analysis before requesting predictions.")
+    seed = body.seed or bkt.meta.get("readingSeed") or body.session_id
+    topics = body.focus_topics or (bkt.meta.get("focusTopics") if isinstance(bkt.meta.get("focusTopics"), list) else [])
+    result = await build_predictions_payload(
+        settings,
+        seed=seed,
+        period=body.period,
+        palm=palm,
+        topics=topics or [],
+    )
+    bkt.predictions[body.period] = result
+    await _persist(body.session_id, settings)
+    return result

@@ -1,0 +1,15 @@
+# Railway.app deployment config for the Agastya FastAPI backend.
+# Deploy with: railway up (from repo root or backend/ directory)
+# Set env vars in Railway Dashboard → Variables.
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "backend/Dockerfile"
+buildCommand = ""
+
+[deploy]
+startCommand = "uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 2"
+healthcheckPath = "/v1/health"
+healthcheckTimeout = 10
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3

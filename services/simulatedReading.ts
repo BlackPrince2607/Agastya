@@ -15,7 +15,7 @@ export function buildSimulatedReading(seedHint: string, focusTopics?: FocusTopic
   const focus = focusTopics ?? [];
   for (const topic of focus) {
     const key =
-      topic === 'love' || topic === 'matching' || topic === 'dating'
+      topic === 'love' || topic === 'matching'
         ? 'love'
         : topic === 'career'
           ? 'career'
@@ -38,32 +38,32 @@ export function buildSimulatedReading(seedHint: string, focusTopics?: FocusTopic
     blueprintTitle: 'Your Life Blueprint',
     visionaryTitle: 'The Visionary',
     visionarySubtitle: 'Architect of Quiet Intensity',
-    archetypeLine: `Your patterns suggest someone who gathers signal in silence—and releases it only when the room finally earns the heat.`,
-    headline: `The constellation “${condensed}” hums beside your pacing.`,
+    archetypeLine: `Your patterns suggest someone who takes things in quietly—and speaks up only when it truly matters.`,
+    headline: `The pattern “${condensed}” runs quietly through the way you move.`,
     sections: [
       {
         id: 'self',
-        title: 'Inner Cartography',
-        body: `You translate overwhelm into itineraries. Sometimes that protects you; sometimes it exiles tenderness. The motif “${condensed}” keeps surfacing whenever you postpone being direct.`,
+        title: 'Who you are',
+        body: `You turn overwhelm into plans. Sometimes that protects you; sometimes it keeps people at arm’s length. The theme “${condensed}” keeps surfacing whenever you put off being direct.`,
       },
       {
         id: 'love',
-        title: 'Love Currents',
-        body: 'You reach first with intuition, apologize second with restraint. Attachment learns your choreography long before anyone meets the backstage version.',
+        title: 'Love & connection',
+        body: 'You lead with intuition and hold back with restraint. The people close to you learn your patterns long before they meet the real, unguarded you.',
       },
       {
         id: 'career',
-        title: 'Ambition Strand',
-        body: 'Momentum appears when stakes feel mythic—not when tasks feel virtuous. You require meaningful gravity to mobilize cleanly.',
+        title: 'Drive & ambition',
+        body: 'You move fastest when the stakes feel meaningful—not when a task simply feels responsible. Give yourself work that matters and momentum follows.',
       },
       {
         id: 'money',
-        title: 'Resource Lore',
-        body: 'Comfort is negotiated between spreadsheets and nightmares. Naming the phantom bill softens negotiation with reality.',
+        title: 'Money & security',
+        body: 'Your sense of comfort sits between careful planning and quiet worry. Naming the thing you’re avoiding makes it far easier to handle.',
       },
     ],
     boldPrediction:
-      'Within forty rotations of the moon something you waved off as synchronicity knocks louder—until you redraw one invisible boundary.',
+      'In the coming weeks, something you brushed off as coincidence will get harder to ignore—until you set one boundary you’ve been putting off.',
     metrics: base,
     aura: { label: auraLabel, gradient: aura },
   };

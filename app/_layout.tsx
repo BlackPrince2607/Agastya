@@ -22,6 +22,18 @@ import '../global.css';
 import { cosmicGradients } from '@/constants/theme';
 import { subscribeAuthDeepLinks } from '@/services/authCallback';
 import { subscribeSupabaseSessionMerge } from '@/services/authMerge';
+import { isServerEnvironment } from '@/services/persistentStorage';
+import { initSentry } from '@/services/sentry';
+import {
+  configureNotificationHandler,
+  getNotificationDeepLink,
+} from '@/services/notifications';
+
+// Initialise Sentry before any other code runs
+initSentry();
+
+// Configure how foreground notifications are shown
+configureNotificationHandler();
 
 export {
   ErrorBoundary,
@@ -73,13 +85,32 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (isServerEnvironment()) return;
     const stopDeepLinks = subscribeAuthDeepLinks();
     const stopMerge = subscribeSupabaseSessionMerge();
     return () => {
       stopDeepLinks();
       stopMerge();
     };
+  }, []);
+
+  useEffect(() => {
+    let sub: ReturnType<typeof import('expo-notifications').addNotificationResponseReceivedListener> | undefined;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Notifications = require('expo-notifications');
+      sub = Notifications.addNotificationResponseReceivedListener(
+        (response: import('expo-notifications').NotificationResponse) => {
+          const link = getNotificationDeepLink(response);
+          if (link) {
+            import('expo-router').then(({ router }) => router.push(link as never));
+          }
+        },
+      );
+    } catch {
+      // expo-notifications not available on web
+    }
+    return () => sub?.remove();
   }, []);
 
   return (
@@ -96,6 +127,8 @@ export default function RootLayout() {
           <Stack.Screen name="welcome" />
           <Stack.Screen name="onboarding" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="(main)" />
+          <Stack.Screen name="report" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="task/[id]" options={{ animation: 'slide_from_right' }} />
         </Stack>
       </ThemeProvider>
     </SafeAreaProvider>

@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CosmicDotGrid } from '@/components/layout/CosmicDotGrid';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
-import { StitchOnboardingHeader } from '@/components/onboarding/StitchOnboardingHeader';
+import { OnboardingHeader } from '@/components/onboarding/OnboardingHeader';
 import { CosmicButton } from '@/components/primitives';
 import { ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS } from '@/constants/onboarding';
 import { stitchMd3 } from '@/constants/stitchWelcome';
@@ -46,14 +46,8 @@ const FOCUS_TOPIC_OPTIONS: Array<{
   },
   {
     id: 'matching',
-    label: 'Cosmic Matching',
-    blurb: 'Pair your aura with another seeker’s signature',
-    icon: 'orbit',
-  },
-  {
-    id: 'dating',
-    label: 'Dating & Connection',
-    blurb: 'Meet aligned souls through celestial chemistry',
+    label: 'Compatibility',
+    blurb: 'Compare your connection with someone special',
     icon: 'account-heart',
   },
 ];
@@ -72,7 +66,7 @@ export default function GoalsScreen() {
     if (topics.length === 0) {
       Alert.alert(
         'Choose a focus',
-        'Select at least one area—Stitch readings align tone and threads to what matters to you right now.',
+        'Pick at least one area so we can tailor your reading to what matters most to you right now.',
       );
       return;
     }
@@ -96,7 +90,7 @@ export default function GoalsScreen() {
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ paddingBottom: 200, paddingTop: 12 }}>
           <View className="gap-10 px-7">
-            <StitchOnboardingHeader ritualStep={{ current: ONBOARDING_STEPS.goals, total: ONBOARDING_TOTAL_STEPS }} />
+            <OnboardingHeader step={ONBOARDING_STEPS.goals} total={ONBOARDING_TOTAL_STEPS} />
 
             <View>
               <Text className="font-noto-serif text-[36px] leading-[40px] tracking-tight text-mist">

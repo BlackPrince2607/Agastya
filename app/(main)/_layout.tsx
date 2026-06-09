@@ -1,20 +1,27 @@
-import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Redirect, Tabs } from 'expo-router';
-import type { ComponentProps } from 'react';
-import { Platform } from 'react-native';
+import { Platform, View } from 'react-native';
 
+import { LoadingBlock } from '@/components/feedback';
+import { Icon, type IconName } from '@/components/ui';
 import MainTabBarBlurBackground from '@/components/navigation/MainTabBarBlurBackground';
+import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { usePersistHydration } from '@/hooks/usePersistHydration';
 import { useSessionStore } from '@/store/sessionStore';
 
-type IconName = ComponentProps<typeof FontAwesome>['name'];
-
-/** Home • Chat • Tasks • Profile (+ match, dating, report via shortcuts) */
+/** Home • Chat • Tasks • Profile (Reports & Compatibility pushed from Home). */
 export default function MainTabsLayout() {
   const hydrated = usePersistHydration();
   const entered = useSessionStore((s) => s.hasEnteredMain);
 
-  if (!hydrated) return null;
+  if (!hydrated) {
+    return (
+      <CosmicScreen variant="stitch">
+        <View className="flex-1 items-center justify-center px-8">
+          <LoadingBlock message="Loading…" />
+        </View>
+      </CosmicScreen>
+    );
+  }
   if (!entered) return <Redirect href="/welcome" />;
 
   return (
@@ -22,47 +29,44 @@ export default function MainTabsLayout() {
       screenOptions={{
         headerShown: false,
         tabBarShowLabel: true,
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '600', marginTop: 2 },
+        tabBarLabelStyle: { fontSize: 10, fontWeight: '600', marginTop: 2, letterSpacing: 0.4 },
         tabBarStyle: {
           position: 'absolute',
-          borderTopWidth: 0,
-          backgroundColor: Platform.OS === 'android' ? 'rgba(10,10,20,0.96)' : 'transparent',
+          borderTopWidth: 1,
+          borderTopColor: 'rgba(255,255,255,0.2)',
+          backgroundColor: Platform.OS === 'android' ? 'rgba(8,8,12,0.92)' : 'transparent',
           elevation: 0,
-          height: Platform.OS === 'ios' ? 76 : 68,
-          paddingHorizontal: 6,
-          paddingBottom: Platform.OS === 'ios' ? 16 : 10,
-          paddingTop: 8,
-          borderRadius: 24,
-          marginHorizontal: 14,
-          marginBottom: Platform.OS === 'ios' ? 24 : 16,
-          overflow: Platform.OS === 'ios' ? 'hidden' : 'visible',
-          borderWidth: 1,
-          borderColor: 'rgba(255,255,255,0.08)',
+          height: Platform.OS === 'ios' ? 80 : 70,
+          paddingBottom: Platform.OS === 'ios' ? 20 : 12,
+          paddingTop: 10,
+          borderTopLeftRadius: 36,
+          borderTopRightRadius: 36,
+          overflow: 'hidden',
         },
         tabBarBackground: () => <MainTabBarBlurBackground />,
-        tabBarActiveTintColor: '#a855f7',
-        tabBarInactiveTintColor: 'rgba(255,255,255,0.4)',
+        tabBarActiveTintColor: '#22d3ee',
+        tabBarInactiveTintColor: 'rgba(232,225,229,0.45)',
       }}>
-      <Tabs.Screen name="home" options={{ title: 'Home', tabBarIcon: ({ color }) => <Glyph name="home" color={color} /> }} />
       <Tabs.Screen
-        name="guide"
-        options={{ title: 'Guide', tabBarIcon: ({ color }) => <Glyph name="comments-o" color={color} /> }}
+        name="home"
+        options={{ title: 'Home', tabBarIcon: ({ color }) => <Glyph name="auto_awesome" color={color} /> }}
+      />
+      <Tabs.Screen
+        name="chat"
+        options={{ title: 'Chat', tabBarIcon: ({ color }) => <Glyph name="auto_fix_high" color={color} /> }}
       />
       <Tabs.Screen
         name="tasks"
-        options={{ title: 'Today', tabBarIcon: ({ color }) => <Glyph name="check-circle-o" color={color} /> }}
+        options={{ title: 'Tasks', tabBarIcon: ({ color }) => <Glyph name="task_alt" color={color} /> }}
       />
       <Tabs.Screen
         name="profile"
-        options={{ title: 'You', tabBarIcon: ({ color }) => <Glyph name="user-o" color={color} /> }}
+        options={{ title: 'Profile', tabBarIcon: ({ color }) => <Glyph name="person" color={color} /> }}
       />
-      <Tabs.Screen name="match" options={{ href: null }} />
-      <Tabs.Screen name="dating" options={{ href: null }} />
-      <Tabs.Screen name="report" options={{ href: null }} />
     </Tabs>
   );
 }
 
 function Glyph({ name, color }: { name: IconName; color: string }) {
-  return <FontAwesome size={20} name={name} color={color} />;
+  return <Icon name={name} size={24} color={color} />;
 }

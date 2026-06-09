@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Agastya - Secure Your Journey</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif:wght@400;500;600;700;900&amp;family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .nebula-gradient {
+            background: linear-gradient(135deg, #d3beeb 0%, #68577e 100%);
+        }
+        .glass-card {
+            backdrop-filter: blur(20px);
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .aura-glow {
+            box-shadow: 0 0 20px rgba(211, 190, 235, 0.15);
+        }
+    </style>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "tertiary-fixed": "#f8dfb9",
+                    "tertiary-fixed-dim": "#dbc39f",
+                    "inverse-primary": "#68577e",
+                    "surface-container-lowest": "#0f0e10",
+                    "on-background": "#e6e1e5",
+                    "inverse-on-surface": "#323033",
+                    "on-error": "#690005",
+                    "secondary": "#cfc1dd",
+                    "primary-fixed": "#eddcff",
+                    "tertiary": "#dbc39f",
+                    "surface-container-high": "#2b292c",
+                    "surface-tint": "#d3beeb",
+                    "primary-container": "#1a0b2e",
+                    "on-primary-fixed": "#231437",
+                    "tertiary-container": "#1c1100",
+                    "primary-fixed-dim": "#d3beeb",
+                    "on-tertiary-fixed": "#261a03",
+                    "background": "#141315",
+                    "surface-bright": "#3b383b",
+                    "inverse-surface": "#e6e1e5",
+                    "on-secondary-fixed-variant": "#4c4359",
+                    "on-primary-fixed-variant": "#4f4065",
+                    "secondary-fixed": "#ebddfa",
+                    "on-tertiary": "#3c2e14",
+                    "outline": "#958f98",
+                    "on-surface-variant": "#cbc4ce",
+                    "secondary-container": "#4e455c",
+                    "on-tertiary-container": "#8f7b5b",
+                    "surface": "#141315",
+                    "error-container": "#93000a",
+                    "error": "#ffb4ab",
+                    "primary": "#d3beeb",
+                    "on-error-container": "#ffdad6",
+                    "surface-container-highest": "#363437",
+                    "outline-variant": "#4a454d",
+                    "surface-container-low": "#1d1b1e",
+                    "on-primary-container": "#88769f",
+                    "surface-variant": "#363437",
+                    "surface-container": "#211f22",
+                    "on-surface": "#e6e1e5",
+                    "on-tertiary-fixed-variant": "#544429",
+                    "on-primary": "#38294d",
+                    "surface-dim": "#141315",
+                    "on-secondary": "#352c42",
+                    "secondary-fixed-dim": "#cfc1dd",
+                    "on-secondary-container": "#c0b3cf",
+                    "on-secondary-fixed": "#20182c"
+            },
+            "borderRadius": {
+                    "DEFAULT": "1rem",
+                    "lg": "2rem",
+                    "xl": "3rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "unit": "4px",
+                    "stack-md": "16px",
+                    "gutter": "16px",
+                    "section-gap": "48px",
+                    "margin-page": "24px",
+                    "stack-sm": "8px",
+                    "stack-lg": "32px"
+            },
+            "fontFamily": {
+                    "label-caps": ["Space Grotesk"],
+                    "headline-xl": ["Noto Serif"],
+                    "headline-md": ["Noto Serif"],
+                    "headline-lg": ["Noto Serif"],
+                    "body-md": ["Inter"],
+                    "body-lg": ["Inter"]
+            },
+            "fontSize": {
+                    "label-caps": ["12px", {"lineHeight": "1.2", "letterSpacing": "0.1em", "fontWeight": "600"}],
+                    "headline-xl": ["40px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "headline-md": ["24px", {"lineHeight": "1.3", "fontWeight": "500"}],
+                    "headline-lg": ["32px", {"lineHeight": "1.2", "fontWeight": "600"}],
+                    "body-md": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                    "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background min-h-screen font-body-md overflow-x-hidden">
+<!-- Top AppBar (from JSON - Semantic Shell Suppressed for Auth but layout kept for branding) -->
+<header class="fixed top-0 w-full z-50 bg-[#1A0B2E]/60 backdrop-blur-xl border-b border-white/10 shadow-[0_0_20px_rgba(168,85,247,0.15)] flex justify-between items-center px-6 h-16">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-cyan-400" data-icon="auto_awesome">auto_awesome</span>
+<span class="text-2xl font-black tracking-tighter bg-gradient-to-r from-purple-400 to-cyan-400 bg-clip-text text-transparent font-['Noto_Serif']">Agastya</span>
+</div>
+<button class="text-on-surface-variant hover:opacity-80 transition-opacity">
+<span class="material-symbols-outlined" data-icon="close">close</span>
+</button>
+</header>
+<main class="pt-16 pb-12 px-margin-page flex flex-col items-center max-w-lg mx-auto">
+<!-- Hero Image Section -->
+<div class="relative w-full aspect-[4/3] rounded-lg overflow-hidden mb-stack-lg aura-glow">
+<img alt="Agastya Atmosphere" class="w-full h-full object-cover" data-alt="A cinematic, low-angle shot of a solitary person's silhouette standing on a dark ridge, gazing up at a colossal, swirling purple and cyan nebula shaped like a celestial gateway. The night sky is densely packed with shimmering stars and faint cosmic dust. The lighting is dominated by an ethereal purple glow from the portal, creating a mysterious and futuristic atmosphere consistent with a dark mystic aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDN1JcwYZhY0jtoi9T1AKz4x6qGqkw_Kw2oeNVPc2P8q9FlYM0BL8lUtJViB034q3rDRhIBd10A1Vg6EJCpX4H3CMR786nKxV0u-fl8EAuemV0tgu-6lLVrOYDgKa3ENpi1gbwfbZA0O0C1NoKeOu2scDTQKVTMIrFbuBbdIq1Z-lmu-bOCQwwEhRvP_wGW6ipqze1PZdkp8hQEqBuWOnXl8eGMXo5EdfAFYKNJKBM1oulc0_FDNED68O9QNc0wOmGhu12Kv28S1Y8"/>
+<div class="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent"></div>
+</div>
+<!-- Headline & Subtitle -->
+<div class="text-center mb-stack-lg">
+<h1 class="font-headline-lg text-headline-lg text-on-background mb-stack-sm px-4">
+                Save Your Reading &amp; Continue Your Journey
+            </h1>
+<p class="font-body-md text-body-md text-on-surface-variant px-6">
+                Sign in to save your report, chat history and daily progress.
+            </p>
+</div>
+<!-- Trust Indicators -->
+<div class="w-full grid grid-cols-3 gap-2 mb-stack-lg">
+<div class="glass-card p-stack-sm rounded-lg flex flex-col items-center text-center">
+<span class="material-symbols-outlined text-primary mb-1" data-icon="cloud_done">cloud_done</span>
+<span class="font-label-caps text-[10px] text-on-surface">Secure Backup</span>
+</div>
+<div class="glass-card p-stack-sm rounded-lg flex flex-col items-center text-center border-primary/20">
+<span class="material-symbols-outlined text-primary mb-1" data-icon="encrypted">encrypted</span>
+<span class="font-label-caps text-[10px] text-on-surface">Private &amp; Safe</span>
+</div>
+<div class="glass-card p-stack-sm rounded-lg flex flex-col items-center text-center">
+<span class="material-symbols-outlined text-primary mb-1" data-icon="devices">devices</span>
+<span class="font-label-caps text-[10px] text-on-surface">Access on Any Device</span>
+</div>
+</div>
+<!-- Social Login Stack -->
+<div class="w-full flex flex-col gap-stack-md mb-stack-md">
+<button class="w-full py-4 px-6 rounded-full bg-white text-black font-semibold flex items-center justify-center gap-3 active:scale-95 transition-all shadow-lg">
+<svg class="w-5 h-5" fill="currentColor" viewbox="0 0 24 24">
+<path d="M17.05 20.28c-.96.95-2.22 1.48-3.55 1.48-2.75 0-5.11-1.63-6.17-4.04-1.2-2.76-.55-6.12 1.63-8.1 1.25-1.12 2.87-1.74 4.54-1.74 1.34 0 2.59.43 3.55 1.23l2.84-2.84c-1.84-1.66-4.22-2.58-6.72-2.58-5.32 0-9.67 4.14-9.67 9.25 0 2.45.98 4.79 2.76 6.57 1.77 1.77 4.12 2.76 6.57 2.76 2.37 0 4.62-.9 6.29-2.53l-2.74-2.74zM12 2c-.14 0-.27 0-.41.01.12.01.24.01.36.01.02 0 .04 0 .05-.01V2z"></path>
+</svg>
+                Continue with Apple
+            </button>
+<button class="w-full py-4 px-6 rounded-full glass-card text-on-surface font-semibold flex items-center justify-center gap-3 active:scale-95 transition-all">
+<svg class="w-5 h-5" viewbox="0 0 24 24">
+<path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"></path>
+<path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"></path>
+<path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"></path>
+<path d="M12 5.38c1.62 0 3.06.56 4.21 1.66l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.34-4.53z" fill="#EA4335"></path>
+</svg>
+                Continue with Google
+            </button>
+</div>
+<!-- Divider -->
+<div class="w-full flex items-center gap-4 mb-stack-md">
+<div class="h-[1px] flex-1 bg-white/10"></div>
+<span class="font-label-caps text-on-surface-variant text-[10px]">OR</span>
+<div class="h-[1px] flex-1 bg-white/10"></div>
+</div>
+<!-- Email Login Form -->
+<div class="w-full space-y-stack-md mb-stack-lg">
+<div class="flex flex-col gap-stack-sm">
+<label class="font-label-caps text-on-surface-variant ml-4" for="email">Email Address</label>
+<div class="relative">
+<input class="w-full bg-surface-container-lowest/50 border border-white/10 rounded-full py-4 px-6 text-on-surface placeholder:text-white/20 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-all aura-glow" id="email" placeholder="you@example.com" type="email"/>
+</div>
+</div>
+<button class="w-full py-4 px-6 rounded-full nebula-gradient text-white font-bold text-body-lg active:scale-95 transition-all shadow-[0_0_30px_rgba(211,190,235,0.3)]">
+                Continue with Email
+            </button>
+</div>
+<!-- Footer Links -->
+<footer class="w-full text-center space-y-2">
+<div class="flex justify-center gap-stack-lg">
+<a class="font-label-caps text-on-surface-variant hover:text-primary transition-colors" href="#">Terms of Use</a>
+<a class="font-label-caps text-on-surface-variant hover:text-primary transition-colors" href="#">Privacy Policy</a>
+</div>
+<p class="text-[10px] text-white/20 font-label-caps">
+                © 2024 AGASTYA AI SPIRITUALITY
+            </p>
+</footer>
+</main>
+<!-- Background Elements -->
+<div class="fixed top-[-10%] right-[-20%] w-[60%] h-[60%] rounded-full bg-primary/5 blur-[120px] pointer-events-none z-[-1]"></div>
+<div class="fixed bottom-[-10%] left-[-20%] w-[60%] h-[60%] rounded-full bg-inverse-primary/10 blur-[120px] pointer-events-none z-[-1]"></div>
+</body></html>

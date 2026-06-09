@@ -60,6 +60,13 @@ class Settings(BaseSettings):
     groq_chat_model: str = "llama-3.3-70b-versatile"
     groq_vision_model: str = "meta-llama/llama-4-scout-17b-16e-instruct"
 
+    # --- RevenueCat webhook (optional — skips signature verification when absent) ---
+    revenuecat_webhook_secret: str | None = None
+
+    # --- Sentry (optional — error tracking) ---
+    sentry_dsn: str | None = None
+    sentry_environment: str = "production"
+
     @property
     def groq_enabled(self) -> bool:
         return bool(self.groq_api_key)

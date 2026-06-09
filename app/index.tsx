@@ -1,6 +1,6 @@
-import { Redirect } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { View } from 'react-native';
+import { router } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
+import { Platform, View } from 'react-native';
 
 import { LoadingBlock } from '@/components/feedback';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
@@ -10,31 +10,57 @@ import { restoreSessionFromServer } from '@/services/sessionRestore';
 import { track } from '@/services/analytics';
 import { useSessionStore } from '@/store/sessionStore';
 
-/** Cold start: hydrate → restore cloud session → welcome or home. */
+const isWeb = Platform.OS === 'web';
+
+function gateDestination() {
+  return useSessionStore.getState().hasEnteredMain ? '/(main)/home' : '/welcome';
+}
+
+/** Cold start: hydrate → bootstrap identity → welcome or home (cloud restore is non-blocking). */
 export default function Gate() {
   const hydrated = usePersistHydration();
-  const [gateReady, setGateReady] = useState(false);
-  const entered = useSessionStore((s) => s.hasEnteredMain);
+  const routedRef = useRef(false);
+  const [routed, setRouted] = useState(false);
 
   useEffect(() => {
-    if (!hydrated) return;
-    void (async () => {
-      await bootstrapIdentity();
-      await restoreSessionFromServer({ force: false });
-      track('identity_bootstrap');
-      setGateReady(true);
-    })();
+    if (!isWeb && !hydrated) return;
+
+    let cancelled = false;
+
+    const routeOut = () => {
+      if (cancelled || routedRef.current) return;
+      routedRef.current = true;
+      setRouted(true);
+      router.replace(gateDestination() as never);
+    };
+
+    void bootstrapIdentity();
+    void restoreSessionFromServer({ force: false });
+    track('identity_bootstrap');
+
+    if (isWeb) {
+      // Web static export can stall on persist hydration — route immediately.
+      const t = setTimeout(routeOut, 50);
+      return () => {
+        cancelled = true;
+        clearTimeout(t);
+      };
+    }
+
+    const fallback = setTimeout(routeOut, 1200);
+    return () => {
+      cancelled = true;
+      clearTimeout(fallback);
+    };
   }, [hydrated]);
 
-  if (!hydrated || !gateReady) {
-    return (
-      <CosmicScreen variant="stitch">
-        <View className="flex-1 items-center justify-center px-8">
-          <LoadingBlock message="Restoring your reading…" />
-        </View>
-      </CosmicScreen>
-    );
-  }
+  if (routed) return null;
 
-  return <Redirect href={entered ? '/(main)/home' : '/welcome'} />;
+  return (
+    <CosmicScreen variant="stitch">
+      <View className="flex-1 items-center justify-center px-8">
+        <LoadingBlock message="Restoring your reading…" />
+      </View>
+    </CosmicScreen>
+  );
 }

@@ -14,3 +14,6 @@ openai>=1.60.0,<2.0.0
 
 # Supabase JWT verification for session merge (optional until SUPABASE_JWT_SECRET is set).
 PyJWT>=2.8.0,<3.0.0
+
+# Error tracking — optional; disable by leaving SENTRY_DSN unset.
+sentry-sdk[fastapi]>=2.0.0,<3.0.0

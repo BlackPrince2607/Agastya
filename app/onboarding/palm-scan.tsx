@@ -3,25 +3,28 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRef, useState } from 'react';
-import { Alert, Image, Pressable, Text, View } from 'react-native';
+import { Alert, Image, Platform, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CosmicDotGrid } from '@/components/layout/CosmicDotGrid';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { ScanFrameCorners } from '@/components/onboarding/ScanFrameCorners';
-import { StitchOnboardingHeader } from '@/components/onboarding/StitchOnboardingHeader';
+import { OnboardingHeader } from '@/components/onboarding/OnboardingHeader';
+import { ScanLine } from '@/components/onboarding/ScanLine';
 import { BlurContainer, CosmicButton, GradientText } from '@/components/primitives';
 import { triggerLightTap } from '@/hooks/useHapticTap';
 import type { PalmScanHand } from '@/store/sessionStore';
 import { useSessionStore } from '@/store/sessionStore';
 import { ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS } from '@/constants/onboarding';
 import { PALM_CAPTURE_FAILED } from '@/constants/userCopy';
+import { pickPalmImageWeb } from '@/utils/pickPalmImageWeb';
 import { deferRouterPush } from '@/utils/routerDefer';
 import { stitchMd3, STITCH_READY_SCAN_PALM_URI } from '@/constants/stitchWelcome';
 import { stitchSignal } from '@/constants/theme';
 
 const FRAME = 300;
 const BRIEF_FRAME = 288;
+const isWeb = Platform.OS === 'web';
 
 function HandToggle({
   label,
@@ -69,6 +72,18 @@ export default function PalmScanScreen() {
     );
   }
 
+  const uploadAndContinueWeb = async () => {
+    const hand: PalmScanHand = palmScanHand ?? 'right';
+    const seed = `${hand}-${Date.now()}`;
+    const base64 = await pickPalmImageWeb();
+    if (!base64) return;
+    setPalmCaptureBase64(base64);
+    deferRouterPush({
+      pathname: '/onboarding/analysis',
+      params: { seed },
+    });
+  };
+
   const requestAndContinue = async () => {
     setPastBriefing(true);
     await requestPermission();
@@ -80,7 +95,7 @@ export default function PalmScanScreen() {
         <View className="flex-1">
           <CosmicDotGrid />
           <View className="flex-1 justify-between px-7 pb-10 pt-2">
-            <StitchOnboardingHeader ritualStep={{ current: ONBOARDING_STEPS.palmScan, total: ONBOARDING_TOTAL_STEPS }} />
+            <OnboardingHeader step={ONBOARDING_STEPS.palmScan} total={ONBOARDING_TOTAL_STEPS} />
 
             <View className="gap-3">
               <Text className="font-noto-serif text-[32px] leading-[36px] tracking-tight text-mist">The stars are aligned.</Text>
@@ -153,9 +168,9 @@ export default function PalmScanScreen() {
             <View className="mt-auto gap-5 pt-8">
               <CosmicButton
                 gradient="nebulaMd3"
-                label="Scan Your Palm"
-                icon={<FontAwesome name="camera" size={18} color={stitchMd3.onPrimary} />}
-                onPress={() => void requestAndContinue()}
+                label={isWeb ? 'Upload palm photo' : 'Scan Your Palm'}
+                icon={<FontAwesome name={isWeb ? 'image' : 'camera'} size={18} color={stitchMd3.onPrimary} />}
+                onPress={() => void (isWeb ? uploadAndContinueWeb() : requestAndContinue())}
               />
               <Pressable
                 accessibilityRole="button"
@@ -182,7 +197,7 @@ export default function PalmScanScreen() {
         <View className="flex-1">
           <CosmicDotGrid />
           <View className="flex-1 justify-center gap-10 px-7 pb-8">
-            <StitchOnboardingHeader ritualStep={{ current: ONBOARDING_STEPS.palmScan, total: ONBOARDING_TOTAL_STEPS }} />
+            <OnboardingHeader step={ONBOARDING_STEPS.palmScan} total={ONBOARDING_TOTAL_STEPS} />
             <View>
               <GradientText className="font-space-grotesk text-[12px] uppercase tracking-[0.45em] text-stitch-signal">
                 Camera access
@@ -233,7 +248,7 @@ export default function PalmScanScreen() {
           <CosmicDotGrid />
           <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1 }}>
             <View className="flex-1 px-7 pb-4 pt-2">
-              <StitchOnboardingHeader ritualStep={{ current: ONBOARDING_STEPS.palmScan, total: ONBOARDING_TOTAL_STEPS }} />
+              <OnboardingHeader step={ONBOARDING_STEPS.palmScan} total={ONBOARDING_TOTAL_STEPS} />
 
               <View className="mt-2 gap-2">
                 <Text className="font-noto-serif text-[28px] leading-8 text-mist">Palm scan</Text>
@@ -254,14 +269,15 @@ export default function PalmScanScreen() {
                       borderRadius: 22,
                       overflow: 'hidden',
                       borderWidth: 2,
-                      borderColor: 'rgba(232,121,249,0.45)',
+                      borderColor: 'rgba(34,211,238,0.4)',
                     }}>
                     <LinearGradient
-                      colors={['rgba(139,92,246,0.25)', 'transparent', 'rgba(0,206,209,0.12)']}
+                      colors={['rgba(34,211,238,0.18)', 'transparent', 'rgba(168,85,247,0.14)']}
                       start={{ x: 0.2, y: 0 }}
                       end={{ x: 0.8, y: 1 }}
                       style={{ flex: 1 }}
                     />
+                    <ScanLine width={FRAME - 48} height={(FRAME - 48) * 1.2} color="#22d3ee" />
                   </View>
                 </View>
               </View>

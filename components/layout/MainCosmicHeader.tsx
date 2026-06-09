@@ -1,48 +1,51 @@
-import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Pressable, Text, View } from 'react-native';
+
+import { BrandWordmark, Icon } from '@/components/ui';
 
 type MainCosmicHeaderProps = {
   displayName?: string;
   onProfilePress?: () => void;
+  onMenuPress?: () => void;
 };
 
-function timeGreeting(): string {
-  const h = new Date().getHours();
-  if (h < 12) return 'Good morning';
-  if (h < 17) return 'Good afternoon';
-  return 'Good evening';
+function initialsFor(name?: string): string {
+  const trimmed = name?.trim();
+  if (!trimmed) return 'A';
+  return trimmed
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? '')
+    .join('');
 }
 
-/** SaaS-style header: avatar, greeting, profile action */
-export function MainCosmicHeader({ displayName, onProfilePress }: MainCosmicHeaderProps) {
-  const name = displayName?.trim();
-  const greeting = name ? `${timeGreeting()}, ${name}` : timeGreeting();
-
+/** Stitch top app bar: menu (left), Agastya wordmark (center), avatar (right). */
+export function MainCosmicHeader({ displayName, onProfilePress, onMenuPress }: MainCosmicHeaderProps) {
   return (
-    <View className="mb-1 w-full flex-row items-center justify-between">
+    <View className="w-full flex-row items-center justify-between border-b border-white/10 px-2 pb-3 pt-1">
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Menu"
+        onPress={onMenuPress ?? onProfilePress}
+        className="h-10 w-10 items-center justify-center rounded-full active:opacity-80">
+        <Icon name="menu" size={24} color="#22d3ee" />
+      </Pressable>
+
+      <BrandWordmark />
+
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Open profile"
         onPress={onProfilePress}
-        className="h-12 w-12 overflow-hidden rounded-full border border-stitch-violet/35 active:opacity-90">
+        className="h-10 w-10 overflow-hidden rounded-full border border-white/20 active:opacity-90"
+        style={{ borderColor: 'rgba(34,211,238,0.3)' }}>
         <LinearGradient
-          colors={['rgba(121,246,255,0.35)', 'rgba(168,85,247,0.55)']}
+          colors={['rgba(34,211,238,0.35)', 'rgba(168,85,247,0.55)']}
           style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <Ionicons name="person" size={22} color="#e8e4ff" />
+          <Text className="font-label text-[13px] tracking-wide text-on-surface">
+            {initialsFor(displayName)}
+          </Text>
         </LinearGradient>
-      </Pressable>
-
-      <Text className="mx-3 flex-1 font-inter-medium text-[17px] text-mist" numberOfLines={1}>
-        {greeting}
-      </Text>
-
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Notifications"
-        onPress={onProfilePress}
-        className="h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.05] active:opacity-90">
-        <Ionicons name="notifications-outline" size={22} color="rgba(255,255,255,0.75)" />
       </Pressable>
     </View>
   );

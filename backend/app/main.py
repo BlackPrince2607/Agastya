@@ -15,11 +15,29 @@ Why `create_app()` factory:
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+import sentry_sdk
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.starlette import StarletteIntegration
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import Settings, get_settings
-from app.routes import agastya, health
+from app.routes import agastya, health, webhooks
+
+
+def _init_sentry(settings: Settings) -> None:
+    if not settings.sentry_dsn:
+        return
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        environment=settings.sentry_environment,
+        traces_sample_rate=0.1,
+        integrations=[
+            StarletteIntegration(transaction_style="endpoint"),
+            FastApiIntegration(transaction_style="endpoint"),
+        ],
+        send_default_pii=False,
+    )
 
 
 @asynccontextmanager
@@ -29,6 +47,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     log = logging.getLogger("app.main")
     settings = get_settings()
+
+    _init_sentry(settings)
+    if settings.sentry_dsn:
+        log.info("Sentry error tracking enabled (env=%s)", settings.sentry_environment)
 
     if settings.supabase_url and settings.supabase_service_role_key:
         log.info("Supabase session persistence enabled")
@@ -76,6 +98,8 @@ def create_app() -> FastAPI:
     # Versioned API surface — Expo will call e.g. https://api.example.com/v1/...
     app.include_router(health.router, prefix=settings.api_v1_prefix)
     app.include_router(agastya.router, prefix=settings.api_v1_prefix)
+    # Webhooks: not rate-limited, not behind session auth
+    app.include_router(webhooks.router, prefix=settings.api_v1_prefix)
 
     return app
 

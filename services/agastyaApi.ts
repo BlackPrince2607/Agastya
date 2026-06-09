@@ -1,11 +1,33 @@
 import type { FocusTopic } from '@/store/sessionStore';
 import { useSessionStore } from '@/store/sessionStore';
 import type { PalmAnalysisDto } from '@/types/palmAnalysis';
+import type { PredictionPeriod, PredictionsResponse } from '@/types/predictions';
 
 import { ERRORS, mapApiError } from '@/services/apiErrors';
 import { apiUrl } from '@/services/env';
 import { getSupabaseAccessToken } from '@/services/supabase';
 import { GUIDE_FINISH_PALM_FIRST } from '@/constants/userCopy';
+
+const DEFAULT_FETCH_TIMEOUT_MS = 8000;
+
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit & { timeoutMs?: number } = {},
+): Promise<Response> {
+  const { timeoutMs = DEFAULT_FETCH_TIMEOUT_MS, signal: externalSignal, ...rest } = init;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  const onExternalAbort = () => controller.abort();
+  externalSignal?.addEventListener('abort', onExternalAbort);
+
+  try {
+    return await fetch(url, { ...rest, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+    externalSignal?.removeEventListener('abort', onExternalAbort);
+  }
+}
 
 export type ApiHealthDto = {
   status: string;
@@ -17,10 +39,11 @@ export type ApiHealthDto = {
 
 /** Lightweight connectivity check — safe to call on bootstrap. */
 export async function fetchApiHealth(signal?: AbortSignal): Promise<ApiHealthDto> {
-  const res = await fetch(apiUrl('/v1/health'), {
+  const res = await fetchWithTimeout(apiUrl('/v1/health'), {
     method: 'GET',
     headers: { Accept: 'application/json' },
     signal,
+    timeoutMs: 6000,
   });
   if (!res.ok) {
     throw new Error(`health ${res.status}`);
@@ -28,10 +51,11 @@ export async function fetchApiHealth(signal?: AbortSignal): Promise<ApiHealthDto
   return res.json() as Promise<ApiHealthDto>;
 }
 
-async function getJson<T>(path: string): Promise<T> {
-  const res = await fetch(apiUrl(path), {
+async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const res = await fetchWithTimeout(apiUrl(path), {
     method: 'GET',
     headers: { Accept: 'application/json' },
+    signal,
   });
   if (!res.ok) {
     const detail = await res.text();
@@ -73,7 +97,7 @@ async function postJson<T>(
     const token = await getSupabaseAccessToken();
     if (token) headers.Authorization = `Bearer ${token}`;
   }
-  const res = await fetch(apiUrl(path), {
+  const res = await fetchWithTimeout(apiUrl(path), {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
@@ -148,7 +172,7 @@ export async function chatWithGuide(body: {
   profileSummary: string;
   isPremium: boolean;
 }) {
-  return postJson<{ reply: string }>('/v1/chat', body);
+  return postJson<{ reply: string; suggestions?: string[] }>('/v1/chat', body);
 }
 
 export async function fetchDailyTasks(body: {
@@ -156,11 +180,23 @@ export async function fetchDailyTasks(body: {
   palmAnalysis: PalmAnalysisDto;
   isPremium: boolean;
 }) {
-  return postJson<{ tasks: string[]; variant: string }>('/v1/tasks/daily', body);
+  // Tasks may be plain strings (legacy) or structured objects; normalized client-side.
+  return postJson<{ tasks: unknown[]; variant: string }>('/v1/tasks/daily', body);
+}
+
+export async function fetchPredictions(body: {
+  sessionId: string;
+  period: PredictionPeriod;
+  seed?: string;
+  palmAnalysis?: PalmAnalysisDto | null;
+  focusTopics?: FocusTopic[];
+  isPremium?: boolean;
+}) {
+  return postJson<PredictionsResponse>('/v1/predictions/generate', body);
 }
 
 export type GuideReplyResult =
-  | { ok: true; text: string }
+  | { ok: true; text: string; suggestions: string[] }
   | { ok: false; error: string; needsPalm?: boolean };
 
 export async function requestGuideReply(
@@ -190,14 +226,14 @@ export async function requestGuideReply(
     .join('\n');
 
   try {
-    const { reply } = await chatWithGuide({
+    const { reply, suggestions } = await chatWithGuide({
       sessionId,
       messages,
       palmAnalysis,
       profileSummary,
       isPremium: hasUnlockedPremium,
     });
-    return { ok: true, text: reply };
+    return { ok: true, text: reply, suggestions: suggestions ?? [] };
   } catch (e) {
     const msg = e instanceof Error ? e.message : ERRORS.network;
     return { ok: false, error: mapApiError(msg) };

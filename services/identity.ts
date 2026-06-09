@@ -8,7 +8,21 @@ import { setApiHealth, setApiHealthFailed } from '@/services/connectivity';
 import { restoreSessionFromServer } from '@/services/sessionRestore';
 import { useSessionStore } from '@/store/sessionStore';
 
+const WEB_INSTALL_KEY = 'agastya_web_install_id';
+
 async function resolveInstallId(): Promise<string> {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    try {
+      const existing = window.localStorage.getItem(WEB_INSTALL_KEY);
+      if (existing) return existing;
+      const id = Crypto.randomUUID();
+      window.localStorage.setItem(WEB_INSTALL_KEY, id);
+      return id;
+    } catch {
+      return 'web-guest';
+    }
+  }
+
   try {
     if (Platform.OS === 'android') {
       return Application.getAndroidId();

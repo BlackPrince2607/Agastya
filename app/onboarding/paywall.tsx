@@ -5,16 +5,19 @@ import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { MotiView } from 'moti';
+
 import { CosmicDotGrid } from '@/components/layout/CosmicDotGrid';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
-import { StitchOnboardingHeader } from '@/components/onboarding/StitchOnboardingHeader';
+import { OnboardingHeader } from '@/components/onboarding/OnboardingHeader';
 import { BlurContainer, CosmicButton } from '@/components/primitives';
 import { ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS } from '@/constants/onboarding';
 import { stitchMd3 } from '@/constants/stitchWelcome';
 import { stitchSignal } from '@/constants/theme';
 import { track } from '@/services/analytics';
 import { unlockPremiumFromStore } from '@/services/premiumUnlock';
-import { isDevPremiumBypassEnabled, isRevenueCatConfigured } from '@/services/revenuecat';
+import { isPremiumBypassEnabled, isRevenueCatConfigured } from '@/services/revenuecat';
+import { isWebDemoMode } from '@/utils/webDemo';
 import { useSessionStore } from '@/store/sessionStore';
 import { enterMainApp, hasRitualReading } from '@/utils/navigationFlow';
 
@@ -27,23 +30,23 @@ const TRUST_HIGHLIGHTS = [
 const FEATURES = [
   {
     icon: 'sparkles' as const,
-    title: 'Full Destiny Report',
-    body: 'Complete breakdown of your life path, love, and wealth metrics.',
+    title: 'Your full palm report',
+    body: 'The complete reading across love, career, money, and growth.',
   },
   {
     icon: 'heart-outline' as const,
-    title: 'Compatibility Reports',
-    body: 'Detailed cosmic matching with anyone—emotional, trust, and values pillars.',
+    title: 'Compatibility insights',
+    body: 'See how you connect with someone across emotion, trust, and values.',
   },
   {
     icon: 'chatbubble-ellipses-outline' as const,
-    title: 'Unlimited Oracle Access',
-    body: '24/7 AI guidance tailored to your unique palm signature.',
+    title: 'Unlimited AI Guide',
+    body: 'Ask your Guide anything, anytime—answers personalized to your reading.',
   },
   {
-    icon: 'eye-outline' as const,
-    title: 'Precise Future Timelines',
-    body: 'Know exactly when to act on opportunities and when to wait.',
+    icon: 'checkmark-done-outline' as const,
+    title: 'Daily guidance',
+    body: 'Small, personalized actions to keep your momentum going each day.',
   },
 ];
 
@@ -144,7 +147,7 @@ export default function PaywallScreen() {
             paddingBottom: 280 + insets.bottom,
             gap: 22,
           }}>
-          <StitchOnboardingHeader ritualStep={{ current: ONBOARDING_STEPS.paywall, total: ONBOARDING_TOTAL_STEPS }} />
+          <OnboardingHeader step={ONBOARDING_STEPS.paywall} total={ONBOARDING_TOTAL_STEPS} />
 
           <View>
             <Text className="font-space-grotesk text-[11px] font-semibold uppercase tracking-[0.38em] text-md-on-primary-container">
@@ -161,7 +164,12 @@ export default function PaywallScreen() {
                 <Text className="font-inter text-[14px] text-stitch-signal">You already have full access on this device.</Text>
               </View>
             ) : null}
-            {!isRevenueCatConfigured() && !isDevPremiumBypassEnabled() ? (
+            {isWebDemoMode() ? (
+              <Text className="mt-3 font-inter text-[13px] leading-5 text-stitch-signal">
+                Web demo — tap Start trial to unlock the full experience without a real purchase.
+              </Text>
+            ) : null}
+            {!isRevenueCatConfigured() && !isPremiumBypassEnabled() ? (
               <Text className="mt-3 font-inter text-[13px] leading-5 text-md-on-surface-variant">
                 Subscriptions aren’t available in this version yet. You can continue with the free preview from the previous
                 screen.
@@ -232,11 +240,16 @@ export default function PaywallScreen() {
             {premium ? (
               <CosmicButton gradient="nebulaMd3" label="Enter app" onPress={() => enterMainApp()} />
             ) : (
-              <CosmicButton
-                gradient="nebulaMd3"
-                label={busy ? 'Processing…' : 'Start free trial'}
-                onPress={() => void handleSubscribe()}
-              />
+              <MotiView
+                from={{ scale: 1 }}
+                animate={{ scale: 1.02 }}
+                transition={{ type: 'timing', duration: 1100, loop: true, repeatReverse: true }}>
+                <CosmicButton
+                  gradient="nebulaMd3"
+                  label={busy ? 'Processing…' : isWebDemoMode() ? 'Unlock full demo' : 'Start 7-Day Free Trial'}
+                  onPress={() => void handleSubscribe()}
+                />
+              </MotiView>
             )}
             <CosmicButton variant="ghost" label="Continue with preview" onPress={continueWithoutPurchase} />
             <CosmicButton variant="ghost" label="Save & sign in" onPress={goToAccountSync} />

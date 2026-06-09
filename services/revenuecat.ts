@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 
 import type { BillingPeriod } from '@/store/sessionStore';
+import { isWebDemoMode } from '@/utils/webDemo';
 
 let Purchases: typeof import('react-native-purchases').default | null = null;
 
@@ -26,6 +27,11 @@ export function isRevenueCatConfigured(): boolean {
 
 export function isDevPremiumBypassEnabled(): boolean {
   return __DEV__ && process.env.EXPO_PUBLIC_ALLOW_DEV_PREMIUM === 'true';
+}
+
+/** Dev bypass, or Vercel web demo (`EXPO_PUBLIC_WEB_DEMO=true`). */
+export function isPremiumBypassEnabled(): boolean {
+  return isDevPremiumBypassEnabled() || isWebDemoMode();
 }
 
 export async function configureRevenueCat() {
@@ -80,7 +86,7 @@ export async function purchasePremiumPlan(period: BillingPeriod): Promise<{
   success: boolean;
   entitled: boolean;
 }> {
-  if (isDevPremiumBypassEnabled()) {
+  if (isPremiumBypassEnabled()) {
     return { success: true, entitled: true };
   }
 

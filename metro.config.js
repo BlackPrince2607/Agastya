@@ -17,6 +17,13 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
       type: 'sourceFile',
     };
   }
+  // Zustand ESM uses import.meta — prefer CJS entry on web export.
+  if (moduleName === 'zustand' || moduleName.startsWith('zustand/')) {
+    return {
+      filePath: require.resolve(moduleName),
+      type: 'sourceFile',
+    };
+  }
   if (typeof origResolveRequest === 'function') {
     return origResolveRequest(context, moduleName, platform);
   }
