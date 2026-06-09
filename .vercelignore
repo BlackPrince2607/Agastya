@@ -3,7 +3,7 @@ backend/
 dist/
 node_modules/
 store-assets/
-legal/
+/legal/
 supabase/
 ios/
 android/
