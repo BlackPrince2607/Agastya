@@ -13,6 +13,7 @@ expo-env.d.ts
 # Local dev artifacts (QR screenshots, design exports)
 assets/expo-qr*.png
 assets/design/
+stitch_ai_palmistry_ux_design/
 
 # Cursor — ignore local editor settings only (keep team rules under .cursor/ if tracked)
 .cursor/settings.json

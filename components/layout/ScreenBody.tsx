@@ -8,7 +8,7 @@ export function ScreenBody({ children }: PropsWithChildren) {
   const { contentWidth } = useLayoutMetrics();
 
   return (
-    <View style={{ width: '100%', maxWidth: contentWidth, alignSelf: 'center' }}>
+    <View style={{ width: '100%', maxWidth: contentWidth, alignSelf: 'center', alignItems: 'stretch' }}>
       {children}
     </View>
   );

@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Platform, View } from 'react-native';
+import { View } from 'react-native';
 
 import { LoadingBlock } from '@/components/feedback';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
@@ -9,8 +9,6 @@ import { bootstrapIdentity } from '@/services/identity';
 import { restoreSessionFromServer } from '@/services/sessionRestore';
 import { track } from '@/services/analytics';
 import { useSessionStore } from '@/store/sessionStore';
-
-const isWeb = Platform.OS === 'web';
 
 function gateDestination() {
   return useSessionStore.getState().hasEnteredMain ? '/(main)/home' : '/welcome';
@@ -23,7 +21,7 @@ export default function Gate() {
   const [routed, setRouted] = useState(false);
 
   useEffect(() => {
-    if (!isWeb && !hydrated) return;
+    if (!hydrated) return;
 
     let cancelled = false;
 
@@ -37,15 +35,6 @@ export default function Gate() {
     void bootstrapIdentity();
     void restoreSessionFromServer({ force: false });
     track('identity_bootstrap');
-
-    if (isWeb) {
-      // Web static export can stall on persist hydration — route immediately.
-      const t = setTimeout(routeOut, 50);
-      return () => {
-        cancelled = true;
-        clearTimeout(t);
-      };
-    }
 
     const fallback = setTimeout(routeOut, 1200);
     return () => {

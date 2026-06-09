@@ -29,9 +29,17 @@ export function isDevPremiumBypassEnabled(): boolean {
   return __DEV__ && process.env.EXPO_PUBLIC_ALLOW_DEV_PREMIUM === 'true';
 }
 
-/** Dev bypass, or Vercel web demo (`EXPO_PUBLIC_WEB_DEMO=true`). */
+/** Dev bypass, explicit web demo flag, or web when native IAP is unavailable. */
 export function isPremiumBypassEnabled(): boolean {
-  return isDevPremiumBypassEnabled() || isWebDemoMode();
+  if (isDevPremiumBypassEnabled() || isWebDemoMode()) return true;
+  // Web builds cannot use App Store / Play billing — unlock locally when RC isn't configured.
+  if (Platform.OS === 'web' && !isRevenueCatConfigured()) return true;
+  return false;
+}
+
+/** True when web users can unlock premium without a real store purchase. */
+export function isWebPremiumUnlockAvailable(): boolean {
+  return Platform.OS === 'web' && isPremiumBypassEnabled();
 }
 
 export async function configureRevenueCat() {

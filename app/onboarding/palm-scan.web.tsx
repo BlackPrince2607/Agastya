@@ -1,27 +1,78 @@
-import { router } from 'expo-router';
-import { Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
-import { CosmicScreen } from '@/components/layout/CosmicScreen';
-import { CosmicButton } from '@/components/primitives';
+import { PalmScanBriefing } from '@/components/onboarding/PalmScanBriefing';
+import type { PalmScanHand } from '@/store/sessionStore';
+import { useSessionStore } from '@/store/sessionStore';
+import { pickPalmImageWeb } from '@/utils/pickPalmImageWeb';
+import { deferRouterPush } from '@/utils/routerDefer';
 
-/** Web cannot use the camera reliably — explain and continue with preview analysis. */
-export default function PalmScanWeb() {
+function HandToggle({
+  label,
+  sub,
+  selected,
+  onPress,
+}: {
+  label: string;
+  sub: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
   return (
-    <CosmicScreen variant="stitch">
-      <View className="flex-1 justify-center gap-6 px-8">
-        <Text className="font-inter-medium text-[20px] text-mist">Palm scan on web</Text>
-        <Text className="font-inter text-[15px] leading-6 text-md-on-surface-variant">
-          For the best experience, use the Agastya app on your phone to scan your palm. On web, we&apos;ll prepare a
-          preview reading so you can explore the product.
+    <Pressable onPress={onPress} className="min-w-[48%] flex-1">
+      <View
+        className={
+          selected
+            ? 'rounded-full border border-stitch-magenta bg-stitch-magenta/15 px-4 py-3 shadow-glow'
+            : 'rounded-full border border-white/15 bg-black/45 px-4 py-3'
+        }>
+        <Text className="text-center font-space-grotesk text-[11px] font-semibold uppercase tracking-[0.14em] text-mist">
+          {label}
         </Text>
-        <CosmicButton
-          gradient="nebulaMd3"
-          label="Continue with preview"
-          onPress={() =>
-            router.replace({ pathname: '/onboarding/analysis', params: { seed: 'web-preview' } })
-          }
-        />
+        <Text className="mt-1 text-center font-inter text-[11px] text-md-on-surface-variant">{sub}</Text>
       </View>
-    </CosmicScreen>
+    </Pressable>
+  );
+}
+
+/** Web: file upload instead of native camera. */
+export default function PalmScanWebScreen() {
+  const palmScanHand = useSessionStore((s) => s.palmScanHand);
+  const setPalmScanHand = useSessionStore((s) => s.setPalmScanHand);
+  const setPalmCaptureBase64 = useSessionStore((s) => s.setPalmCaptureBase64);
+
+  const uploadAndContinue = async () => {
+    const hand: PalmScanHand = palmScanHand ?? 'right';
+    const seed = `${hand}-${Date.now()}`;
+    const base64 = await pickPalmImageWeb();
+    if (!base64) return;
+    setPalmCaptureBase64(base64);
+    deferRouterPush({
+      pathname: '/onboarding/analysis',
+      params: { seed },
+    });
+  };
+
+  return (
+    <PalmScanBriefing
+      primaryLabel="Upload palm photo"
+      primaryIcon="image"
+      onPrimaryPress={() => void uploadAndContinue()}
+      beforePrimary={
+        <View className="flex-row gap-3">
+          <HandToggle
+            label="Left hand"
+            sub="Often receptive energy"
+            selected={palmScanHand === 'left'}
+            onPress={() => setPalmScanHand('left')}
+          />
+          <HandToggle
+            label="Right hand"
+            sub="Often active energy"
+            selected={palmScanHand === 'right' || palmScanHand === null}
+            onPress={() => setPalmScanHand('right')}
+          />
+        </View>
+      }
+    />
   );
 }

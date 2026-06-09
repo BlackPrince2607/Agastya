@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useMemo, useState } from 'react';
-import { Text, TextInput, View } from 'react-native';
+import { Platform, Text, TextInput, View } from 'react-native';
 
 import { MetricBar } from '@/components/match/MetricBar';
 import { EntertainmentDisclaimer } from '@/components/legal/EntertainmentDisclaimer';
@@ -14,10 +14,11 @@ import {
 
 type CosmicMatchPanelProps = {
   defaultSelfName?: string;
+  subtitle?: string;
   onOpenGuide?: () => void;
 };
 
-export function CosmicMatchPanel({ defaultSelfName = '', onOpenGuide }: CosmicMatchPanelProps) {
+export function CosmicMatchPanel({ defaultSelfName = '', subtitle, onOpenGuide }: CosmicMatchPanelProps) {
   const [selfName, setSelfName] = useState(defaultSelfName);
   const [partnerName, setPartnerName] = useState('');
 
@@ -33,7 +34,7 @@ export function CosmicMatchPanel({ defaultSelfName = '', onOpenGuide }: CosmicMa
 
   return (
     <View className="w-full gap-6">
-      <View className="flex-row items-center justify-between px-1">
+      <View className="w-full flex-row items-center justify-between px-1">
         <AvatarRing tint="cyan" />
         <LinearGradient
           colors={['#d392f6', '#f472b6']}
@@ -49,8 +50,18 @@ export function CosmicMatchPanel({ defaultSelfName = '', onOpenGuide }: CosmicMa
         <AvatarRing tint="violet" outline />
       </View>
 
-      <View className="items-center">
-        <GradientText className="font-noto-serif text-[48px] font-semibold">{affinity}%</GradientText>
+      {subtitle ? (
+        <View style={{ alignSelf: 'stretch' }}>
+          <Text style={{ fontSize: 14, lineHeight: 20, color: '#cbc4ce', textAlign: 'center' }}>{subtitle}</Text>
+        </View>
+      ) : null}
+
+      <View className="w-full items-center">
+        {Platform.OS === 'web' ? (
+          <Text className="font-noto-serif text-[48px] font-semibold text-primary">{affinity}%</Text>
+        ) : (
+          <GradientText className="font-noto-serif text-[48px] font-semibold">{affinity}%</GradientText>
+        )}
         <Text className="mt-1 font-inter-medium text-[15px] text-stitch-signal">{strength}</Text>
       </View>
 

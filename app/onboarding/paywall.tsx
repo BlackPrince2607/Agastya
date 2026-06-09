@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { MotiView } from 'moti';
@@ -16,7 +16,7 @@ import { stitchMd3 } from '@/constants/stitchWelcome';
 import { stitchSignal } from '@/constants/theme';
 import { track } from '@/services/analytics';
 import { unlockPremiumFromStore } from '@/services/premiumUnlock';
-import { isPremiumBypassEnabled, isRevenueCatConfigured } from '@/services/revenuecat';
+import { isPremiumBypassEnabled, isRevenueCatConfigured, isWebPremiumUnlockAvailable } from '@/services/revenuecat';
 import { isWebDemoMode } from '@/utils/webDemo';
 import { useSessionStore } from '@/store/sessionStore';
 import { enterMainApp, hasRitualReading } from '@/utils/navigationFlow';
@@ -164,12 +164,14 @@ export default function PaywallScreen() {
                 <Text className="font-inter text-[14px] text-stitch-signal">You already have full access on this device.</Text>
               </View>
             ) : null}
-            {isWebDemoMode() ? (
+            {isWebPremiumUnlockAvailable() ? (
               <Text className="mt-3 font-inter text-[13px] leading-5 text-stitch-signal">
-                Web demo — tap Start trial to unlock the full experience without a real purchase.
+                {isWebDemoMode()
+                  ? 'Web demo — tap below to unlock the full experience without a real purchase.'
+                  : 'On web, tap below to unlock the full experience — no app-store purchase required.'}
               </Text>
             ) : null}
-            {!isRevenueCatConfigured() && !isPremiumBypassEnabled() ? (
+            {Platform.OS !== 'web' && !isRevenueCatConfigured() && !isPremiumBypassEnabled() ? (
               <Text className="mt-3 font-inter text-[13px] leading-5 text-md-on-surface-variant">
                 Subscriptions aren’t available in this version yet. You can continue with the free preview from the previous
                 screen.
@@ -246,7 +248,13 @@ export default function PaywallScreen() {
                 transition={{ type: 'timing', duration: 1100, loop: true, repeatReverse: true }}>
                 <CosmicButton
                   gradient="nebulaMd3"
-                  label={busy ? 'Processing…' : isWebDemoMode() ? 'Unlock full demo' : 'Start 7-Day Free Trial'}
+                  label={
+                    busy
+                      ? 'Processing…'
+                      : isWebPremiumUnlockAvailable()
+                        ? 'Unlock full access'
+                        : 'Start 7-Day Free Trial'
+                  }
                   onPress={() => void handleSubscribe()}
                 />
               </MotiView>

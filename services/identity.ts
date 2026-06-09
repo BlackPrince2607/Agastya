@@ -3,6 +3,7 @@ import * as Crypto from 'expo-crypto';
 import { Platform } from 'react-native';
 
 import { fetchApiHealth, registerSession } from '@/services/agastyaApi';
+import { isApiConfigured } from '@/services/env';
 import { track } from '@/services/analytics';
 import { setApiHealth, setApiHealthFailed } from '@/services/connectivity';
 import { restoreSessionFromServer } from '@/services/sessionRestore';
@@ -59,6 +60,10 @@ export async function bootstrapIdentity() {
   });
 
   void (async () => {
+    if (!isApiConfigured()) {
+      setApiHealthFailed();
+      return;
+    }
     try {
       const ctrl = new AbortController();
       const t = setTimeout(() => ctrl.abort(), 6000);
@@ -89,6 +94,7 @@ export async function bootstrapIdentity() {
 
 export async function syncProfileRemote() {
   await bootstrapIdentity();
+  if (!isApiConfigured()) return;
   const snap = useSessionStore.getState();
   if (!snap.sessionId || !snap.deviceInstallId) return;
 

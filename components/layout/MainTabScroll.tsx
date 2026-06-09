@@ -32,7 +32,8 @@ export function MainTabScroll({
           paddingTop: 8,
           paddingBottom: TAB_BAR_CLEARANCE,
           paddingHorizontal: pad,
-          alignItems: 'center',
+          alignItems: 'stretch',
+          width: '100%',
         },
         contentContainerStyle,
       ]}>

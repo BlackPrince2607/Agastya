@@ -1,4 +1,5 @@
 import { fetchSessionBootstrap } from '@/services/agastyaApi';
+import { isApiConfigured } from '@/services/env';
 import { track } from '@/services/analytics';
 import { normalizeFullReport } from '@/services/normalizeReport';
 import { SYNC_NOTICE_FAILED } from '@/constants/userCopy';
@@ -27,6 +28,7 @@ type RestoreOptions = {
 
 /** Pull palm + dossiers from API/Supabase when local ritual state is empty or `force`. */
 export async function restoreSessionFromServer(options?: RestoreOptions): Promise<boolean> {
+  if (!isApiConfigured()) return false;
   const snap = useSessionStore.getState();
   if (!snap.sessionId) return false;
 

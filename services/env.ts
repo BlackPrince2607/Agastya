@@ -51,18 +51,32 @@ function resolveApiRoot(): string {
       console.log(`[Agastya API] ${lan}`);
       return lan;
     }
+    const root = trimSlash(fallbackDev);
+    console.log(`[Agastya API] ${root}`);
+    return root;
   }
 
-  const root = trimSlash(fallbackDev);
-  if (__DEV__) {
-    console.log(`[Agastya API] ${root}`);
+  // Production web without EXPO_PUBLIC_AGASTYA_API_URL — offline/demo mode only.
+  if (Platform.OS === 'web') {
+    if (!__DEV__) {
+      console.warn('[Agastya API] EXPO_PUBLIC_AGASTYA_API_URL not set — API calls disabled on web.');
+    }
+    return '';
   }
-  return root;
+
+  return trimSlash(fallbackDev);
 }
 
 export const AGASTYA_API_ROOT = resolveApiRoot();
 
+export function isApiConfigured(): boolean {
+  return AGASTYA_API_ROOT.length > 0;
+}
+
 export function apiUrl(path: string) {
+  if (!AGASTYA_API_ROOT) {
+    throw new Error('EXPO_PUBLIC_AGASTYA_API_URL is not configured');
+  }
   const p = path.startsWith('/') ? path : `/${path}`;
   return `${AGASTYA_API_ROOT}${p}`;
 }

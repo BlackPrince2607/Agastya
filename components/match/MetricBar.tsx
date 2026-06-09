@@ -9,12 +9,12 @@ type MetricBarProps = {
 };
 
 export function MetricBar({ label, pct }: MetricBarProps) {
-  const clamped = Math.min(100, Math.max(0, pct));
+  const clamped = Math.round(Math.min(100, Math.max(0, pct)));
   return (
-    <View className="gap-2">
-      <View className="flex-row items-center justify-between">
-        <Text className="font-inter text-[14px] text-mist">{label}</Text>
-        <Text className="font-space-grotesk text-[13px] font-semibold text-stitch-signal">{clamped}%</Text>
+    <View className="w-full gap-2">
+      <View className="w-full flex-row items-center justify-between gap-3">
+        <Text className="min-w-0 flex-1 font-inter text-[14px] text-mist">{label}</Text>
+        <Text className="shrink-0 font-space-grotesk text-[13px] font-semibold text-stitch-signal">{clamped}%</Text>
       </View>
       <View className="h-2.5 overflow-hidden rounded-full bg-white/10">
         <LinearGradient

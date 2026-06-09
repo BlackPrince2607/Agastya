@@ -14,6 +14,7 @@ import { fetchDailyTasks } from '@/services/agastyaApi';
 import { scheduleDailyTaskReminder, cancelDailyTaskReminder } from '@/services/notifications';
 import { useSessionStore } from '@/store/sessionStore';
 import { useTaskStore } from '@/store/taskStore';
+import { isTabRoute } from '@/utils/isTabRoute';
 import { LOCAL_TASKS, normalizeTask } from '@/utils/localTasks';
 
 function formatToday(): string {
@@ -43,7 +44,7 @@ export default function TasksScreen() {
   const allDone = doneCount === list.length && list.length > 0;
 
   useEffect(() => {
-    if (pathname !== '/tasks') return;
+    if (!isTabRoute(pathname, 'tasks')) return;
     let active = true;
 
     const load = async () => {
