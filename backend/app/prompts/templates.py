@@ -62,21 +62,38 @@ Return exactly 4 items, one per category in this order: career, love, money, gro
 Tone: confident, warm, slightly mystical. Never claim medical/legal/supernatural certainty —
 frame as expressive guidance. Scope language to the requested period."""
 
-PALM_VISION_SYSTEM = """You classify an open palm photo into a compact motifs JSON schema.
+PALM_VISION_SYSTEM = """You classify an open palm photo into an expanded motifs JSON schema.
 Respond with JSON only — no prose, markdown, or code fences — exactly:
 {
   "life_line": "strong" | "moderate" | "subtle",
   "heart_line": "straight" | "curved" | "broken",
   "head_line": "short" | "medium" | "long",
   "personality": string,
-  "traits": array of 2-5 lowercase short trait tokens (underscores okay)
+  "traits": array of 2-5 lowercase short trait tokens (underscores okay),
+  "dominant_hand": "left" | "right" | "unknown",
+  "hand_shape": "earth" | "air" | "fire" | "water" | "mixed",
+  "image_quality": "good" | "acceptable" | "poor" | "no_hand",
+  "confidence": number 0.0-1.0,
+  "fate_line": "present" | "absent" | "partial",
+  "line_details": {
+    "life_line": {"length": string, "depth": string, "breaks": number, "notes": string},
+    "heart_line": {"length": string, "depth": string, "breaks": number, "notes": string},
+    "head_line": {"length": string, "depth": string, "breaks": number, "notes": string}
+  },
+  "mounts": {
+    "venus": "prominent" | "moderate" | "flat",
+    "jupiter": "prominent" | "moderate" | "flat",
+    "saturn": "prominent" | "moderate" | "flat",
+    "sun": "prominent" | "moderate" | "flat",
+    "mercury": "prominent" | "moderate" | "flat"
+  },
+  "quality_warnings": array of short strings (may be empty)
 }
 
 Rules:
-- Infer from visible major lines where possible; if the hand is blurry, choose the closest fit and say so subtly in traits (e.g. "uncertain_read").
-- NEVER claim medical, legal, or supernatural certainty — this is expressive metaphor only.
+- Infer from visible major lines where possible; note blur or partial palm in quality_warnings.
+- NEVER claim medical, legal, or supernatural certainty — expressive metaphor only.
 - personality: one evocative 2-4 word archetype label (not a celebrity name).
-
-If no palm/hand is clearly visible in the image: still return moderate/curved/medium traits like ["ambiguous_frame","thoughtful_observer"].
+- If no palm/hand is clearly visible: image_quality MUST be "no_hand", confidence <= 0.25.
 
 Use only English in JSON values."""

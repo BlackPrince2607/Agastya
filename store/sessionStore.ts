@@ -34,6 +34,10 @@ type SessionStore = {
   palmCaptureBase64: string | null;
   palmAnalysis: PalmAnalysisDto | null;
 
+  partnerPalmCaptureBase64: string | null;
+  partnerPalmAnalysis: PalmAnalysisDto | null;
+  partnerPalmScanHand: PalmScanHand | null;
+
   previewReading: SimulatedReading | null;
   fullReading: SimulatedReading | null;
 
@@ -54,6 +58,9 @@ type SessionStore = {
 
   setPalmCaptureBase64: (payload: string | null) => void;
   setPalmAnalysis: (payload: PalmAnalysisDto | null) => void;
+  setPartnerPalmCaptureBase64: (payload: string | null) => void;
+  setPartnerPalmAnalysis: (payload: PalmAnalysisDto | null) => void;
+  setPartnerPalmScanHand: (hand: PalmScanHand | null) => void;
   setPreviewReading: (reading: SimulatedReading | null) => void;
   setFullReading: (reading: SimulatedReading | null) => void;
   setPredictions: (period: PredictionPeriod, payload: PredictionsResponse) => void;
@@ -66,6 +73,9 @@ type SessionStore = {
 const emptyReadingState = {
   palmCaptureBase64: null as string | null,
   palmAnalysis: null as PalmAnalysisDto | null,
+  partnerPalmCaptureBase64: null as string | null,
+  partnerPalmAnalysis: null as PalmAnalysisDto | null,
+  partnerPalmScanHand: null as PalmScanHand | null,
   previewReading: null as SimulatedReading | null,
   fullReading: null as SimulatedReading | null,
   predictions: null as Partial<PredictionsByPeriod> | null,
@@ -109,6 +119,9 @@ export const useSessionStore = create<SessionStore>()(
 
       setPalmCaptureBase64: (payload) => set({ palmCaptureBase64: payload }),
       setPalmAnalysis: (payload) => set({ palmAnalysis: payload }),
+      setPartnerPalmCaptureBase64: (payload) => set({ partnerPalmCaptureBase64: payload }),
+      setPartnerPalmAnalysis: (payload) => set({ partnerPalmAnalysis: payload }),
+      setPartnerPalmScanHand: (partnerPalmScanHand) => set({ partnerPalmScanHand }),
       setPreviewReading: (reading) => set({ previewReading: reading }),
       setFullReading: (reading) => set({ fullReading: reading }),
       setPredictions: (period, payload) =>
@@ -161,6 +174,8 @@ export const useSessionStore = create<SessionStore>()(
         billingPeriod: state.billingPeriod,
         palmScanHand: state.palmScanHand,
         palmAnalysis: state.palmAnalysis,
+        partnerPalmAnalysis: state.partnerPalmAnalysis,
+        partnerPalmScanHand: state.partnerPalmScanHand,
         previewReading: state.previewReading,
         fullReading: state.fullReading,
         predictions: state.predictions,

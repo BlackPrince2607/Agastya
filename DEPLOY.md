@@ -92,6 +92,39 @@ For Google OAuth: create an OAuth app in Google Cloud Console and add the Client
 
 For Apple OAuth: configure Sign in with Apple in your Apple Developer account and add to Supabase Auth → Providers → Apple.
 
+Ensure `SUPABASE_JWT_SECRET` in backend `.env` matches Supabase → Project Settings → API → JWT Secret (required for session merge in production).
+
+### Auth QA checklist
+
+| Flow | Platform | Expected |
+|------|----------|----------|
+| Google OAuth | iOS, Android | Browser closes → signed in → merge → cloud restore → correct resume route |
+| Apple OAuth | iOS | Same as Google |
+| Magic link email | All | Email link → `/auth/callback` → session + merge |
+| Skip account | Onboarding | Ritual continues anonymously |
+| Sign in from Profile | Main app | Opens account screen; merge preserves reading |
+| Sign out | Profile | Clears Supabase; local ritual data kept |
+| Reinstall + sign in | Native | Cloud reading + premium restored from server bootstrap |
+
+### Auth routing (anonymous-first)
+
+Login is **optional** — users complete the ritual without signing in.
+
+| Entry point | Route |
+|-------------|-------|
+| Welcome “Sign in” | `/onboarding/account` (or resume if already signed in) |
+| Onboarding account step | `/onboarding/account` |
+| Profile → Sign in | `/onboarding/account` |
+| Paywall → Save & sign in | `/onboarding/account` |
+
+| Gate | Checks | Does not require login |
+|------|--------|------------------------|
+| Main tabs `/(main)/*` | `hasEnteredMain` (finished onboarding) | Supabase session |
+| Premium features | Server `isPremium` + client store | Login |
+| Cloud sync | Supabase sign-in + merge API | Anonymous ritual works offline |
+
+**Public before login:** `/welcome`, `/onboarding/*`, `/report`, `/task/[id]`. **Requires ritual progress:** main app tabs.
+
 ---
 
 ## 6. RevenueCat Setup
@@ -101,6 +134,21 @@ For Apple OAuth: configure Sign in with Apple in your Apple Developer account an
 3. Create monthly ($9.99) and annual ($59.99) products in App Store Connect and Google Play Console, then map them to offerings in RevenueCat
 4. Under **Integrations → Webhooks**, add your backend URL: `https://api.agastya.app/v1/webhooks/revenuecat`
    - Set the Authorization header to a secret string, then set `REVENUECAT_WEBHOOK_SECRET` in your backend `.env`
+5. RevenueCat App User ID is set automatically to the anonymous `sessionId` at bootstrap; after sign-in it switches to `supabaseUserId` so webhooks match the correct row.
+
+---
+
+## 6b. Stripe Setup (web billing only)
+
+Mobile subscriptions stay on RevenueCat + App Store / Play Billing. Stripe is for **web** Checkout only.
+
+1. Create monthly and annual subscription products in Stripe Dashboard → Products
+2. Copy Price IDs to backend env: `STRIPE_PRICE_MONTHLY`, `STRIPE_PRICE_ANNUAL`
+3. Set `STRIPE_SECRET_KEY` in backend `.env`
+4. Add webhook endpoint: `https://api.agastya.app/v1/webhooks/stripe`
+   - Events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`
+   - Copy signing secret to `STRIPE_WEBHOOK_SECRET`
+5. Frontend (production web): set `EXPO_PUBLIC_STRIPE_CHECKOUT_ENABLED=true` and `EXPO_PUBLIC_WEB_DEMO=false`
 
 ---
 

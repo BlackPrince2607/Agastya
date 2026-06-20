@@ -17,7 +17,7 @@ export function StrengthDots({ label, value }: StrengthDotsProps) {
           <View
             key={i}
             className="h-2.5 w-2.5 rounded-full"
-            style={{ backgroundColor: i < filled ? '#d3beeb' : 'rgba(255,255,255,0.15)' }}
+            style={{ backgroundColor: i < filled ? '#c084fc' : 'rgba(255,255,255,0.12)' }}
           />
         ))}
       </View>

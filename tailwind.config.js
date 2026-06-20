@@ -37,9 +37,14 @@ module.exports = {
         'on-tertiary-container': '#8f7b5b',
         error: '#ffb4ab',
         'on-error': '#690005',
-        // Brand signal accents
-        signal: '#22d3ee',
+        // Brand signal accents (purple-led)
+        signal: '#c084fc',
         nebula: '#68577e',
+        magenta: '#e879f9',
+        purple: '#a855f7',
+        'line-life': '#a855f7',
+        'line-heart': '#f472b6',
+        'line-head': '#22d3ee',
 
         // ---- Legacy namespaces (retuned to Cosmic Essence) ----
         md: {
@@ -83,11 +88,11 @@ module.exports = {
         'space-grotesk': ['SpaceGrotesk_600SemiBold'],
       },
       boxShadow: {
-        glow: '0 0 40px rgba(211,190,235,0.30)',
-        'glow-teal': '0 0 45px rgba(34,211,238,0.35)',
-        'glow-sm': '0 0 22px rgba(211,190,235,0.22)',
-        aura: '0 0 20px rgba(211,190,235,0.15)',
-        nebula: '0 10px 30px rgba(104,87,126,0.3)',
+        glow: '0 0 40px rgba(168,85,247,0.35)',
+        'glow-magenta': '0 0 45px rgba(232,121,249,0.40)',
+        'glow-sm': '0 0 22px rgba(168,85,247,0.25)',
+        aura: '0 0 24px rgba(168,85,247,0.20)',
+        nebula: '0 10px 30px rgba(104,87,126,0.35)',
       },
       spacing: {
         unit: '4px',

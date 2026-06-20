@@ -17,3 +17,12 @@ PyJWT>=2.8.0,<3.0.0
 
 # Error tracking — optional; disable by leaving SENTRY_DSN unset.
 sentry-sdk[fastapi]>=2.0.0,<3.0.0
+
+# Shared rate limiting across workers (optional — set REDIS_URL in production).
+redis>=5.0.0,<6.0.0
+
+# Test runner
+pytest>=8.0.0,<9.0.0
+
+# Stripe — web Checkout + webhooks (optional)
+stripe>=11.0.0,<13.0.0

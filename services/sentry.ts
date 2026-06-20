@@ -31,7 +31,7 @@ export function initSentry(): void {
 
   try {
     const integrations =
-      Platform.OS === 'web'
+      Platform.OS === 'web' || typeof Sentry.mobileReplayIntegration !== 'function'
         ? []
         : [
             Sentry.mobileReplayIntegration({
@@ -50,11 +50,8 @@ export function initSentry(): void {
       replaysOnErrorSampleRate: Platform.OS === 'web' ? 0 : 1.0,
       integrations,
       beforeSend(event) {
-        if (!__DEV__ && event.breadcrumbs?.values) {
-          event.breadcrumbs.values = event.breadcrumbs.values.map((b) => ({
-            ...b,
-            data: undefined,
-          }));
+        if (!__DEV__ && event.breadcrumbs) {
+          delete event.breadcrumbs;
         }
         return event;
       },

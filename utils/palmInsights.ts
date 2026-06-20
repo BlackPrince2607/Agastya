@@ -32,14 +32,30 @@ function pick<T>(map: Record<string, T>, key: string, fallback: T): T {
 
 export function palmLineInsights(palm: PalmAnalysisDto, seed: string): PalmLineInsight[] {
   const digs = seedDigits(seed || 'lines', 3);
+  const conf = palm.confidence ?? 0.55;
   const life = pick(LIFE, palm.life_line, LIFE.moderate);
   const heart = pick(HEART, palm.heart_line, HEART.curved);
   const head = pick(HEAD, palm.head_line, HEAD.medium);
 
   return [
-    { lineName: 'Life Line', descriptor: life.descriptor, interpretation: life.text, score: inRange(digs[0] ?? 0.7, 74, 92) },
-    { lineName: 'Heart Line', descriptor: heart.descriptor, interpretation: heart.text, score: inRange(digs[1] ?? 0.6, 70, 90) },
-    { lineName: 'Head Line', descriptor: head.descriptor, interpretation: head.text, score: inRange(digs[2] ?? 0.65, 72, 88) },
+    {
+      lineName: 'Life Line',
+      descriptor: life.descriptor,
+      interpretation: life.text,
+      score: inRange((digs[0] ?? 0.7) * conf, 74, 92),
+    },
+    {
+      lineName: 'Heart Line',
+      descriptor: heart.descriptor,
+      interpretation: heart.text,
+      score: inRange((digs[1] ?? 0.6) * conf, 70, 90),
+    },
+    {
+      lineName: 'Head Line',
+      descriptor: head.descriptor,
+      interpretation: head.text,
+      score: inRange((digs[2] ?? 0.65) * conf, 72, 88),
+    },
   ];
 }
 

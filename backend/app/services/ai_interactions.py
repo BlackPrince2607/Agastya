@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 
+import sentry_sdk
+
 from app.config import Settings
-from app.services.llm_client import groq_client
+from app.services.llm_client import groq_chat_completion
 from app.prompts.templates import CHAT_SYSTEM, TASK_SYSTEM
 from app.schemas.chat import ChatRequest
 from app.schemas.palm import PalmAnalysis
 from app.schemas.tasks import DailyTasksBody, Task
 
 _SUGGESTION_LINE = re.compile(r"^\s*SUGGESTIONS:\s*(\[.*\])\s*$", re.IGNORECASE | re.MULTILINE)
+logger = logging.getLogger(__name__)
 
 _FALLBACK_SUGGESTIONS = [
     "Tell me more about my future",
@@ -55,10 +59,9 @@ async def generate_chat_reply(
     body: ChatRequest,
     server_is_premium: bool = False,
 ) -> tuple[str, list[str]]:
-    # Use server-authoritative premium flag (from DB/webhook) when available;
-    # fall back to client claim only when Supabase is not configured.
-    is_premium = server_is_premium or body.is_premium
-    if not is_premium and len(body.messages) > 10:
+    # Use server-authoritative premium flag only.
+    is_premium = server_is_premium
+    if not is_premium and len(body.messages) > 5:
         return (
             "You've reached the luminous preview ceiling—unlock unlimited guide transmissions "
             "to continue this thread without interruption.",
@@ -72,33 +75,36 @@ async def generate_chat_reply(
         "Answer as Agastya."
     )
 
-    client = groq_client(settings)
-    if client is None:
-        return _heuristic_chat(body), list(_FALLBACK_SUGGESTIONS)
-    try:
-        msgs = [{"role": "system", "content": f"{CHAT_SYSTEM}\n\n{context}"}]
-        for turn in body.messages:
-            role = turn.role
-            if role == "guide":
-                role = "assistant"
-            elif role == "you":
-                role = "user"
-            if role not in {"user", "assistant", "system"}:
-                role = "user"
-            msgs.append({"role": role, "content": turn.content})
+    msgs = [{"role": "system", "content": f"{CHAT_SYSTEM}\n\n{context}"}]
+    for turn in body.messages:
+        role = turn.role
+        if role == "guide":
+            role = "assistant"
+        elif role == "you":
+            role = "user"
+        if role not in {"user", "assistant", "system"}:
+            role = "user"
+        msgs.append({"role": role, "content": turn.content})
 
-        completion = await client.chat.completions.create(
-            model=settings.groq_chat_model,
-            messages=msgs,
-            temperature=0.9,
-            max_tokens=480,
-        )
+    completion = await groq_chat_completion(
+        settings,
+        model=settings.groq_chat_model,
+        messages=msgs,
+        temperature=0.9,
+        max_tokens=480,
+    )
+    if completion is None:
+        return _heuristic_chat(body), list(_FALLBACK_SUGGESTIONS)
+
+    try:
         text = completion.choices[0].message.content or ""
         reply, suggestions = _split_suggestions(text)
         if not reply:
             return _heuristic_chat(body), list(_FALLBACK_SUGGESTIONS)
         return reply, suggestions or list(_FALLBACK_SUGGESTIONS)
-    except Exception:
+    except Exception as exc:
+        logger.exception("Chat reply parse failed: %s", exc)
+        sentry_sdk.capture_exception(exc)
         return _heuristic_chat(body), list(_FALLBACK_SUGGESTIONS)
 
 
@@ -141,9 +147,6 @@ async def generate_daily_tasks(settings: Settings, body: DailyTasksBody) -> tupl
     premium = body.is_premium
     fallback = _deterministic_tasks(palm, premium)
 
-    client = groq_client(settings)
-    if client is None:
-        return fallback
     payload = {
         "traits": palm.traits,
         "personality": palm.personality,
@@ -152,16 +155,19 @@ async def generate_daily_tasks(settings: Settings, body: DailyTasksBody) -> tupl
         "head_line": palm.head_line,
         "premium": premium,
     }
+    completion = await groq_chat_completion(
+        settings,
+        model=settings.groq_chat_model,
+        response_format={"type": "json_object"},
+        messages=[
+            {"role": "system", "content": TASK_SYSTEM},
+            {"role": "user", "content": json.dumps(payload)},
+        ],
+        temperature=0.85,
+    )
+    if completion is None:
+        return fallback
     try:
-        completion = await client.chat.completions.create(
-            model=settings.groq_chat_model,
-            response_format={"type": "json_object"},
-            messages=[
-                {"role": "system", "content": TASK_SYSTEM},
-                {"role": "user", "content": json.dumps(payload)},
-            ],
-            temperature=0.85,
-        )
         raw = completion.choices[0].message.content or "{}"
         data = json.loads(raw)
         raw_tasks = data.get("tasks") or []
@@ -173,5 +179,7 @@ async def generate_daily_tasks(settings: Settings, body: DailyTasksBody) -> tupl
             return fallback
         variant = "premium_predictions" if premium else "standard"
         return tasks, variant
-    except Exception:
+    except Exception as exc:
+        logger.exception("Daily tasks generation failed: %s", exc)
+        sentry_sdk.capture_exception(exc)
         return fallback

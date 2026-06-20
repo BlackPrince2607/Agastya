@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useMemo } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
@@ -6,7 +7,7 @@ import { InlineError, StatusPill } from '@/components/feedback';
 import { MainTabScroll } from '@/components/layout/MainTabScroll';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { MainCosmicHeader } from '@/components/layout/MainCosmicHeader';
-import { GlassCard, Icon, NebulaButton, type IconName } from '@/components/ui';
+import { GlassCard, Icon, NebulaButton, ProgressBar, type IconName } from '@/components/ui';
 import {
   buildDailyInsight,
   displayNameOrDefault,
@@ -19,6 +20,16 @@ import { useSessionStore } from '@/store/sessionStore';
 import { useTaskStore } from '@/store/taskStore';
 
 type Tool = { icon: IconName; label: string; hint?: string; onPress: () => void; wide?: boolean };
+
+function initialsFor(name?: string): string {
+  const trimmed = name?.trim();
+  if (!trimmed) return 'A';
+  return trimmed
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? '')
+    .join('');
+}
 
 function timeGreeting(): string {
   const h = new Date().getHours();
@@ -62,27 +73,37 @@ export default function HomeDashboardScreen() {
   const tools: Tool[] = [
     { icon: 'front_hand', label: 'Palm Report', onPress: () => router.push('/report') },
     { icon: 'auto_fix_high', label: 'AI Chat', onPress: () => router.push('/chat') },
+    { icon: 'task_alt', label: 'Daily Tasks', onPress: () => router.push('/tasks') },
     { icon: 'auto_graph', label: 'Predictions', onPress: () => router.push({ pathname: '/report', params: { tab: 'predictions' } }) },
-    { icon: 'favorite', label: 'Compatibility', onPress: () => router.push('/report/compatibility') },
-    {
-      icon: 'task_alt',
-      label: 'Daily Tasks',
-      hint: 'Rituals to shape your future',
-      onPress: () => router.push('/tasks'),
-      wide: true,
-    },
   ];
+
+  const streakGoal = 7;
+  const streakProgress = Math.min(100, Math.round((streak / streakGoal) * 100));
 
   return (
     <CosmicScreen variant="stitch">
       <MainTabScroll>
         <MainCosmicHeader displayName={displayName} onProfilePress={() => router.push('/profile')} />
 
-        <View className="gap-1">
-          <Text className="font-headline text-[26px] leading-8 text-on-surface" accessibilityRole="header">
-            {greeting} <Text className="text-primary">✦</Text>
-          </Text>
-          <Text className="font-body text-[14px] text-on-surface-variant">Ready to shape your future?</Text>
+        <View className="flex-row items-center gap-3">
+          <View
+            className="h-11 w-11 overflow-hidden rounded-full border border-purple/40"
+            style={{ shadowColor: '#a855f7', shadowOpacity: 0.3, shadowRadius: 8 }}>
+            <LinearGradient
+              colors={['rgba(168,85,247,0.5)', 'rgba(232,121,249,0.35)']}
+              style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+              <Text className="font-label text-[13px] text-on-surface">{initialsFor(displayName)}</Text>
+            </LinearGradient>
+          </View>
+          <View className="flex-1 gap-0.5">
+            <View className="flex-row items-center gap-1.5">
+              <Text className="font-headline text-[24px] leading-8 text-on-surface" accessibilityRole="header">
+                {greeting}
+              </Text>
+              {palmAnalysis ? <Icon name="verified_user" size={18} color="#c084fc" /> : null}
+            </View>
+            <Text className="font-body text-[14px] text-on-surface-variant">Ready to shape your future?</Text>
+          </View>
         </View>
 
         {apiLimited ? <StatusPill label={OFFLINE_LIMITED_LABEL} variant="offline" /> : null}
@@ -108,15 +129,27 @@ export default function HomeDashboardScreen() {
           </GlassCard>
         ) : null}
 
-        {/* Daily Insight (Stitch Daily Forecast) */}
-        <GlassCard glow className="w-full p-5">
-          <View pointerEvents="none" className="absolute -right-20 -top-20 h-56 w-56 rounded-full bg-primary/20" />
-          <View className="relative gap-3">
+        {/* Daily Insight */}
+        <GlassCard glow className="w-full overflow-hidden p-5">
+          <View pointerEvents="none" className="absolute -right-10 top-4 h-32 w-32 items-center justify-center">
+            <View
+              className="h-28 w-28 rounded-full"
+              style={{
+                backgroundColor: 'rgba(168,85,247,0.25)',
+                shadowColor: '#a855f7',
+                shadowOpacity: 0.6,
+                shadowRadius: 24,
+              }}
+            />
+            <View className="absolute h-16 w-16 rounded-full bg-purple/40" />
+            <Icon name="person" size={28} color="rgba(255,255,255,0.5)" />
+          </View>
+          <View className="relative max-w-[72%] gap-3">
             <View className="flex-row items-center gap-2">
-              <Icon name="auto_awesome" size={18} color="#d3beeb" />
+              <Icon name="auto_awesome" size={18} color="#c084fc" />
               <Text className="font-label text-[12px] uppercase tracking-[0.16em] text-primary">Daily Insight</Text>
             </View>
-            <Text className="font-headline text-[24px] leading-8 text-on-surface">{quickInsight.title}</Text>
+            <Text className="font-headline text-[22px] leading-8 text-on-surface">{quickInsight.title}</Text>
             <Text className="font-body text-[15px] leading-6 text-on-surface-variant" numberOfLines={4}>
               {quickInsight.body}
             </Text>
@@ -144,70 +177,48 @@ export default function HomeDashboardScreen() {
           </GlassCard>
         ) : null}
 
-        {/* Sacred Tools bento grid */}
-        <Text className="mt-2 px-1 font-headline-md text-[20px] text-on-surface">Sacred Tools</Text>
+        {/* Quick Access */}
+        <Text className="mt-2 px-1 font-headline-md text-[20px] text-on-surface">Quick Access</Text>
         <View className="flex-row flex-wrap justify-between gap-3">
-          {tools.map((tool) =>
-            tool.wide ? (
-              <Pressable
-                key={tool.label}
-                onPress={tool.onPress}
-                className="w-full active:opacity-90"
-                accessibilityRole="button"
-                accessibilityLabel={tool.label}>
-                <GlassCard className="flex-row items-center justify-between p-4">
-                  <View className="flex-row items-center gap-3">
-                    <View className="h-12 w-12 items-center justify-center rounded-full bg-secondary-container">
-                      <Icon name={tool.icon} size={26} color="#d3beeb" />
-                    </View>
-                    <View>
-                      <Text className="font-label text-[12px] uppercase tracking-[0.1em] text-on-surface">
-                        {tool.label}
-                      </Text>
-                      {tool.hint ? (
-                        <Text className="mt-0.5 font-body text-[12px] text-on-surface-variant">{tool.hint}</Text>
-                      ) : null}
-                    </View>
-                  </View>
-                  <Icon name="chevron_right" size={22} color="#d3beeb" />
-                </GlassCard>
-              </Pressable>
-            ) : (
-              <Pressable
-                key={tool.label}
-                onPress={tool.onPress}
-                style={{ width: '48%' }}
-                className="active:opacity-90"
-                accessibilityRole="button"
-                accessibilityLabel={tool.label}>
-                <GlassCard className="aspect-square items-center justify-center gap-2 p-4">
-                  <View className="h-12 w-12 items-center justify-center rounded-full bg-secondary-container">
-                    <Icon name={tool.icon} size={28} color="#d3beeb" />
-                  </View>
-                  <Text className="font-label text-center text-[12px] uppercase tracking-[0.08em] text-on-surface">
-                    {tool.label}
-                  </Text>
-                </GlassCard>
-              </Pressable>
-            ),
-          )}
+          {tools.map((tool) => (
+            <Pressable
+              key={tool.label}
+              onPress={tool.onPress}
+              style={{ width: '48%' }}
+              className="active:opacity-90"
+              accessibilityRole="button"
+              accessibilityLabel={tool.label}>
+              <GlassCard className="aspect-square items-center justify-center gap-3 p-4">
+                <View
+                  className="h-14 w-14 items-center justify-center rounded-2xl border border-white/10"
+                  style={{ backgroundColor: 'rgba(168,85,247,0.12)' }}>
+                  <Icon name={tool.icon} size={28} color="#c084fc" />
+                </View>
+                <Text className="font-label text-center text-[11px] uppercase tracking-[0.1em] text-on-surface">
+                  {tool.label}
+                </Text>
+              </GlassCard>
+            </Pressable>
+          ))}
         </View>
 
-        {/* Streak / Destiny Alignment */}
-        <GlassCard className="flex-row items-center gap-4 p-4">
-          <View className="h-12 w-12 items-center justify-center rounded-2xl bg-orange-500/20">
-            <Icon name="local_fire_department" size={24} color="#fb923c" />
-          </View>
-          <View className="flex-1">
-            <Text className="font-headline-md text-[16px] text-on-surface">{JOURNEY_DAY_LABEL(journeyDays)}</Text>
-            <Text className="mt-0.5 font-body text-[13px] text-on-surface-variant">{JOURNEY_DAY_FOOTNOTE}</Text>
-          </View>
-          {streak > 0 ? (
-            <View className="items-center justify-center rounded-2xl bg-orange-500/20 px-3 py-1.5">
-              <Text className="font-space-grotesk text-[18px] font-bold text-orange-400">{streak}</Text>
-              <Text className="font-label text-[9px] uppercase tracking-widest text-orange-300/70">streak</Text>
+        {/* Streak */}
+        <GlassCard className="gap-3 p-4">
+          <View className="flex-row items-center gap-4">
+            <View className="h-12 w-12 items-center justify-center rounded-2xl bg-purple/20">
+              <Icon name="local_fire_department" size={24} color="#c084fc" />
             </View>
-          ) : null}
+            <View className="flex-1">
+              <Text className="font-headline-md text-[16px] text-on-surface">
+                {streak > 0 ? `${streak} Day Streak` : JOURNEY_DAY_LABEL(journeyDays)}
+              </Text>
+              <Text className="mt-0.5 font-body text-[13px] text-on-surface-variant">{JOURNEY_DAY_FOOTNOTE}</Text>
+            </View>
+            {streak > 0 ? (
+              <Text className="font-space-grotesk text-[20px] font-bold text-primary">{streak}</Text>
+            ) : null}
+          </View>
+          <ProgressBar value={streakProgress} height={8} palette="progress" />
         </GlassCard>
       </MainTabScroll>
     </CosmicScreen>

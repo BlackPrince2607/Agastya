@@ -52,6 +52,7 @@ export default function ChatScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const apiLimited = getApiHealth()?.ok === false;
   const reachedCap = !premium && messageCount >= FREE_MESSAGE_CAP;
+  const messagesLeft = !premium ? Math.max(0, FREE_MESSAGE_CAP - messageCount) : null;
 
   useEffect(() => {
     const prompt = typeof icebreaker === 'string' ? icebreaker.trim() : '';
@@ -84,7 +85,7 @@ export default function ChatScreen() {
       setSuggestions(result.suggestions);
     } else {
       setError(result.error);
-      if (!result.needsPalm) {
+      if (!result.needsPalm && result.offline) {
         const fallback = trimmed.length < 12 ? (AI_VOICE_HINTS[1] ?? AI_VOICE_HINTS[0]) : AI_VOICE_HINTS[0];
         addMessage('guide', fallback);
       }
@@ -111,6 +112,11 @@ export default function ChatScreen() {
             </View>
 
             {apiLimited ? <View className="mt-3"><StatusPill label={OFFLINE_LIMITED_LABEL} variant="offline" /></View> : null}
+            {!premium && messagesLeft !== null && messagesLeft > 0 ? (
+              <Text className="mt-2 font-inter text-[12px] text-on-surface-variant">
+                {messagesLeft} preview {messagesLeft === 1 ? 'message' : 'messages'} left
+              </Text>
+            ) : null}
 
             <ScrollView
               ref={scrollRef}

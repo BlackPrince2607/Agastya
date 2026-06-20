@@ -1,5 +1,5 @@
-import { useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect, useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
 
 import { MotiView } from '@/components/moti/MotiView';
@@ -11,6 +11,7 @@ import { AnalyzingSeal, GradientText } from '@/components/primitives';
 import {
   ANALYSIS_LOADING_PHRASES,
   ANALYSIS_OFFLINE_NOTICE,
+  SAMPLE_READING_BADGE,
 } from '@/constants/userCopy';
 import { analyzePalm, generateReport } from '@/services/agastyaApi';
 import { bootstrapIdentity, syncProfileRemote } from '@/services/identity';
@@ -18,10 +19,13 @@ import { normalizeFullReport } from '@/services/normalizeReport';
 import { scheduleReadyNotification } from '@/services/notifications';
 import { track } from '@/services/analytics';
 import { buildSimulatedReading } from '@/services/simulatedReading';
+import { isApiConfigured } from '@/services/env';
 import type { PalmAnalysisDto } from '@/types/palmAnalysis';
+import { isLivePalmAnalysis, palmNeedsRetake } from '@/types/palmAnalysis';
 import { useSessionStore } from '@/store/sessionStore';
 import { ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS } from '@/constants/onboarding';
 import { deferRouterReplace } from '@/utils/routerDefer';
+import { estimateLandmarksFromRoi, trimBase64Payload } from '@/utils/palmLandmarks';
 
 const STEP_MS = 2600;
 
@@ -31,6 +35,7 @@ const FALLBACK_PALM: PalmAnalysisDto = {
   head_line: 'long',
   personality: 'visionary',
   traits: ['independent', 'overthinker'],
+  analysis_source: 'fallback',
 };
 
 export default function AnalysisScreen() {
@@ -43,6 +48,8 @@ export default function AnalysisScreen() {
   const [pct, setPct] = useState(12);
   const [syncPulse, setSyncPulse] = useState(0.22);
   const [offlineRitual, setOfflineRitual] = useState(false);
+  const [sampleBadge, setSampleBadge] = useState(false);
+  const [palmResult, setPalmResult] = useState<PalmAnalysisDto | null>(null);
 
   const runMs = STEP_MS * ANALYSIS_LOADING_PHRASES.length + 900;
 
@@ -62,7 +69,6 @@ export default function AnalysisScreen() {
     return () => clearInterval(id);
   }, []);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- single-shot ritual orchestrated per palm seed
   useEffect(() => {
     const resolvedSeed = seed ?? `trace-${Date.now()}`;
     setReadingSeed(resolvedSeed);
@@ -71,81 +77,119 @@ export default function AnalysisScreen() {
       setTimeout(resolve, STEP_MS * ANALYSIS_LOADING_PHRASES.length + 900);
     });
 
-    const pipeline = async () => {
-      await bootstrapIdentity();
-      await syncProfileRemote();
-      const snap = useSessionStore.getState();
-      if (!snap.sessionId || !snap.deviceInstallId) {
-        throw new Error('missing_session');
-      }
-
-      let palm: PalmAnalysisDto = FALLBACK_PALM;
-      try {
-        const capture = useSessionStore.getState().palmCaptureBase64;
-        palm = await analyzePalm({
-          sessionId: snap.sessionId,
-          seed: resolvedSeed,
-          imageBase64: capture,
-        });
-      } catch {
-        palm = FALLBACK_PALM;
-      }
-      setPalmAnalysis(palm);
-
-      try {
-        const previewPayload = await generateReport({
-          sessionId: snap.sessionId,
-          seed: resolvedSeed,
-          palmAnalysis: palm,
-          focusTopics: snap.focusTopics,
-          mode: 'preview',
-          displayName: snap.userDisplayName,
-          gender: snap.userGender,
-        });
-        setPreviewReading(normalizeFullReport(previewPayload));
-      } catch {
-        setPreviewReading(buildSimulatedReading(resolvedSeed, snap.focusTopics));
-      }
-
-      track('analysis_pipeline_complete', { seed_len: resolvedSeed.length });
-      useSessionStore.setState({ palmCaptureBase64: null });
-      void scheduleReadyNotification();
-    };
-
     let cancelled = false;
 
     void (async () => {
+      let needsRetake = false;
+
+      const pipeline = async () => {
+        await bootstrapIdentity();
+        await syncProfileRemote();
+        const snap = useSessionStore.getState();
+        if (!snap.sessionId || !snap.deviceInstallId) {
+          throw new Error('missing_session');
+        }
+
+        const captureRaw = snap.palmCaptureBase64;
+        const capture = captureRaw ? trimBase64Payload(captureRaw) : null;
+        const landmarks = estimateLandmarksFromRoi();
+        const online = isApiConfigured();
+
+        let palm: PalmAnalysisDto = FALLBACK_PALM;
+        try {
+          palm = await analyzePalm({
+            sessionId: snap.sessionId,
+            deviceInstallId: snap.deviceInstallId,
+            seed: resolvedSeed,
+            imageBase64: capture,
+            dominantHand: snap.palmScanHand ?? 'right',
+            landmarks,
+          });
+          setPalmResult(palm);
+          if (palmNeedsRetake(palm)) {
+            needsRetake = true;
+            return;
+          }
+          if (!isLivePalmAnalysis(palm)) {
+            setSampleBadge(true);
+          }
+        } catch (err) {
+          if (online) {
+            const msg = err instanceof Error ? err.message : 'Analysis failed';
+            if (msg.toLowerCase().includes('retake') || msg.toLowerCase().includes('palm')) {
+              needsRetake = true;
+              return;
+            }
+            throw err;
+          }
+          palm = FALLBACK_PALM;
+          setSampleBadge(true);
+        }
+
+        setPalmAnalysis(palm);
+
+        try {
+          const previewPayload = await generateReport({
+            sessionId: snap.sessionId,
+            seed: resolvedSeed,
+            palmAnalysis: palm,
+            focusTopics: snap.focusTopics,
+            mode: 'preview',
+            displayName: snap.userDisplayName,
+            gender: snap.userGender,
+          });
+          setPreviewReading(normalizeFullReport(previewPayload));
+        } catch {
+          setPreviewReading(buildSimulatedReading(resolvedSeed, snap.focusTopics));
+        }
+
+        track('analysis_pipeline_complete', { seed_len: resolvedSeed.length });
+        useSessionStore.setState({ palmCaptureBase64: null });
+        void scheduleReadyNotification();
+      };
+
       try {
         await Promise.all([minDelay, pipeline()]);
       } catch {
+        if (cancelled) return;
         const snap = useSessionStore.getState();
         setOfflineRitual(true);
-        const fb = FALLBACK_PALM;
-        setPalmAnalysis(fb);
+        setSampleBadge(true);
+        setPalmAnalysis(FALLBACK_PALM);
         setPreviewReading(buildSimulatedReading(resolvedSeed, snap.focusTopics));
       } finally {
-        if (!cancelled) {
-          deferRouterReplace({
-            pathname: '/onboarding/report-preview',
-            params: { seed: resolvedSeed },
-          });
+        if (cancelled) return;
+        if (needsRetake) {
+          router.replace('/onboarding/palm-scan');
+          return;
         }
+        deferRouterReplace({
+          pathname: '/onboarding/report-preview',
+          params: { seed: resolvedSeed },
+        });
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [seed]);
+  }, [seed, setPalmAnalysis, setPreviewReading, setReadingSeed]);
 
   const caption = ANALYSIS_LOADING_PHRASES[phase] ?? ANALYSIS_LOADING_PHRASES[0];
 
-  const checklist: ChecklistItem[] = [
-    { label: 'Major Lines', state: pct > 30 ? 'done' : 'active' },
-    { label: 'Mounts', state: pct > 55 ? 'done' : pct > 30 ? 'active' : 'pending' },
-    { label: 'Hand Shape', state: pct > 78 ? 'done' : pct > 55 ? 'active' : 'pending' },
-    { label: 'Finger Analysis', state: pct >= 99 ? 'done' : pct > 78 ? 'active' : 'pending' },
-  ];
+  const checklist: ChecklistItem[] = useMemo(() => {
+    const p = palmResult;
+    const lineDone = Boolean(p?.life_line && p?.heart_line && p?.head_line);
+    const mountsDone = Boolean(p?.mounts && Object.keys(p.mounts).length > 0);
+    const shapeDone = Boolean(p?.hand_shape);
+    const fingersDone = Boolean(p?.line_details || p?.fate_line);
+    return [
+      { label: 'Major Lines', state: lineDone ? 'done' : pct > 30 ? 'active' : 'pending' },
+      { label: 'Mounts', state: mountsDone ? 'done' : pct > 55 ? 'active' : 'pending' },
+      { label: 'Hand Shape', state: shapeDone ? 'done' : pct > 78 ? 'active' : 'pending' },
+      { label: 'Finger Analysis', state: fingersDone ? 'done' : pct >= 99 ? 'active' : 'pending' },
+    ];
+  }, [palmResult, pct]);
 
   return (
     <CosmicScreen>
@@ -158,6 +202,9 @@ export default function AnalysisScreen() {
             <GradientText className="font-space-grotesk text-[12px] uppercase tracking-[0.5em] text-stitch-signal">
               Analyzing your palm
             </GradientText>
+            {sampleBadge ? (
+              <Text className="font-inter text-[12px] text-amber-200/90">{SAMPLE_READING_BADGE}</Text>
+            ) : null}
             <View className="relative items-center justify-center">
               <AnalyzingSeal diameter={244} hideCenterGlyph />
               <View className="pointer-events-none absolute items-center justify-center gap-1">

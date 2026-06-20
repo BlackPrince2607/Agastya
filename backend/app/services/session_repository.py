@@ -88,6 +88,21 @@ def row_to_bucket(row: dict[str, Any]) -> SessionBucket:
     )
 
 
+async def refresh_premium_from_db(
+    session_id: str,
+    bucket: SessionBucket,
+    settings: Settings | None = None,
+) -> bool:
+    """Reload is_premium from Supabase so multi-worker deploys stay consistent."""
+    client = _client(settings)
+    if client is None:
+        return bucket.is_premium
+    row = await client.select_one(TABLE, filters={"session_id": session_id})
+    if row is not None:
+        bucket.is_premium = bool(row.get("is_premium", False))
+    return bucket.is_premium
+
+
 async def load(session_id: str, settings: Settings | None = None) -> SessionBucket | None:
     client = _client(settings)
     if client is None:

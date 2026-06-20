@@ -1,18 +1,29 @@
 import { generateReport } from '@/services/agastyaApi';
 import { track } from '@/services/analytics';
 import { normalizeFullReport } from '@/services/normalizeReport';
+import { restoreSessionFromServer } from '@/services/sessionRestore';
 import {
   isPremiumBypassEnabled,
   isRevenueCatConfigured,
+  isStripeCheckoutEnabled,
   purchasePremiumPlan,
   refreshPremiumFromStore,
   restorePurchasesFromStore,
 } from '@/services/revenuecat';
+import { startStripeCheckout } from '@/services/stripeBilling';
 import { useSessionStore } from '@/store/sessionStore';
 
 export type UnlockResult =
-  | { ok: true; source: 'purchase' | 'restore' | 'entitlement' | 'dev' }
+  | { ok: true; source: 'purchase' | 'restore' | 'entitlement' | 'dev' | 'stripe' }
   | { ok: false; reason: 'cancelled' | 'unavailable' | 'not_entitled' };
+
+async function syncPremiumFromServer(): Promise<boolean> {
+  const restored = await restoreSessionFromServer({ force: true });
+  if (restored && useSessionStore.getState().hasUnlockedPremium) {
+    return true;
+  }
+  return useSessionStore.getState().hasUnlockedPremium;
+}
 
 async function materializeFullReport(seed?: string) {
   const snap = useSessionStore.getState();
@@ -39,7 +50,7 @@ async function materializeFullReport(seed?: string) {
   }
 }
 
-/** Subscribe or restore — only sets premium when the store reports entitlement (or dev bypass). */
+/** Subscribe or restore — sets premium when store/webhook confirms entitlement (or dev bypass). */
 export async function unlockPremiumFromStore(options: {
   mode: 'purchase' | 'restore';
   seed?: string;
@@ -52,6 +63,17 @@ export async function unlockPremiumFromStore(options: {
     await materializeFullReport(seed);
     track('premium_unlock_dev');
     return { ok: true, source: 'dev' };
+  }
+
+  if (isStripeCheckoutEnabled() && mode === 'purchase') {
+    const checkout = await startStripeCheckout();
+    if (checkout.ok) {
+      return { ok: true, source: 'stripe' };
+    }
+    if (checkout.reason === 'cancelled') {
+      return { ok: false, reason: 'cancelled' };
+    }
+    return { ok: false, reason: 'unavailable' };
   }
 
   if (!isRevenueCatConfigured()) {
@@ -78,8 +100,22 @@ export async function unlockPremiumFromStore(options: {
     return { ok: false, reason: 'not_entitled' };
   }
 
-  setPremium(true);
+  const serverPremium = await syncPremiumFromServer();
+  setPremium(serverPremium || entitled);
   await materializeFullReport(seed);
   track('premium_unlock_ok', { mode });
   return { ok: true, source: mode === 'restore' ? 'restore' : 'purchase' };
+}
+
+/** After Stripe Checkout success redirect — poll server for isPremium. */
+export async function finalizeStripeCheckout(seed?: string): Promise<UnlockResult> {
+  const setPremium = useSessionStore.getState().setPremium;
+  const entitled = await syncPremiumFromServer();
+  if (!entitled) {
+    return { ok: false, reason: 'not_entitled' };
+  }
+  setPremium(true);
+  await materializeFullReport(seed);
+  track('premium_unlock_ok', { mode: 'stripe' });
+  return { ok: true, source: 'stripe' };
 }

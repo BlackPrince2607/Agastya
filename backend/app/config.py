@@ -14,7 +14,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # backend/ directory (parent of app/)
@@ -46,8 +46,14 @@ class Settings(BaseSettings):
     # Expo tunnel dev URLs (HTTPS) — matched by regex in addition to cors_origins.
     cors_origin_regex: str | None = Field(default=r"https://.*\.exp\.direct")
 
-    # --- Palm: dummy always hash-only motifs; groq tries vision LM when Groq key + palm image ---
-    palm_analysis_mode: Literal["dummy", "groq"] = "groq"
+    # --- Palm: dummy | groq | hybrid (CV landmarks + Groq narrative) ---
+    palm_analysis_mode: Literal["dummy", "groq", "hybrid"] = "groq"
+
+    # --- Rate limiting (optional Redis / Upstash for multi-worker deploys) ---
+    redis_url: str | None = None
+
+    # --- Trusted hosts (comma-separated; empty = allow all) ---
+    trusted_hosts: str = ""
 
     # --- Supabase (optional — enables session persistence + palm storage) ---
     supabase_url: str | None = None
@@ -63,6 +69,12 @@ class Settings(BaseSettings):
     # --- RevenueCat webhook (optional — skips signature verification when absent) ---
     revenuecat_webhook_secret: str | None = None
 
+    # --- Stripe (web billing) ---
+    stripe_secret_key: str | None = None
+    stripe_webhook_secret: str | None = None
+    stripe_price_monthly: str | None = None
+    stripe_price_annual: str | None = None
+
     # --- Sentry (optional — error tracking) ---
     sentry_dsn: str | None = None
     sentry_environment: str = "production"
@@ -74,6 +86,43 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def trusted_hosts_list(self) -> list[str]:
+        return [h.strip() for h in self.trusted_hosts.split(",") if h.strip()]
+
+    @property
+    def supabase_enabled(self) -> bool:
+        return bool(self.supabase_url and self.supabase_service_role_key)
+
+    @field_validator("cors_origins")
+    @classmethod
+    def _strip_cors(cls, v: str) -> str:
+        return v.strip()
+
+
+def validate_production_settings(settings: Settings) -> None:
+    """Fail fast when DEBUG=false and required production secrets are missing."""
+    if settings.debug:
+        return
+    missing: list[str] = []
+    if not settings.groq_api_key:
+        missing.append("GROQ_API_KEY")
+    if not settings.supabase_url:
+        missing.append("SUPABASE_URL")
+    if not settings.supabase_service_role_key:
+        missing.append("SUPABASE_SERVICE_ROLE_KEY")
+    if not settings.supabase_jwt_secret:
+        missing.append("SUPABASE_JWT_SECRET")
+    if not settings.revenuecat_webhook_secret:
+        missing.append("REVENUECAT_WEBHOOK_SECRET")
+    if missing:
+        raise RuntimeError(
+            f"Production startup blocked — set required env vars: {', '.join(missing)}"
+        )
+    origins = settings.cors_origins_list
+    if not origins or "*" in origins:
+        raise RuntimeError("Production CORS_ORIGINS must list explicit origins (no wildcard)")
 
 
 @lru_cache

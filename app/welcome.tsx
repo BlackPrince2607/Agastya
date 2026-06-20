@@ -1,10 +1,11 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
 import { MotiPressable } from 'moti/interactions';
+import { router } from 'expo-router';
 import { useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Dimensions,
   Image,
   Pressable,
@@ -18,7 +19,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WelcomeBlurShell } from '@/components/welcome/WelcomeBlurShell';
 import { stitchMd3, STITCH_PALM_ART_URI } from '@/constants/stitchWelcome';
 import { triggerLightTap } from '@/hooks/useHapticTap';
-import { routeAfterSignInIntent } from '@/utils/navigationFlow';
+import { readAuthSession } from '@/services/authSession';
+import { isSupabaseEnabled } from '@/services/supabase';
+import { SIGN_IN_UNAVAILABLE } from '@/constants/userCopy';
+import { routeAfterSignInIntent, resolveResumeHref } from '@/utils/navigationFlow';
+import { deferRouterReplace } from '@/utils/routerDefer';
 
 /** Pixel translation of Stitch HTML export — MD3 tokens, Inter / Noto Serif / Space Grotesk */
 const WIN = Dimensions.get('window');
@@ -30,10 +35,21 @@ export default function WelcomeScreen() {
 
   const handleSignIn = async () => {
     if (signInBusy) return;
+    if (!isSupabaseEnabled) {
+      Alert.alert('Sign-in unavailable', SIGN_IN_UNAVAILABLE);
+      return;
+    }
     void triggerLightTap();
     setSignInBusy(true);
     try {
-      await routeAfterSignInIntent();
+      const auth = await readAuthSession();
+      if (auth.isSignedIn) {
+        await routeAfterSignInIntent();
+      } else {
+        router.push('/onboarding/account');
+      }
+    } catch {
+      Alert.alert('Sign-in', 'Something went wrong. Please try again.');
     } finally {
       setSignInBusy(false);
     }
@@ -85,7 +101,7 @@ export default function WelcomeScreen() {
             <MotiPressable
               onPress={() => {
                 void triggerLightTap();
-                router.push('/onboarding');
+                deferRouterReplace(resolveResumeHref());
               }}
               animate={({ pressed }) => ({ scale: pressed ? 0.97 : 1 })}
               transition={{ type: 'timing', duration: 160 }}>

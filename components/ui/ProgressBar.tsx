@@ -14,8 +14,9 @@ type ProgressBarProps = {
 };
 
 /** Thin nebula-filled progress track with a leading glow point. */
-export function ProgressBar({ value, height = 6, palette = 'nebula' }: ProgressBarProps) {
+export function ProgressBar({ value, height = 6, palette = 'progress' }: ProgressBarProps) {
   const clamped = Math.max(0, Math.min(100, value));
+  const colors = palette in gradients ? gradients[palette as keyof typeof gradients] : gradients.nebula;
 
   return (
     <View
@@ -27,7 +28,7 @@ export function ProgressBar({ value, height = 6, palette = 'nebula' }: ProgressB
         transition={{ type: 'timing', duration: 700 }}
         style={{ height: '100%' }}>
         <LinearGradient
-          colors={[...gradients[palette]]}
+          colors={[...colors]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
           style={{ flex: 1, borderRadius: 999 }}

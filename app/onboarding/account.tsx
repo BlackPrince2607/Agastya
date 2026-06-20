@@ -2,7 +2,7 @@ import * as Linking from 'expo-linking';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert,
   Image,
@@ -23,14 +23,26 @@ import { OnboardingHeader } from '@/components/onboarding/OnboardingHeader';
 import { GlassCard, Icon, NebulaButton, type IconName } from '@/components/ui';
 import { LEGAL_URLS } from '@/constants/legal';
 import { ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS } from '@/constants/onboarding';
-import { SIGN_IN_UNAVAILABLE } from '@/constants/userCopy';
+import { SIGN_IN_UNAVAILABLE, EMAIL_SIGNIN_USE_OAUTH } from '@/constants/userCopy';
 import { STITCH_PALM_ART_URI } from '@/constants/stitchWelcome';
 import { track } from '@/services/analytics';
-import { restoreSessionFromServer } from '@/services/sessionRestore';
+import { createSessionFromUrlDetailed } from '@/services/authCallback';
+import { mapSupabaseAuthError } from '@/services/authErrors';
+import { ensureSessionMerged } from '@/services/authMerge';
+import { getAuthRedirectUri } from '@/services/authRedirect';
+import { isAuthBypassEnabled, isEmailSignInEnabled } from '@/services/authConfig';
 import { getSupabase, isSupabaseEnabled } from '@/services/supabase';
 import { useSessionStore } from '@/store/sessionStore';
 import { useAuthSession } from '@/hooks/useAuthSession';
-import { enterMainApp as goToMainApp, hasRitualReading, resolveResumeHref } from '@/utils/navigationFlow';
+import {
+  enterMainApp as goToMainApp,
+  hasRitualReading,
+  resolveResumeHref,
+  routeAfterSignInIntent,
+  tryEnterMainApp,
+} from '@/utils/navigationFlow';
+
+WebBrowser.maybeCompleteAuthSession();
 
 const TRUST_BADGES: { icon: IconName; label: string }[] = [
   { icon: 'cloud_done', label: 'Secure Backup' },
@@ -49,8 +61,17 @@ export default function SaveJourneyScreen() {
   const afterPaywall = fromPaywall === '1';
 
   const [email, setEmail] = useState('');
+  const [oauthBusy, setOauthBusy] = useState<'apple' | 'google' | null>(null);
+  const [emailBusy, setEmailBusy] = useState(false);
 
-  const redirectUri = Linking.createURL('/');
+  const redirectUri = getAuthRedirectUri();
+
+  /** Dev bypass: skip this screen when the user already has a reading. */
+  useEffect(() => {
+    if (!isAuthBypassEnabled || isSignedIn) return;
+    if (!hasRitualReading()) return;
+    void tryEnterMainApp();
+  }, [isAuthBypassEnabled, isSignedIn]);
 
   const openLegal = (url: string) => {
     void Linking.openURL(url).catch(() => {
@@ -59,6 +80,10 @@ export default function SaveJourneyScreen() {
   };
 
   const magicLink = async () => {
+    if (!isEmailSignInEnabled) {
+      Alert.alert('Email sign-in', EMAIL_SIGNIN_USE_OAUTH);
+      return;
+    }
     const supabase = getSupabase();
     if (!isSupabaseEnabled || !supabase) {
       Alert.alert('Sign-in unavailable', SIGN_IN_UNAVAILABLE);
@@ -70,18 +95,45 @@ export default function SaveJourneyScreen() {
       return;
     }
 
-    const { error } = await supabase.auth.signInWithOtp({
-      email: trimmed,
-      options: { emailRedirectTo: redirectUri },
-    });
+    setEmailBusy(true);
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email: trimmed,
+        options: {
+          emailRedirectTo: redirectUri,
+          shouldCreateUser: true,
+        },
+      });
 
-    if (error) {
-      Alert.alert('Something went wrong', error.message);
+      if (error) {
+        Alert.alert('Something went wrong', mapSupabaseAuthError(error.message));
+        return;
+      }
+
+      track('auth_magic_link_dispatched');
+      Alert.alert(
+        'Check your inbox',
+        `We sent a sign-in link to ${trimmed}. Open it on this device to finish signing in.`,
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Could not send sign-in email.';
+      Alert.alert('Something went wrong', mapSupabaseAuthError(msg));
+    } finally {
+      setEmailBusy(false);
+    }
+  };
+
+  const finishOAuthReturn = async (returnUrl: string) => {
+    const result = await createSessionFromUrlDetailed(returnUrl);
+    if (!result.ok) {
+      Alert.alert(
+        'Sign-in incomplete',
+        mapSupabaseAuthError(result.message ?? 'We could not finish signing you in. Please try again.'),
+      );
       return;
     }
-
-    track('auth_magic_link_dispatched');
-    Alert.alert('Check your inbox', 'We sent a sign-in link. After you sign in, your reading syncs across devices.');
+    await ensureSessionMerged();
+    await routeAfterSignInIntent();
   };
 
   const oauth = async (provider: 'apple' | 'google') => {
@@ -90,28 +142,62 @@ export default function SaveJourneyScreen() {
       Alert.alert('Sign-in unavailable', SIGN_IN_UNAVAILABLE);
       return;
     }
+    if (oauthBusy) return;
 
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider,
-      options: {
-        redirectTo: redirectUri,
-        skipBrowserRedirect: Platform.OS !== 'web',
-      },
-    });
+    setOauthBusy(provider);
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo: redirectUri,
+          skipBrowserRedirect: Platform.OS !== 'web',
+        },
+      });
 
-    if (error) {
-      Alert.alert(`${provider === 'apple' ? 'Apple' : 'Google'} sign-in`, error.message);
-      return;
-    }
-
-    if (Platform.OS !== 'web' && data.url) {
-      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUri);
-      if (result.type === 'success') {
-        await restoreSessionFromServer({ force: true });
+      if (error) {
+        Alert.alert(`${provider === 'apple' ? 'Apple' : 'Google'} sign-in`, mapSupabaseAuthError(error.message));
+        return;
       }
-    }
 
-    track('auth_oauth_attempt', { provider });
+      if (Platform.OS === 'web') {
+        if (data.url) {
+          window.location.assign(data.url);
+        } else {
+          Alert.alert(
+            'Sign-in unavailable',
+            'Could not open the sign-in page. Check Supabase OAuth settings for this provider.',
+          );
+        }
+        return;
+      }
+
+      if (!data.url) {
+        Alert.alert(
+          'Sign-in unavailable',
+          `Could not start ${provider === 'apple' ? 'Apple' : 'Google'} sign-in. Enable the provider in Supabase and add redirect URL:\n${redirectUri}`,
+        );
+        return;
+      }
+
+      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUri);
+      if (result.type === 'success' && result.url) {
+        await finishOAuthReturn(result.url);
+      } else if (result.type === 'cancel' || result.type === 'dismiss') {
+        Alert.alert('Sign-in cancelled', 'No changes were made to your account.');
+      } else {
+        Alert.alert(
+          'Sign-in incomplete',
+          'The sign-in window closed before we could verify your account. Try again.',
+        );
+      }
+
+      track('auth_oauth_attempt', { provider });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Sign-in failed.';
+      Alert.alert(`${provider === 'apple' ? 'Apple' : 'Google'} sign-in`, mapSupabaseAuthError(msg));
+    } finally {
+      setOauthBusy(null);
+    }
   };
 
   return (
@@ -153,6 +239,15 @@ export default function SaveJourneyScreen() {
               </Text>
             </View>
 
+            {isAuthBypassEnabled ? (
+              <GlassCard className="w-full px-4 py-3" style={{ borderColor: 'rgba(34,211,238,0.35)' }}>
+                <Text className="font-body text-[14px] leading-6" style={{ color: '#22d3ee' }}>
+                  Dev access is on — you can enter without signing in. Use Google or Apple below if you want cloud
+                  backup.
+                </Text>
+              </GlassCard>
+            ) : null}
+
             {isSignedIn ? (
               <GlassCard className="w-full px-4 py-3" style={{ borderColor: 'rgba(34,211,238,0.35)' }}>
                 <Text className="font-body text-[14px] leading-6" style={{ color: '#22d3ee' }}>
@@ -178,49 +273,71 @@ export default function SaveJourneyScreen() {
             <View className="gap-3">
               <Pressable
                 onPress={() => void oauth('apple')}
+                disabled={oauthBusy !== null}
                 accessibilityRole="button"
                 accessibilityLabel="Continue with Apple"
                 className="flex-row items-center justify-center gap-3 rounded-pill bg-white py-4 active:opacity-90">
                 <Ionicons name="logo-apple" size={20} color="#000" />
-                <Text className="font-body-medium text-[16px] font-semibold text-black">Continue with Apple</Text>
+                <Text className="font-body-medium text-[16px] font-semibold text-black">
+                  {oauthBusy === 'apple' ? 'Signing in…' : 'Continue with Apple'}
+                </Text>
               </Pressable>
 
               <Pressable
                 onPress={() => void oauth('google')}
+                disabled={oauthBusy !== null}
                 accessibilityRole="button"
                 accessibilityLabel="Continue with Google"
                 className="flex-row items-center justify-center gap-3 rounded-pill border border-white/10 bg-white/[0.05] py-4 active:opacity-90">
                 <GoogleLogo size={20} />
-                <Text className="font-body-medium text-[16px] font-semibold text-on-surface">Continue with Google</Text>
+                <Text className="font-body-medium text-[16px] font-semibold text-on-surface">
+                  {oauthBusy === 'google' ? 'Signing in…' : 'Continue with Google'}
+                </Text>
               </Pressable>
             </View>
 
-            {/* Divider */}
-            <View className="flex-row items-center gap-4">
-              <View className="h-px flex-1 bg-white/10" />
-              <Text className="font-label text-[10px] uppercase tracking-[0.28em] text-on-surface-variant">Or</Text>
-              <View className="h-px flex-1 bg-white/10" />
-            </View>
+            {/* Email form — opt-in via EXPO_PUBLIC_EMAIL_SIGNIN=true (Supabase email limits are strict) */}
+            {isEmailSignInEnabled ? (
+              <>
+                <View className="flex-row items-center gap-4">
+                  <View className="h-px flex-1 bg-white/10" />
+                  <Text className="font-label text-[10px] uppercase tracking-[0.28em] text-on-surface-variant">Or</Text>
+                  <View className="h-px flex-1 bg-white/10" />
+                </View>
 
-            {/* Email form */}
-            <View className="gap-2">
-              <Text className="ml-4 font-label text-[11px] uppercase tracking-[0.1em] text-on-surface-variant">
-                Email Address
+                <View className="gap-2">
+                  <Text className="ml-4 font-label text-[11px] uppercase tracking-[0.1em] text-on-surface-variant">
+                    Email Address
+                  </Text>
+                  <TextInput
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    placeholder="you@example.com"
+                    placeholderTextColor="rgba(255,255,255,0.25)"
+                    value={email}
+                    onChangeText={setEmail}
+                    className="rounded-pill border border-white/10 bg-surface-container-lowest/50 px-6 py-4 font-body text-[16px] text-on-surface"
+                  />
+                  <View className="mt-2">
+                    <NebulaButton
+                      label={emailBusy ? 'Sending link…' : 'Continue with Email'}
+                      onPress={() => void magicLink()}
+                      disabled={emailBusy}
+                    />
+                  </View>
+                  {__DEV__ ? (
+                    <Text className="mt-2 px-2 font-body text-[11px] leading-4 text-on-surface-variant/70">
+                      Dev redirect: {redirectUri}
+                    </Text>
+                  ) : null}
+                </View>
+              </>
+            ) : __DEV__ ? (
+              <Text className="px-2 text-center font-body text-[12px] leading-5 text-on-surface-variant/70">
+                Dev redirect: {redirectUri}
               </Text>
-              <TextInput
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                placeholder="you@example.com"
-                placeholderTextColor="rgba(255,255,255,0.25)"
-                value={email}
-                onChangeText={setEmail}
-                className="rounded-pill border border-white/10 bg-surface-container-lowest/50 px-6 py-4 font-body text-[16px] text-on-surface"
-              />
-              <View className="mt-2">
-                <NebulaButton label="Continue with Email" onPress={() => void magicLink()} />
-              </View>
-            </View>
+            ) : null}
 
             {/* Footer */}
             <View className="items-center gap-2 pt-1">
@@ -247,30 +364,25 @@ export default function SaveJourneyScreen() {
             className="absolute bottom-0 left-0 right-0 z-20 border-t border-white/10 bg-[#0f0e10]/95 px-6 pt-4"
             style={{ paddingBottom: Math.max(insets.bottom, 16) }}>
             <View className="gap-y-2.5">
-              {hasRitualReading() ? (
-                <NebulaButton label="Open Agastya" onPress={() => goToMainApp()} />
-              ) : (
+              {(isSignedIn || isAuthBypassEnabled) && hasRitualReading() ? (
+                <NebulaButton
+                  label={isAuthBypassEnabled && !isSignedIn ? 'Enter without account' : 'Enter Agastya'}
+                  onPress={() => goToMainApp()}
+                />
+              ) : isSignedIn || isAuthBypassEnabled ? (
                 <NebulaButton label="Continue onboarding" onPress={() => router.replace(resolveResumeHref())} />
-              )}
-              <Pressable
-                onPress={() => {
-                  if (hasRitualReading()) {
-                    goToMainApp();
-                  } else {
-                    router.replace('/onboarding/report-preview');
-                  }
-                }}
-                className="items-center py-2 active:opacity-80">
-                <Text className="font-label text-[11px] uppercase tracking-[0.1em] text-on-surface-variant">
-                  {hasRitualReading() ? 'Skip sign-in for now' : 'Back to reading preview'}
+              ) : null}
+              {!isSignedIn && !isAuthBypassEnabled ? (
+                <Text className="text-center font-inter text-[12px] leading-5 text-md-on-surface-variant">
+                  Sign in above to save your reading and access the app.
                 </Text>
-              </Pressable>
+              ) : null}
               {!afterPaywall && !premium ? (
                 <Pressable
                   onPress={() => router.push({ pathname: '/onboarding/paywall', params: { seed: mergedSeed } })}
                   className="items-center pb-1">
                   <Text className="font-body text-[13px]" style={{ color: '#22d3ee' }}>
-                    Haven’t unlocked yet? View plans
+                    Haven&apos;t unlocked yet? View plans
                   </Text>
                 </Pressable>
               ) : null}

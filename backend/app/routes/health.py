@@ -20,10 +20,12 @@ router = APIRouter()
 @router.get("/health", response_model=HealthResponse)
 def health(settings: Annotated[Settings, Depends(get_settings)]) -> HealthResponse:
     """Liveness: process running and settings loaded."""
-    return HealthResponse(
-        status="ok",
-        service=settings.app_name,
-        supabase=session_repository.is_enabled(settings),
-        groq=settings.groq_enabled,
-        palm_groq=settings.groq_enabled and settings.palm_analysis_mode == "groq",
-    )
+    if settings.debug:
+        return HealthResponse(
+            status="ok",
+            service=settings.app_name,
+            supabase=session_repository.is_enabled(settings),
+            groq=settings.groq_enabled,
+            palm_groq=settings.groq_enabled and settings.palm_analysis_mode in {"groq", "hybrid"},
+        )
+    return HealthResponse(status="ok", service=settings.app_name)

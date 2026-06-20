@@ -11,12 +11,16 @@ const easProjectId = appJson.expo.extra?.eas?.projectId ?? '';
 const updatesConfigured =
   Boolean(easProjectId) && !String(easProjectId).includes('REPLACE_WITH');
 
+const truthy = (v) => v === true || v === 'true';
+
 module.exports = {
   expo: {
     ...appJson.expo,
     extra: {
       ...(appJson.expo.extra ?? {}),
       agastyaApiUrl: process.env.EXPO_PUBLIC_AGASTYA_API_URL || undefined,
+      bypassAuth: truthy(process.env.EXPO_PUBLIC_BYPASS_AUTH),
+      allowDevPremium: truthy(process.env.EXPO_PUBLIC_ALLOW_DEV_PREMIUM),
     },
     // Disable OTA updates until EAS project ID is configured — avoids dev/build errors.
     updates: updatesConfigured ? appJson.expo.updates : { enabled: false },

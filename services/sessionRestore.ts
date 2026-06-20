@@ -65,6 +65,10 @@ export async function restoreSessionFromServer(options?: RestoreOptions): Promis
     }
     if (data.fullReport && (options?.force || !snap.fullReading)) {
       updates.fullReading = normalizeFullReport(data.fullReport);
+    }
+    if (data.isPremium === true) {
+      updates.hasUnlockedPremium = true;
+    } else if (data.fullReport && (options?.force || !snap.fullReading)) {
       updates.hasUnlockedPremium = true;
     }
 

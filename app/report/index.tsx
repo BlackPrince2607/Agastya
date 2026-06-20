@@ -8,6 +8,7 @@ import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { EntertainmentDisclaimer } from '@/components/legal/EntertainmentDisclaimer';
 import { AuraNebulaCard, GradientText, InsightCard, MetricDonut } from '@/components/primitives';
 import { PalmLineCard, PredictionCard, StrengthDots } from '@/components/report';
+import { PalmLineOverlay } from '@/components/report/PalmLineOverlay';
 import { AuraChip, GlassCard, Icon, NebulaButton } from '@/components/ui';
 import { fetchPredictions } from '@/services/agastyaApi';
 import { buildSimulatedReading } from '@/services/simulatedReading';
@@ -48,6 +49,11 @@ export default function ReportScreen() {
   const [active, setActive] = useState<ReportTab>(initialTab);
   const [period, setPeriod] = useState<PredictionPeriod>('month');
 
+  useEffect(() => {
+    const next = TABS.find((t) => t.id === tab)?.id;
+    if (next) setActive(next as ReportTab);
+  }, [tab]);
+
   const hasStoredReading = Boolean(previewReading || fullReading);
   const palm = palmAnalysis ?? FALLBACK_PALM;
 
@@ -81,7 +87,6 @@ export default function ReportScreen() {
           seed: seed ?? undefined,
           palmAnalysis,
           focusTopics,
-          isPremium: premium,
         });
         if (alive) setPredictions(period, result);
       } catch {
@@ -166,6 +171,11 @@ export default function ReportScreen() {
 
         {active === 'lines' ? (
           <>
+            {palm.line_geometry?.length ? (
+              <View className="relative h-56 w-full overflow-hidden rounded-3xl border border-white/10 bg-black/40">
+                <PalmLineOverlay geometry={palm.line_geometry} width={320} height={224} />
+              </View>
+            ) : null}
             {lines.map((line) => (
               <PalmLineCard key={line.lineName} {...line} />
             ))}
@@ -174,13 +184,24 @@ export default function ReportScreen() {
 
         {active === 'personality' ? (
           <>
-            <GlassCard glow className="w-full items-center gap-4 p-6">
-              <View className="h-24 w-24 items-center justify-center rounded-full bg-primary/15">
-                <Icon name="psychology" size={44} color="#d3beeb" />
+            <GlassCard glow className="w-full items-center gap-5 p-6">
+              <View className="items-center justify-center">
+                <View
+                  className="absolute h-32 w-32 rounded-full"
+                  style={{
+                    backgroundColor: 'rgba(168,85,247,0.15)',
+                    shadowColor: '#a855f7',
+                    shadowOpacity: 0.5,
+                    shadowRadius: 20,
+                  }}
+                />
+                <View className="h-24 w-24 items-center justify-center overflow-hidden rounded-full border-2 border-purple/50 bg-primary/15">
+                  <Icon name="psychology" size={44} color="#c084fc" />
+                </View>
               </View>
               <View className="flex-row flex-wrap justify-center gap-2">
                 {persona.traits.map((t) => (
-                  <AuraChip key={t} label={t} />
+                  <AuraChip key={t} label={t} tint="#c084fc" />
                 ))}
               </View>
               <Text className="text-center font-body text-[15px] leading-7 text-on-surface-variant">
@@ -192,7 +213,7 @@ export default function ReportScreen() {
               <Text className="font-headline-md text-[18px] text-on-surface">Shadow Traits</Text>
               <View className="flex-row flex-wrap gap-2">
                 {persona.shadowTraits.map((t) => (
-                  <AuraChip key={t} label={t} tint="#e879f9" />
+                  <AuraChip key={t} label={t} tint="#f472b6" />
                 ))}
               </View>
             </GlassCard>
@@ -263,7 +284,7 @@ function ReportHeader() {
         accessibilityRole="button"
         accessibilityLabel="Back"
         className="h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.05] active:opacity-80">
-        <Icon name="chevron_left" size={24} color="#22d3ee" />
+        <Icon name="chevron_left" size={24} color="#c084fc" />
       </Pressable>
       <Text className="font-headline text-[22px] text-on-surface" accessibilityRole="header">
         Palm Report

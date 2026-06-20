@@ -1,10 +1,11 @@
 import type { FocusTopic } from '@/store/sessionStore';
 import { useSessionStore } from '@/store/sessionStore';
+import type { HandLandmark } from '@/utils/palmLandmarks';
 import type { PalmAnalysisDto } from '@/types/palmAnalysis';
 import type { PredictionPeriod, PredictionsResponse } from '@/types/predictions';
 
 import { ERRORS, mapApiError } from '@/services/apiErrors';
-import { apiUrl } from '@/services/env';
+import { apiUrl, isApiConfigured } from '@/services/env';
 import { getSupabaseAccessToken } from '@/services/supabase';
 import { GUIDE_FINISH_PALM_FIRST } from '@/constants/userCopy';
 
@@ -37,7 +38,6 @@ export type ApiHealthDto = {
   palm_groq?: boolean;
 };
 
-/** Lightweight connectivity check — safe to call on bootstrap. */
 export async function fetchApiHealth(signal?: AbortSignal): Promise<ApiHealthDto> {
   const res = await fetchWithTimeout(apiUrl('/v1/health'), {
     method: 'GET',
@@ -75,6 +75,7 @@ export type SessionBootstrapDto = {
   palmAnalysis?: PalmAnalysisDto | null;
   previewReport?: Record<string, unknown> | null;
   fullReport?: Record<string, unknown> | null;
+  isPremium?: boolean;
 };
 
 export async function fetchSessionBootstrap(sessionId: string) {
@@ -110,6 +111,23 @@ async function postJson<T>(
   return res.json() as Promise<T>;
 }
 
+async function patchJson<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
+  const res = await fetchWithTimeout(apiUrl(path), {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify(body),
+    signal,
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(mapApiError(detail));
+  }
+  return res.json() as Promise<T>;
+}
+
 export async function registerSession(
   body: {
     sessionId: string;
@@ -134,6 +152,21 @@ export async function registerSession(
   );
 }
 
+export async function patchSessionProfile(body: {
+  sessionId: string;
+  deviceInstallId: string;
+  displayName?: string;
+  gender?: string;
+  focusTopics?: FocusTopic[];
+}) {
+  return patchJson<{
+    sessionId: string;
+    displayName?: string | null;
+    gender?: string | null;
+    focusTopics: string[];
+  }>('/v1/sessions/profile', body);
+}
+
 export async function mergeSessions(body: { anonymousSessionId: string; supabaseUserId: string }) {
   return postJson<{ ok: boolean; linked: boolean }>(
     '/v1/sessions/merge',
@@ -145,12 +178,38 @@ export async function mergeSessions(body: { anonymousSessionId: string; supabase
   );
 }
 
+export async function createStripeCheckoutSession(body: {
+  sessionId: string;
+  deviceInstallId: string;
+  billingPeriod: 'monthly' | 'annual';
+  successUrl: string;
+  cancelUrl: string;
+}) {
+  return postJson<{ checkoutUrl: string }>('/v1/billing/checkout', {
+    sessionId: body.sessionId,
+    deviceInstallId: body.deviceInstallId,
+    billingPeriod: body.billingPeriod,
+    successUrl: body.successUrl,
+    cancelUrl: body.cancelUrl,
+  });
+}
+
 export async function analyzePalm(body: {
   sessionId: string;
+  deviceInstallId: string;
   seed: string;
   imageBase64?: string | null;
+  dominantHand?: 'left' | 'right' | null;
+  landmarks?: HandLandmark[] | null;
 }) {
-  return postJson<PalmAnalysisDto>('/v1/palm/analyze', body);
+  return postJson<PalmAnalysisDto>('/v1/palm/analyze', {
+    sessionId: body.sessionId,
+    deviceInstallId: body.deviceInstallId,
+    seed: body.seed,
+    imageBase64: body.imageBase64,
+    dominantHand: body.dominantHand ?? 'unknown',
+    landmarks: body.landmarks ?? undefined,
+  });
 }
 
 export async function generateReport(body: {
@@ -170,7 +229,6 @@ export async function chatWithGuide(body: {
   messages: Array<{ role: string; content: string }>;
   palmAnalysis: PalmAnalysisDto;
   profileSummary: string;
-  isPremium: boolean;
 }) {
   return postJson<{ reply: string; suggestions?: string[] }>('/v1/chat', body);
 }
@@ -178,9 +236,7 @@ export async function chatWithGuide(body: {
 export async function fetchDailyTasks(body: {
   sessionId: string;
   palmAnalysis: PalmAnalysisDto;
-  isPremium: boolean;
 }) {
-  // Tasks may be plain strings (legacy) or structured objects; normalized client-side.
   return postJson<{ tasks: unknown[]; variant: string }>('/v1/tasks/daily', body);
 }
 
@@ -190,22 +246,21 @@ export async function fetchPredictions(body: {
   seed?: string;
   palmAnalysis?: PalmAnalysisDto | null;
   focusTopics?: FocusTopic[];
-  isPremium?: boolean;
 }) {
   return postJson<PredictionsResponse>('/v1/predictions/generate', body);
 }
 
 export type GuideReplyResult =
   | { ok: true; text: string; suggestions: string[] }
-  | { ok: false; error: string; needsPalm?: boolean };
+  | { ok: false; error: string; needsPalm?: boolean; offline?: boolean };
 
 export async function requestGuideReply(
   messages: Array<{ role: string; content: string }>,
 ): Promise<GuideReplyResult> {
   const {
     sessionId,
+    deviceInstallId,
     palmAnalysis,
-    hasUnlockedPremium,
     userDisplayName,
     userGender,
     focusTopics,
@@ -231,11 +286,14 @@ export async function requestGuideReply(
       messages,
       palmAnalysis,
       profileSummary,
-      isPremium: hasUnlockedPremium,
     });
     return { ok: true, text: reply, suggestions: suggestions ?? [] };
   } catch (e) {
     const msg = e instanceof Error ? e.message : ERRORS.network;
-    return { ok: false, error: mapApiError(msg) };
+    return {
+      ok: false,
+      error: mapApiError(msg),
+      offline: !isApiConfigured(),
+    };
   }
 }

@@ -6,6 +6,7 @@ import { fetchApiHealth, registerSession } from '@/services/agastyaApi';
 import { isApiConfigured } from '@/services/env';
 import { track } from '@/services/analytics';
 import { setApiHealth, setApiHealthFailed } from '@/services/connectivity';
+import { linkRevenueCatUser } from '@/services/revenuecat';
 import { restoreSessionFromServer } from '@/services/sessionRestore';
 import { useSessionStore } from '@/store/sessionStore';
 
@@ -58,6 +59,8 @@ export async function bootstrapIdentity() {
     deviceInstallId,
     identityReady: true,
   });
+
+  void linkRevenueCatUser(sessionId);
 
   void (async () => {
     if (!isApiConfigured()) {

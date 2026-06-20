@@ -9,8 +9,14 @@ export const APP_BRAND = 'Agastya';
 export const SIGN_IN_UNAVAILABLE =
   'Sign-in isn’t available right now. You can still enjoy your reading on this device.';
 
+export const EMAIL_SIGNIN_USE_OAUTH =
+  'Email sign-in isn’t enabled yet. Use Google or Apple to continue.';
+
 export const SYNC_NOTICE_FAILED =
   'We couldn’t sync your latest reading. You’re viewing what’s saved on this device.';
+
+export const SYNC_NOTICE_MERGE_FAILED =
+  'Sign-in succeeded but we couldn’t link your reading to your account. Try again from Profile.';
 
 export const OFFLINE_LIMITED_LABEL = 'Some features may be limited while offline.';
 

@@ -40,4 +40,7 @@ jobs:
         run: |
           pip install pyright
           pyright backend/app/
-        continue-on-error: true
+      - name: Run pytest
+        run: pytest backend/tests/ -q
+        env:
+          DEBUG: "true"

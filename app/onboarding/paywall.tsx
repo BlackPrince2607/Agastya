@@ -15,11 +15,12 @@ import { ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS } from '@/constants/onboarding
 import { stitchMd3 } from '@/constants/stitchWelcome';
 import { stitchSignal } from '@/constants/theme';
 import { track } from '@/services/analytics';
-import { unlockPremiumFromStore } from '@/services/premiumUnlock';
-import { isPremiumBypassEnabled, isRevenueCatConfigured, isWebPremiumUnlockAvailable } from '@/services/revenuecat';
+import { isAuthBypassEnabled } from '@/services/authConfig';
+import { unlockPremiumFromStore, finalizeStripeCheckout } from '@/services/premiumUnlock';
+import { isPremiumBypassEnabled, isRevenueCatConfigured, isStripeCheckoutEnabled, isWebPremiumUnlockAvailable } from '@/services/revenuecat';
 import { isWebDemoMode } from '@/utils/webDemo';
+import { enterMainApp } from '@/utils/navigationFlow';
 import { useSessionStore } from '@/store/sessionStore';
-import { enterMainApp, hasRitualReading } from '@/utils/navigationFlow';
 
 const TRUST_HIGHLIGHTS = [
   'Personalized palm insights tied to your focus areas',
@@ -52,7 +53,7 @@ const FEATURES = [
 
 export default function PaywallScreen() {
   const insets = useSafeAreaInsets();
-  const { seed } = useLocalSearchParams<{ seed?: string }>();
+  const { seed, checkout } = useLocalSearchParams<{ seed?: string; checkout?: string }>();
   const period = useSessionStore((s) => s.billingPeriod);
   const setPeriod = useSessionStore((s) => s.setBillingPeriod);
   const premium = useSessionStore((s) => s.hasUnlockedPremium);
@@ -63,6 +64,31 @@ export default function PaywallScreen() {
   }, []);
 
   const mergedSeed = seed ?? useSessionStore.getState().readingSeed ?? 'stillness';
+
+  useEffect(() => {
+    if (checkout !== 'success') return;
+    let cancelled = false;
+    setBusy(true);
+    void (async () => {
+      const result = await finalizeStripeCheckout(mergedSeed);
+      if (cancelled) return;
+      if (result.ok) {
+        track('paywall_unlock_success', { source: result.source });
+        Alert.alert('Welcome to full access', 'Your subscription is active. Sign in to enter the app.', [
+          { text: 'Sign in', onPress: goToAccountSync },
+        ]);
+      } else {
+        Alert.alert(
+          'Verifying subscription',
+          'Payment received — premium may take a moment to activate. Try again shortly.',
+        );
+      }
+      setBusy(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [checkout, mergedSeed]);
 
   const goToAccountSync = () => {
     router.push({
@@ -83,7 +109,7 @@ export default function PaywallScreen() {
         if (result.reason === 'unavailable') {
           Alert.alert(
             'Subscriptions unavailable',
-            'Purchases aren’t available right now. You can continue with the free preview, or tap Restore if you already subscribed.',
+            'Purchases aren’t available right now. Sign in to save your preview, or tap Restore if you already subscribed.',
           );
         } else if (result.reason === 'not_entitled') {
           Alert.alert('Purchase incomplete', 'We could not verify your subscription. Try Restore purchases or contact support.');
@@ -91,19 +117,18 @@ export default function PaywallScreen() {
         return;
       }
 
+      if (result.source === 'stripe') {
+        return;
+      }
+
       track('paywall_unlock_success', { source: result.source });
       Alert.alert(
         'Welcome to full access',
-        'Your full reading is unlocked. Sign in from Profile anytime to save it across devices.',
+        'Your full reading is unlocked. Sign in to save it across devices and enter the app.',
         [
           {
-            text: 'Sync account',
+            text: 'Sign in',
             onPress: goToAccountSync,
-          },
-          {
-            text: 'Enter app',
-            style: 'default',
-            onPress: () => enterMainApp(),
           },
         ],
       );
@@ -118,7 +143,9 @@ export default function PaywallScreen() {
     try {
       const result = await unlockPremiumFromStore({ mode: 'restore', seed: mergedSeed });
       if (result.ok) {
-        Alert.alert('Restored', 'Your subscription is active again.', [{ text: 'Continue', onPress: () => enterMainApp() }]);
+        Alert.alert('Restored', 'Your subscription is active again. Sign in to enter the app.', [
+          { text: 'Sign in', onPress: goToAccountSync },
+        ]);
       } else {
         Alert.alert('No subscription found', 'We could not find an active plan for this store account.');
       }
@@ -127,11 +154,7 @@ export default function PaywallScreen() {
     }
   };
 
-  const continueWithoutPurchase = () => {
-    if (hasRitualReading()) {
-      router.back();
-      return;
-    }
+  const backToPreview = () => {
     router.replace('/onboarding/report-preview');
   };
 
@@ -168,7 +191,9 @@ export default function PaywallScreen() {
               <Text className="mt-3 font-inter text-[13px] leading-5 text-stitch-signal">
                 {isWebDemoMode()
                   ? 'Web demo — tap below to unlock the full experience without a real purchase.'
-                  : 'On web, tap below to unlock the full experience — no app-store purchase required.'}
+                  : isStripeCheckoutEnabled()
+                    ? 'Subscribe securely with Stripe — billed on the web, synced to your account.'
+                    : 'On web, tap below to unlock the full experience — no app-store purchase required.'}
               </Text>
             ) : null}
             {Platform.OS !== 'web' && !isRevenueCatConfigured() && !isPremiumBypassEnabled() ? (
@@ -239,8 +264,10 @@ export default function PaywallScreen() {
           className="absolute bottom-0 left-0 right-0 z-20 rounded-none border-t border-white/14 bg-[#0f0e10]/94 px-6 pt-4"
           style={{ elevation: 24 }}>
           <View style={{ paddingBottom: Math.max(insets.bottom, 16) }} className="gap-y-2.5">
-            {premium ? (
-              <CosmicButton gradient="nebulaMd3" label="Enter app" onPress={() => enterMainApp()} />
+            {isAuthBypassEnabled ? (
+              <CosmicButton gradient="nebulaMd3" label="Continue to app" onPress={() => enterMainApp()} />
+            ) : premium ? (
+              <CosmicButton gradient="nebulaMd3" label="Sign in to enter" onPress={goToAccountSync} />
             ) : (
               <MotiView
                 from={{ scale: 1 }}
@@ -251,16 +278,20 @@ export default function PaywallScreen() {
                   label={
                     busy
                       ? 'Processing…'
-                      : isWebPremiumUnlockAvailable()
-                        ? 'Unlock full access'
-                        : 'Start 7-Day Free Trial'
+                      : isStripeCheckoutEnabled()
+                        ? 'Subscribe with Stripe'
+                        : isWebPremiumUnlockAvailable()
+                          ? 'Unlock full access'
+                          : 'Start 7-Day Free Trial'
                   }
                   onPress={() => void handleSubscribe()}
                 />
               </MotiView>
             )}
-            <CosmicButton variant="ghost" label="Continue with preview" onPress={continueWithoutPurchase} />
-            <CosmicButton variant="ghost" label="Save & sign in" onPress={goToAccountSync} />
+            <CosmicButton variant="ghost" label="Back to preview" onPress={backToPreview} />
+            {!isAuthBypassEnabled ? (
+              <CosmicButton variant="ghost" label="Save & sign in" onPress={goToAccountSync} />
+            ) : null}
             <View className="mt-1 flex-row items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2.5">
               <Ionicons name="shield-checkmark" size={16} color="#4ade80" />
               <Text className="font-inter text-[12px] text-mist/85">Cancel anytime · Restore from Profile</Text>

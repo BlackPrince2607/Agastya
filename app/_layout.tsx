@@ -21,9 +21,13 @@ import '../global.css';
 
 import { cosmicGradients } from '@/constants/theme';
 import { subscribeAuthDeepLinks } from '@/services/authCallback';
+import { applyDevAccessGrants } from '@/services/authConfig';
 import { subscribeSupabaseSessionMerge } from '@/services/authMerge';
+import { bootstrapIdentity } from '@/services/identity';
+import { configureRevenueCat } from '@/services/revenuecat';
 import { isServerEnvironment } from '@/services/persistentStorage';
 import { initSentry } from '@/services/sentry';
+import { useSessionStore } from '@/store/sessionStore';
 import {
   configureNotificationHandler,
   getNotificationDeepLink,
@@ -86,8 +90,13 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (isServerEnvironment()) return;
+    applyDevAccessGrants();
     const stopDeepLinks = subscribeAuthDeepLinks();
     const stopMerge = subscribeSupabaseSessionMerge();
+    void bootstrapIdentity().then(() => {
+      const id = useSessionStore.getState().sessionId;
+      if (id) void configureRevenueCat(id);
+    });
     return () => {
       stopDeepLinks();
       stopMerge();
@@ -102,9 +111,20 @@ export default function RootLayout() {
       sub = Notifications.addNotificationResponseReceivedListener(
         (response: import('expo-notifications').NotificationResponse) => {
           const link = getNotificationDeepLink(response);
-          if (link) {
-            import('expo-router').then(({ router }) => router.push(link as never));
-          }
+          if (!link) return;
+          void import('@/utils/navigationFlow').then(({ tryEnterMainApp }) => {
+            import('@/store/sessionStore').then(({ useSessionStore }) => {
+              if (link.startsWith('/(main)/') || link === '/tasks' || link === '/chat') {
+                if (!useSessionStore.getState().hasEnteredMain) {
+                  void tryEnterMainApp();
+                }
+              }
+              import('expo-router').then(({ router }) => {
+                const target = link === '/tasks' ? '/(main)/tasks' : link;
+                router.push(target as never);
+              });
+            });
+          });
         },
       );
     } catch {
@@ -125,6 +145,7 @@ export default function RootLayout() {
           }}>
           <Stack.Screen name="index" />
           <Stack.Screen name="welcome" />
+          <Stack.Screen name="auth/callback" options={{ animation: 'fade' }} />
           <Stack.Screen name="onboarding" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="(main)" />
           <Stack.Screen name="report" options={{ animation: 'slide_from_right' }} />

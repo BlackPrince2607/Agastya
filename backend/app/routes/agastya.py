@@ -15,6 +15,7 @@ from app.schemas.session import (
     SessionBootstrapResponse,
     SessionMergeBody,
     SessionMergeResponse,
+    SessionProfilePatchBody,
     SessionProfileResponse,
     SessionRegisterBody,
     SessionRegisterResponse,
@@ -27,11 +28,13 @@ from app.services.palm_storage import upload_palm_capture_if_configured
 from app.services.predictions_engine import build_predictions_payload
 from app.services.report_engine import build_report_payload
 from app.services import session_repository
+from app.utils.validators import assert_device_binding, validate_session_id
 
 router = APIRouter(tags=["agastya"], dependencies=[Depends(check_rate_limit)])
 
 
 async def _hydrate(session_id: str, settings: Settings) -> None:
+    validate_session_id(session_id)
     if has_bucket(session_id):
         return
     loaded = await session_repository.load(session_id, settings)
@@ -45,6 +48,13 @@ async def _persist(session_id: str, settings: Settings) -> None:
     await session_repository.save(session_id, bucket(session_id), settings)
 
 
+async def _sync_premium(session_id: str, settings: Settings) -> SessionBucket:
+    await _hydrate(session_id, settings)
+    bkt = bucket(session_id)
+    await session_repository.refresh_premium_from_db(session_id, bkt, settings)
+    return bkt
+
+
 @router.post("/sessions/register", response_model=SessionRegisterResponse)
 async def register_session(
     body: SessionRegisterBody,
@@ -52,6 +62,9 @@ async def register_session(
 ) -> SessionRegisterResponse:
     await _hydrate(body.session_id, settings)
     bkt = bucket(body.session_id)
+    stored = bkt.meta.get("deviceInstallId")
+    if stored and stored != body.device_install_id:
+        raise HTTPException(status_code=403, detail="deviceInstallId does not match session owner")
     bkt.meta["deviceInstallId"] = body.device_install_id
     if body.display_name:
         bkt.meta["displayName"] = body.display_name
@@ -77,6 +90,7 @@ def _bootstrap_from_bucket(session_id: str, bkt: SessionBucket) -> SessionBootst
         palm_analysis=bkt.palm.model_dump() if bkt.palm else None,
         preview_report=bkt.preview.model_dump(by_alias=True) if bkt.preview else None,
         full_report=bkt.full.model_dump(by_alias=True) if bkt.full else None,
+        is_premium=bkt.is_premium,
     )
 
 
@@ -89,8 +103,10 @@ async def session_bootstrap(
     settings: Annotated[Settings, Depends(get_settings)],
     session_id: str = Query(..., alias="sessionId"),
 ) -> SessionBootstrapResponse:
+    validate_session_id(session_id)
     await _hydrate(session_id, settings)
-    return _bootstrap_from_bucket(session_id, bucket(session_id))
+    bkt = await _sync_premium(session_id, settings)
+    return _bootstrap_from_bucket(session_id, bkt)
 
 
 @router.get(
@@ -102,6 +118,7 @@ async def session_profile(
     settings: Annotated[Settings, Depends(get_settings)],
     session_id: str = Query(..., alias="sessionId"),
 ) -> SessionProfileResponse:
+    validate_session_id(session_id)
     await _hydrate(session_id, settings)
     bkt = bucket(session_id)
     meta = bkt.meta
@@ -117,20 +134,59 @@ async def session_profile(
     )
 
 
+@router.patch("/sessions/profile", response_model=SessionProfileResponse, response_model_by_alias=True)
+async def patch_session_profile(
+    body: SessionProfilePatchBody,
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> SessionProfileResponse:
+    await _hydrate(body.session_id, settings)
+    bkt = bucket(body.session_id)
+    assert_device_binding(
+        session_id=body.session_id,
+        device_install_id=body.device_install_id,
+        stored_device_id=bkt.meta.get("deviceInstallId"),
+    )
+    if not bkt.meta.get("deviceInstallId"):
+        bkt.meta["deviceInstallId"] = body.device_install_id
+    if body.display_name is not None:
+        bkt.meta["displayName"] = body.display_name
+    if body.gender is not None:
+        bkt.meta["gender"] = body.gender
+    if body.focus_topics is not None:
+        bkt.meta["focusTopics"] = body.focus_topics
+    await _persist(body.session_id, settings)
+    meta = bkt.meta
+    topics = meta.get("focusTopics") or []
+    return SessionProfileResponse(
+        session_id=body.session_id,
+        device_install_id=meta.get("deviceInstallId"),
+        display_name=meta.get("displayName"),
+        gender=meta.get("gender"),
+        focus_topics=topics if isinstance(topics, list) else [],
+        supabase_user_id=meta.get("supabaseUserId"),
+        palm_storage_path=meta.get("palmStoragePath"),
+    )
+
+
 @router.post("/sessions/merge", response_model=SessionMergeResponse)
 async def merge_session(
     body: SessionMergeBody,
     settings: Annotated[Settings, Depends(get_settings)],
     authorization: Annotated[str | None, Header()] = None,
 ) -> SessionMergeResponse:
+    if settings.supabase_enabled and not settings.supabase_jwt_secret:
+        raise HTTPException(
+            status_code=503,
+            detail="SUPABASE_JWT_SECRET is required for session merge",
+        )
     token = _bearer_token(authorization)
-    if token and settings.supabase_jwt_secret:
+    if settings.supabase_jwt_secret:
+        if not token:
+            raise HTTPException(status_code=401, detail="Authorization bearer token required")
         claims = verify_supabase_access_token(token, settings)
         token_user = str(claims.get("sub", ""))
         if token_user != body.supabase_user_id:
             raise HTTPException(status_code=403, detail="Token subject does not match supabaseUserId")
-    elif settings.supabase_jwt_secret:
-        raise HTTPException(status_code=401, detail="Authorization bearer token required")
 
     await _hydrate(body.anonymous_session_id, settings)
     linked = link_supabase_user(body.anonymous_session_id, body.supabase_user_id)
@@ -150,8 +206,15 @@ async def palm_analyze(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> dict[str, Any]:
     await _hydrate(body.session_id, settings)
-    palm = await analyze_palm(settings, body)
     bkt = bucket(body.session_id)
+    assert_device_binding(
+        session_id=body.session_id,
+        device_install_id=body.device_install_id,
+        stored_device_id=bkt.meta.get("deviceInstallId"),
+    )
+    if body.device_install_id and not bkt.meta.get("deviceInstallId"):
+        bkt.meta["deviceInstallId"] = body.device_install_id
+    palm = await analyze_palm(settings, body)
     bkt.palm = palm
     storage_path = await upload_palm_capture_if_configured(
         settings,
@@ -169,8 +232,9 @@ async def reports_generate(
     body: GenerateReportBody,
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> dict[str, Any]:
-    await _hydrate(body.session_id, settings)
-    bkt = bucket(body.session_id)
+    bkt = await _sync_premium(body.session_id, settings)
+    if body.mode == "full" and not bkt.is_premium:
+        raise HTTPException(status_code=403, detail="Premium required for full report")
     palm = body.palm_analysis or bkt.palm
     if palm is None:
         raise HTTPException(status_code=400, detail="Run palm analysis before requesting a dossier.")
@@ -195,8 +259,7 @@ async def reports_generate(
 
 @router.post("/chat", response_model=ChatResponse)
 async def cosmic_chat(body: ChatRequest, settings: Annotated[Settings, Depends(get_settings)]) -> ChatResponse:
-    await _hydrate(body.session_id, settings)
-    bkt = bucket(body.session_id)
+    bkt = await _sync_premium(body.session_id, settings)
     reply, suggestions = await generate_chat_reply(
         settings, body, server_is_premium=bkt.is_premium
     )
@@ -209,11 +272,8 @@ async def cosmic_chat(body: ChatRequest, settings: Annotated[Settings, Depends(g
 
 @router.post("/tasks/daily", response_model=DailyTasksResponse, response_model_by_alias=True)
 async def daily_tasks(body: DailyTasksBody, settings: Annotated[Settings, Depends(get_settings)]) -> DailyTasksResponse:
-    await _hydrate(body.session_id, settings)
-    bkt = bucket(body.session_id)
-    # Override client-supplied premium flag with the server-authoritative value.
-    if bkt.is_premium:
-        body = body.model_copy(update={"is_premium": True})
+    bkt = await _sync_premium(body.session_id, settings)
+    body = body.model_copy(update={"is_premium": bkt.is_premium})
     tasks, variant = await generate_daily_tasks(settings, body)
     return DailyTasksResponse(tasks=tasks, variant=variant)
 
@@ -227,8 +287,9 @@ async def predictions_generate(
     body: PredictionsGenerateBody,
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> PredictionsResponse:
-    await _hydrate(body.session_id, settings)
-    bkt = bucket(body.session_id)
+    bkt = await _sync_premium(body.session_id, settings)
+    if body.period in {"3month", "year"} and not bkt.is_premium:
+        raise HTTPException(status_code=403, detail="Premium required for this prediction period")
     palm = body.palm_analysis or bkt.palm
     if palm is None:
         raise HTTPException(status_code=400, detail="Run palm analysis before requesting predictions.")

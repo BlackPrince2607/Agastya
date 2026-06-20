@@ -1,14 +1,14 @@
 import { mergeSessions } from '@/services/agastyaApi';
 import { track } from '@/services/analytics';
 import { syncAuthUserToStore } from '@/services/authSession';
+import { linkRevenueCatUser } from '@/services/revenuecat';
 import { restoreSessionFromServer } from '@/services/sessionRestore';
 import { getSupabase } from '@/services/supabase';
 import { useSessionStore } from '@/store/sessionStore';
+import { SYNC_NOTICE_MERGE_FAILED } from '@/constants/userCopy';
 
 async function tryMergeSession(supabaseUserId: string) {
-  const state = useSessionStore.getState();
-  if (state.supabaseUserId === supabaseUserId) return;
-  const anonymousSessionId = state.sessionId;
+  const anonymousSessionId = useSessionStore.getState().sessionId;
   if (!anonymousSessionId) return;
 
   try {
@@ -18,13 +18,26 @@ async function tryMergeSession(supabaseUserId: string) {
     });
     syncAuthUserToStore(supabaseUserId);
     track('session_merge', { linked: res.linked });
+    await linkRevenueCatUser(supabaseUserId);
     await restoreSessionFromServer({ force: true });
-  } catch {
+  } catch (err) {
     track('session_merge_failed');
+    useSessionStore.getState().setSyncNotice(SYNC_NOTICE_MERGE_FAILED);
     if (__DEV__) {
-      console.warn('[Agastya] session merge failed — check SUPABASE_JWT_SECRET on API');
+      console.warn('[Agastya] session merge failed — check SUPABASE_JWT_SECRET on API', err);
     }
   }
+}
+
+/** Run merge for the current Supabase user if needed (after OAuth / magic link). */
+export async function ensureSessionMerged(): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase) return;
+  const { data } = await supabase.auth.getSession();
+  const userId = data.session?.user?.id;
+  if (!userId) return;
+  syncAuthUserToStore(userId);
+  await tryMergeSession(userId);
 }
 
 /** Links anonymous FastAPI session to Supabase user; clears store on sign-out. */

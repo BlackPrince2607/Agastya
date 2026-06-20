@@ -44,7 +44,8 @@ export default function CompatibilityScreen() {
 
             <CosmicMatchPanel
               defaultSelfName={displayName?.trim() ?? ''}
-              onOpenGuide={() => router.push('/(main)/chat')}
+              subtitle="Compare by name or match palm readings with someone special."
+              onOpenGuide={() => router.push('/chat')}
             />
           </View>
         </ScreenBody>

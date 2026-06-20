@@ -34,16 +34,17 @@ export const colors = {
   secondaryContainer: '#4e455c',
   tertiary: '#dbc39f',
 
-  // Brand signal accents (cyan / purple nebula)
+  // Brand signal accents (purple / magenta nebula)
   cyan: '#22d3ee',
   purple: '#a855f7',
+  magenta: '#e879f9',
   nebulaDeep: '#68577e',
 
-  // Semantic category accents
-  love: '#e879f9',
-  career: '#d3beeb',
-  money: '#22d3ee',
-  growth: '#4ade80',
+  // Semantic category accents (prediction / report cards)
+  love: '#f472b6',
+  career: '#60a5fa',
+  money: '#fbbf24',
+  growth: '#c084fc',
   health: '#86efac',
 
   error: '#ffb4ab',
@@ -55,12 +56,14 @@ export const gradients = {
   cosmic: ['#0f0e10', '#141315', '#0f0e10'] as const,
   /** Primary nebula CTA (Stitch `.nebula-gradient`). */
   nebula: ['#d3beeb', '#68577e'] as const,
-  /** Brand wordmark / hero accent — cyan to purple. */
-  brand: ['#22d3ee', '#a855f7'] as const,
+  /** Brand wordmark / hero accent — purple to magenta. */
+  brand: ['#a855f7', '#e879f9'] as const,
   /** High-impact paywall CTA. */
-  cta: ['#22d3ee', '#a855f7'] as const,
+  cta: ['#9333ea', '#e879f9'] as const,
   /** Soft aurora wash inside glass cards. */
-  aurora: ['rgba(211,190,235,0.12)', 'rgba(104,87,126,0.05)', 'rgba(34,211,238,0.05)'] as const,
+  aurora: ['rgba(168,85,247,0.14)', 'rgba(232,121,249,0.06)', 'rgba(104,87,126,0.04)'] as const,
+  /** Progress bar fill with glow. */
+  progress: ['#a855f7', '#d946ef', '#e879f9'] as const,
 } as const;
 
 // ---------------------------------------------------------------------------

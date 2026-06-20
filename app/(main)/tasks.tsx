@@ -53,7 +53,7 @@ export default function TasksScreen() {
       setLoading(true);
       setLoadError(null);
       try {
-        const payload = await fetchDailyTasks({ sessionId, palmAnalysis, isPremium: premium });
+        const payload = await fetchDailyTasks({ sessionId, palmAnalysis });
         if (active) {
           const normalized = payload.tasks.map((t, i) => normalizeTask(t, i));
           setTasks(normalized.length ? normalized : LOCAL_TASKS, payload.variant, isoToday);

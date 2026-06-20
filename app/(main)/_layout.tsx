@@ -5,15 +5,19 @@ import { LoadingBlock } from '@/components/feedback';
 import { Icon, type IconName } from '@/components/ui';
 import MainTabBarBlurBackground from '@/components/navigation/MainTabBarBlurBackground';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
+import { useAuthSession } from '@/hooks/useAuthSession';
 import { usePersistHydration } from '@/hooks/usePersistHydration';
+import { requiresSupabaseSignIn } from '@/services/authConfig';
 import { useSessionStore } from '@/store/sessionStore';
+import { resolveResumeHref } from '@/utils/navigationFlow';
 
 /** Home • Chat • Tasks • Profile (Reports & Compatibility pushed from Home). */
 export default function MainTabsLayout() {
   const hydrated = usePersistHydration();
   const entered = useSessionStore((s) => s.hasEnteredMain);
+  const { isSignedIn, loading: authLoading } = useAuthSession();
 
-  if (!hydrated) {
+  if (!hydrated || authLoading) {
     return (
       <CosmicScreen variant="stitch">
         <View className="flex-1 items-center justify-center px-8">
@@ -22,7 +26,17 @@ export default function MainTabsLayout() {
       </CosmicScreen>
     );
   }
-  if (!entered) return <Redirect href="/welcome" />;
+  if (!entered) {
+    const resume = resolveResumeHref();
+    if (resume !== '/(main)/home') {
+      return <Redirect href={resume} />;
+    }
+    return <Redirect href="/welcome" />;
+  }
+
+  if (requiresSupabaseSignIn() && !isSignedIn) {
+    return <Redirect href="/onboarding/account" />;
+  }
 
   return (
     <Tabs
@@ -44,7 +58,7 @@ export default function MainTabsLayout() {
           overflow: 'hidden',
         },
         tabBarBackground: () => <MainTabBarBlurBackground />,
-        tabBarActiveTintColor: '#22d3ee',
+        tabBarActiveTintColor: '#c084fc',
         tabBarInactiveTintColor: 'rgba(232,225,229,0.45)',
       }}>
       <Tabs.Screen

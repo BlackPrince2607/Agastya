@@ -10,6 +10,7 @@ import re
 import httpx
 
 from app.config import Settings
+from app.utils.validators import validate_session_id
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +67,8 @@ async def upload_palm_capture_if_configured(
     if not image_base64 or not settings.supabase_url or not settings.supabase_service_role_key:
         return None
 
+    safe_session = validate_session_id(session_id)
+
     decoded = decode_capture_bytes(image_base64)
     if not decoded:
         return None
@@ -73,7 +76,7 @@ async def upload_palm_capture_if_configured(
     data, content_type, ext = decoded
     base = settings.supabase_url.rstrip("/")
     bucket = settings.supabase_palm_bucket.strip() or "palms"
-    obj_path = f"{session_id}/palm_capture{ext}"
+    obj_path = f"{safe_session}/palm_capture{ext}"
     url = f"{base}/storage/v1/object/{bucket}/{obj_path}"
 
     headers = {

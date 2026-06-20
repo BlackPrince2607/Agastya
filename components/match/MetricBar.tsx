@@ -1,7 +1,7 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { Text, View } from 'react-native';
 
-import { cosmicGradients } from '@/constants/theme';
+import { gradients } from '@/constants/theme';
 
 type MetricBarProps = {
   label: string;
@@ -13,12 +13,12 @@ export function MetricBar({ label, pct }: MetricBarProps) {
   return (
     <View className="w-full gap-2">
       <View className="w-full flex-row items-center justify-between gap-3">
-        <Text className="min-w-0 flex-1 font-inter text-[14px] text-mist">{label}</Text>
-        <Text className="shrink-0 font-space-grotesk text-[13px] font-semibold text-stitch-signal">{clamped}%</Text>
+        <Text className="min-w-0 flex-1 font-body text-[15px] text-on-surface">{label}</Text>
+        <Text className="shrink-0 font-space-grotesk text-[14px] font-semibold text-primary">{clamped}%</Text>
       </View>
       <View className="h-2.5 overflow-hidden rounded-full bg-white/10">
         <LinearGradient
-          colors={[cosmicGradients.pulse[0], '#d392f6', '#f472b6']}
+          colors={[...gradients.progress]}
           start={{ x: 0, y: 0.5 }}
           end={{ x: 1, y: 0.5 }}
           style={{ width: `${clamped}%`, height: '100%', borderRadius: 999 }}

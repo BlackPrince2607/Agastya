@@ -13,6 +13,7 @@ try {
 }
 
 let configured = false;
+let linkedUserId: string | null = null;
 
 const ENTITLEMENT_ID = process.env.EXPO_PUBLIC_REVENUECAT_ENTITLEMENT ?? 'premium';
 
@@ -25,14 +26,18 @@ export function isRevenueCatConfigured(): boolean {
   return false;
 }
 
+export function isStripeCheckoutEnabled(): boolean {
+  return Platform.OS === 'web' && process.env.EXPO_PUBLIC_STRIPE_CHECKOUT_ENABLED === 'true';
+}
+
 export function isDevPremiumBypassEnabled(): boolean {
   return __DEV__ && process.env.EXPO_PUBLIC_ALLOW_DEV_PREMIUM === 'true';
 }
 
-/** Dev bypass, explicit web demo flag, or web when native IAP is unavailable. */
+/** Dev bypass, explicit web demo flag, or web when neither Stripe nor RC is configured. */
 export function isPremiumBypassEnabled(): boolean {
   if (isDevPremiumBypassEnabled() || isWebDemoMode()) return true;
-  // Web builds cannot use App Store / Play billing — unlock locally when RC isn't configured.
+  if (Platform.OS === 'web' && isStripeCheckoutEnabled()) return false;
   if (Platform.OS === 'web' && !isRevenueCatConfigured()) return true;
   return false;
 }
@@ -42,22 +47,36 @@ export function isWebPremiumUnlockAvailable(): boolean {
   return Platform.OS === 'web' && isPremiumBypassEnabled();
 }
 
-export async function configureRevenueCat() {
-  if (!Purchases || configured) return;
+export async function configureRevenueCat(appUserId?: string) {
+  if (!Purchases || !isRevenueCatConfigured()) return;
+
   const iosKey = process.env.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY;
   const androidKey = process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY;
 
   try {
-    if (Platform.OS === 'ios' && iosKey) {
-      Purchases.configure({ apiKey: iosKey });
-      configured = true;
-    } else if (Platform.OS === 'android' && androidKey) {
-      Purchases.configure({ apiKey: androidKey });
-      configured = true;
+    if (!configured) {
+      if (Platform.OS === 'ios' && iosKey) {
+        Purchases.configure({ apiKey: iosKey, appUserID: appUserId });
+        configured = true;
+        if (appUserId) linkedUserId = appUserId;
+      } else if (Platform.OS === 'android' && androidKey) {
+        Purchases.configure({ apiKey: androidKey, appUserID: appUserId });
+        configured = true;
+        if (appUserId) linkedUserId = appUserId;
+      }
+    } else if (appUserId && appUserId !== linkedUserId) {
+      await Purchases.logIn(appUserId);
+      linkedUserId = appUserId;
     }
   } catch {
     configured = false;
   }
+}
+
+/** Link RevenueCat customer to session or Supabase user for webhook matching. */
+export async function linkRevenueCatUser(appUserId: string): Promise<void> {
+  if (!Purchases || !isRevenueCatConfigured() || !appUserId) return;
+  await configureRevenueCat(appUserId);
 }
 
 function hasActiveEntitlement(
