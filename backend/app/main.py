@@ -14,7 +14,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.config import Settings, get_settings, validate_production_settings
 from app.middleware.security import MaxBodySizeMiddleware, SecurityHeadersMiddleware
-from app.routes import agastya, billing, health, webhooks
+from app.routes import agastya, auth, billing, health, webhooks
 
 
 def _init_sentry(settings: Settings) -> None:
@@ -102,6 +102,7 @@ def create_app() -> FastAPI:
     app.add_middleware(CORSMiddleware, **cors_kw)
 
     app.include_router(health.router, prefix=settings.api_v1_prefix)
+    app.include_router(auth.router, prefix=settings.api_v1_prefix)
     app.include_router(agastya.router, prefix=settings.api_v1_prefix)
     app.include_router(billing.router, prefix=settings.api_v1_prefix)
     app.include_router(webhooks.router, prefix=settings.api_v1_prefix)

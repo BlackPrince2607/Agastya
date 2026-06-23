@@ -2,6 +2,7 @@
 fastapi>=0.115.0,<0.117.0
 uvicorn[standard]>=0.32.0,<0.35.0
 pydantic-settings>=2.6.0,<3.0.0
+email-validator>=2.0.0,<3.0.0
 
 # Used by FastAPI for form bodies / future file uploads from the app.
 python-multipart>=0.0.12,<0.1.0

@@ -1,6 +1,6 @@
 import type { Href } from 'expo-router';
 
-import { readAuthSession, leaveMainAppForOnboarding } from '@/services/authSession';
+import { consumePostSignInReturn, leaveMainAppForOnboarding, readAuthSession } from '@/services/authSession';
 import { restoreSessionFromServer } from '@/services/sessionRestore';
 import { bootstrapIdentity } from '@/services/identity';
 import { requestNotificationPermission } from '@/services/notifications';
@@ -111,6 +111,12 @@ export async function prepareReturningUser(forceRestore = false): Promise<Href> 
 }
 
 export async function routeAfterSignInIntent(): Promise<void> {
+  const returnHref = consumePostSignInReturn();
+  if (returnHref) {
+    deferRouterReplace(returnHref);
+    return;
+  }
+
   const href = await prepareReturningUser(true);
   if (href === '/(main)/home') {
     const result = await tryEnterMainApp();
@@ -124,4 +130,28 @@ export async function routeAfterSignInIntent(): Promise<void> {
     return;
   }
   deferRouterReplace(href);
+}
+
+type AccountBackParams = {
+  fromPaywall?: string;
+  fromProfile?: string;
+  seed?: string;
+};
+
+/** Where the account screen back button should return. */
+export function resolveAccountBackHref(params: AccountBackParams = {}): Href {
+  if (params.fromPaywall === '1') {
+    return params.seed
+      ? { pathname: '/onboarding/paywall', params: { seed: params.seed } }
+      : '/onboarding/paywall';
+  }
+  if (params.fromProfile === '1') {
+    return '/(main)/profile';
+  }
+  if (hasRitualReading()) {
+    return params.seed
+      ? { pathname: '/onboarding/report-preview', params: { seed: params.seed } }
+      : '/onboarding/report-preview';
+  }
+  return '/welcome';
 }

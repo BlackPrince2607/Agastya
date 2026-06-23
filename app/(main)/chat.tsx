@@ -20,6 +20,7 @@ import { InlineError, StatusPill } from '@/components/feedback';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { ScreenBody } from '@/components/layout/ScreenBody';
 import { GlassCard, Icon } from '@/components/ui';
+import { colors, gradients } from '@/constants/theme';
 import { useLayoutMetrics } from '@/hooks/useLayoutMetrics';
 import { AI_VOICE_HINTS, OFFLINE_LIMITED_LABEL } from '@/constants/userCopy';
 import { requestGuideReply } from '@/services/agastyaApi';
@@ -103,17 +104,17 @@ export default function ChatScreen() {
             {/* Header */}
             <View className="flex-row items-center gap-3 border-b border-white/10 pb-3">
               <View className="h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-white/[0.05]">
-                <Icon name="auto_fix_high" size={20} color="#d3beeb" />
+                <Icon name="auto_fix_high" size={20} color={colors.primary} />
               </View>
               <View className="flex-1">
-                <Text className="font-headline text-[18px] text-on-surface">AI Guide</Text>
+                <Text className="font-headline text-[18px] text-on-surface">Guide</Text>
                 <Text className="font-body text-[12px] text-on-surface-variant">Your personal palm reading guide</Text>
               </View>
             </View>
 
             {apiLimited ? <View className="mt-3"><StatusPill label={OFFLINE_LIMITED_LABEL} variant="offline" /></View> : null}
             {!premium && messagesLeft !== null && messagesLeft > 0 ? (
-              <Text className="mt-2 font-inter text-[12px] text-on-surface-variant">
+              <Text className="mt-2 font-body text-[12px] text-on-surface-variant">
                 {messagesLeft} preview {messagesLeft === 1 ? 'message' : 'messages'} left
               </Text>
             ) : null}
@@ -162,7 +163,7 @@ export default function ChatScreen() {
                   value={input}
                   onChangeText={setInput}
                   placeholder={empty ? 'Ask me anything…' : 'Ask follow up…'}
-                  placeholderTextColor="rgba(203,196,206,0.5)"
+                  placeholderTextColor={colors.placeholder}
                   className="flex-1 px-4 py-2.5 font-body text-[15px] text-on-surface"
                   editable={!isTyping}
                   onSubmitEditing={() => void dispatch()}
@@ -176,9 +177,9 @@ export default function ChatScreen() {
                   accessibilityLabel="Send"
                   style={{ opacity: isTyping || !input.trim() ? 0.5 : 1 }}>
                   <LinearGradient
-                    colors={['#d3beeb', '#68577e']}
+                    colors={[...gradients.nebula]}
                     style={{ width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' }}>
-                    <Icon name="send" size={20} color="#1a0b2e" />
+                    <Icon name="send" size={20} color={colors.onPrimary} />
                   </LinearGradient>
                 </Pressable>
               </GlassCard>
@@ -207,7 +208,7 @@ function AuraOrb() {
         className="absolute h-32 w-32 rounded-full border border-secondary/20"
       />
       <LinearGradient
-        colors={['#d3beeb', '#68577e']}
+        colors={[...gradients.nebula]}
         style={{ width: 88, height: 88, borderRadius: 44, alignItems: 'center', justifyContent: 'center' }}>
         <Icon name="visibility" size={40} color="#ffffff" />
       </LinearGradient>

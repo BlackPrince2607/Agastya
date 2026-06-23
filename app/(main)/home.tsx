@@ -8,6 +8,7 @@ import { MainTabScroll } from '@/components/layout/MainTabScroll';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { MainCosmicHeader } from '@/components/layout/MainCosmicHeader';
 import { GlassCard, Icon, NebulaButton, ProgressBar, type IconName } from '@/components/ui';
+import { colors } from '@/constants/theme';
 import {
   buildDailyInsight,
   displayNameOrDefault,
@@ -18,18 +19,9 @@ import {
 import { getApiHealth } from '@/services/connectivity';
 import { useSessionStore } from '@/store/sessionStore';
 import { useTaskStore } from '@/store/taskStore';
+import { initialsFor } from '@/utils/initials';
 
 type Tool = { icon: IconName; label: string; hint?: string; onPress: () => void; wide?: boolean };
-
-function initialsFor(name?: string): string {
-  const trimmed = name?.trim();
-  if (!trimmed) return 'A';
-  return trimmed
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((p) => p[0]?.toUpperCase() ?? '')
-    .join('');
-}
 
 function timeGreeting(): string {
   const h = new Date().getHours();
@@ -72,7 +64,7 @@ export default function HomeDashboardScreen() {
 
   const tools: Tool[] = [
     { icon: 'front_hand', label: 'Palm Report', onPress: () => router.push('/report') },
-    { icon: 'auto_fix_high', label: 'AI Chat', onPress: () => router.push('/chat') },
+    { icon: 'auto_fix_high', label: 'Chat', onPress: () => router.push('/chat') },
     { icon: 'task_alt', label: 'Daily Tasks', onPress: () => router.push('/tasks') },
     { icon: 'auto_graph', label: 'Predictions', onPress: () => router.push({ pathname: '/report', params: { tab: 'predictions' } }) },
   ];
@@ -100,7 +92,7 @@ export default function HomeDashboardScreen() {
               <Text className="font-headline text-[24px] leading-8 text-on-surface" accessibilityRole="header">
                 {greeting}
               </Text>
-              {palmAnalysis ? <Icon name="verified_user" size={18} color="#c084fc" /> : null}
+              {palmAnalysis ? <Icon name="verified_user" size={18} color={colors.purple} /> : null}
             </View>
             <Text className="font-body text-[14px] text-on-surface-variant">Ready to shape your future?</Text>
           </View>
@@ -114,16 +106,16 @@ export default function HomeDashboardScreen() {
           <GlassCard glow className="w-full p-5">
             <View className="flex-row items-center gap-3">
               <View className="h-11 w-11 items-center justify-center rounded-2xl bg-primary/20">
-                <Icon name="front_hand" size={22} color="#d3beeb" />
+                <Icon name="front_hand" size={22} color={colors.primary} />
               </View>
               <View className="flex-1">
                 <Text className="font-headline-md text-[18px] text-on-surface">Start your palm reading</Text>
-                <Text className="mt-0.5 font-body text-[13px] leading-5 text-on-surface-variant">
-                  Scan your palm to unlock a personalized report, daily guidance, and your AI Guide.
+                <Text className="mt-1 font-body text-[13px] leading-5 text-on-surface-variant">
+                  Scan your palm to unlock a personalized report, daily guidance, and your Guide.
                 </Text>
               </View>
             </View>
-            <View className="mt-4">
+            <View className="mt-5">
               <NebulaButton label="Scan my palm" onPress={() => router.push('/onboarding/palm-scan')} />
             </View>
           </GlassCard>
@@ -146,7 +138,7 @@ export default function HomeDashboardScreen() {
           </View>
           <View className="relative max-w-[72%] gap-3">
             <View className="flex-row items-center gap-2">
-              <Icon name="auto_awesome" size={18} color="#c084fc" />
+              <Icon name="auto_awesome" size={18} color={colors.purple} />
               <Text className="font-label text-[12px] uppercase tracking-[0.16em] text-primary">Daily Insight</Text>
             </View>
             <Text className="font-headline text-[22px] leading-8 text-on-surface">{quickInsight.title}</Text>
@@ -178,7 +170,7 @@ export default function HomeDashboardScreen() {
         ) : null}
 
         {/* Quick Access */}
-        <Text className="mt-2 px-1 font-headline-md text-[20px] text-on-surface">Quick Access</Text>
+        <Text className="font-headline-md text-[20px] text-on-surface">Quick Access</Text>
         <View className="flex-row flex-wrap justify-between gap-3">
           {tools.map((tool) => (
             <Pressable
@@ -192,7 +184,7 @@ export default function HomeDashboardScreen() {
                 <View
                   className="h-14 w-14 items-center justify-center rounded-2xl border border-white/10"
                   style={{ backgroundColor: 'rgba(168,85,247,0.12)' }}>
-                  <Icon name={tool.icon} size={28} color="#c084fc" />
+                  <Icon name={tool.icon} size={28} color={colors.purple} />
                 </View>
                 <Text className="font-label text-center text-[11px] uppercase tracking-[0.1em] text-on-surface">
                   {tool.label}
@@ -206,7 +198,7 @@ export default function HomeDashboardScreen() {
         <GlassCard className="gap-3 p-4">
           <View className="flex-row items-center gap-4">
             <View className="h-12 w-12 items-center justify-center rounded-2xl bg-purple/20">
-              <Icon name="local_fire_department" size={24} color="#c084fc" />
+              <Icon name="local_fire_department" size={24} color={colors.purple} />
             </View>
             <View className="flex-1">
               <Text className="font-headline-md text-[16px] text-on-surface">

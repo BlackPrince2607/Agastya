@@ -2,22 +2,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Pressable, Text, View } from 'react-native';
 
 import { BrandWordmark, Icon } from '@/components/ui';
+import { initialsFor } from '@/utils/initials';
 
 type MainCosmicHeaderProps = {
   displayName?: string;
   onProfilePress?: () => void;
   onMenuPress?: () => void;
 };
-
-function initialsFor(name?: string): string {
-  const trimmed = name?.trim();
-  if (!trimmed) return 'A';
-  return trimmed
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((p) => p[0]?.toUpperCase() ?? '')
-    .join('');
-}
 
 /** Stitch top app bar: menu (left), Agastya wordmark (center), avatar (right). */
 export function MainCosmicHeader({ displayName, onProfilePress, onMenuPress }: MainCosmicHeaderProps) {

@@ -9,8 +9,25 @@ export const APP_BRAND = 'Agastya';
 export const SIGN_IN_UNAVAILABLE =
   'Sign-in isn’t available right now. You can still enjoy your reading on this device.';
 
-export const EMAIL_SIGNIN_USE_OAUTH =
-  'Email sign-in isn’t enabled yet. Use Google or Apple to continue.';
+export const EMAIL_MAGIC_LINK_SENT =
+  'We sent a sign-in link. Open it on this device to finish signing in.';
+
+export const EMAIL_CONFIRM_SENT =
+  'We sent a confirmation link to your inbox. Open it on this same phone, then come back here and sign in with your password.';
+
+export const EMAIL_RESET_SENT =
+  'We sent a password reset link. Open it on this device to choose a new password.';
+
+export const PASSWORD_MISMATCH = 'Passwords do not match.';
+
+export const AUTH_WRONG_PASSWORD_HINT =
+  'That password did not work. If you joined with Google or Apple, use that button instead. If you are new, tap Create account. You can also use Email me a sign-in link — no password needed.';
+
+export const AUTH_ACCOUNT_EXISTS_HINT =
+  'An account already exists for this email. Sign in with your password, Google, or a sign-in link.';
+
+export const AUTH_MAGIC_LINK_HELP =
+  'Check spam/promotions. The link must be opened on this same device. If nothing arrives in a few minutes, Supabase email may not be configured yet — try Google sign-in.';
 
 export const SYNC_NOTICE_FAILED =
   'We couldn’t sync your latest reading. You’re viewing what’s saved on this device.';

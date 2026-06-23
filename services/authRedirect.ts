@@ -1,18 +1,33 @@
-import { makeRedirectUri } from 'expo-auth-session';
+import * as Linking from 'expo-linking';
+import { Platform } from 'react-native';
+
+let cachedRedirectUri: string | null = null;
 
 /**
- * Redirect URI registered with Supabase Auth (OAuth + magic link).
- * Uses expo-auth-session so Expo Go (exp://) and standalone (agastya://) both work.
+ * Redirect URI registered with Supabase Auth (OAuth + magic link + email confirm).
+ *
+ * - Web: `{origin}/auth/callback`
+ * - Expo Go: `exp://<lan>:8081/--/auth/callback` (add `exp://**` in Supabase)
+ * - Dev/prod builds: `agastya://auth/callback` (add `agastya://**` in Supabase)
  */
 export function getAuthRedirectUri(): string {
-  const uri = makeRedirectUri({
-    scheme: 'agastya',
-    path: 'auth/callback',
-  });
-  if (__DEV__) {
-    console.log('[Agastya auth] redirect URI — add to Supabase Auth → Redirect URLs:', uri);
+  if (cachedRedirectUri) return cachedRedirectUri;
+
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    cachedRedirectUri = `${window.location.origin}/auth/callback`;
+  } else {
+    // Linking.createURL picks exp:// in Expo Go and agastya:// in standalone builds.
+    cachedRedirectUri = Linking.createURL('/auth/callback');
   }
-  return uri;
+
+  if (__DEV__) {
+    console.log('[Agastya auth] redirect URI:', cachedRedirectUri);
+    console.log(
+      '[Agastya auth] Add this exact URL (or exp://** / agastya://**) to Supabase → Authentication → URL Configuration → Redirect URLs',
+    );
+  }
+
+  return cachedRedirectUri;
 }
 
 /** True when a deep link / browser return carries Supabase auth params. */

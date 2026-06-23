@@ -17,11 +17,9 @@ import {
   MetricDonut,
 } from '@/components/primitives';
 import { palmReadingChips } from '@/constants/userCopy';
-import { isAuthBypassEnabled } from '@/services/authConfig';
 import { buildSimulatedReading } from '@/services/simulatedReading';
 import type { FocusTopic } from '@/store/sessionStore';
 import { useSessionStore } from '@/store/sessionStore';
-import { enterMainApp } from '@/utils/navigationFlow';
 import { ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS } from '@/constants/onboarding';
 
 const FOCUS_LABEL: Record<FocusTopic, string> = {
@@ -210,31 +208,8 @@ export default function ReportPreviewScreen() {
           intensity={56}
           className="absolute bottom-0 left-0 right-0 z-20 rounded-none border-t border-white/14 bg-cosmic-void/92 px-6 pt-4"
           style={{ elevation: 24 }}>
-          <View style={{ paddingBottom: Math.max(insets.bottom, 16) }} className="gap-y-2.5">
-            {isAuthBypassEnabled ? (
-              <>
-                <CosmicButton
-                  gradient="nebulaMd3"
-                  label="Continue to app"
-                  onPress={() => enterMainApp()}
-                />
-                {!premium ? (
-                  <CosmicButton
-                    variant="ghost"
-                    label="View plans"
-                    onPress={() =>
-                      router.push({
-                        pathname: '/onboarding/paywall',
-                        params: { seed: mergedSeed },
-                      })
-                    }
-                  />
-                ) : null}
-                <Text className="mt-2 text-center font-inter text-[11px] leading-5 text-md-on-primary-container">
-                  Dev access is on — sign-in is optional. Your reading stays on this device.
-                </Text>
-              </>
-            ) : premium ? (
+          <View style={{ paddingBottom: Math.max(insets.bottom, 16) }} className="gap-y-3">
+            {premium ? (
               <CosmicButton
                 gradient="nebulaMd3"
                 label="Save & sign in to continue"
@@ -257,23 +232,19 @@ export default function ReportPreviewScreen() {
                 }
               />
             )}
-            {!isAuthBypassEnabled ? (
-              <>
-                <CosmicButton
-                  variant="ghost"
-                  label="Save & sync my reading"
-                  onPress={() =>
-                    router.push({
-                      pathname: '/onboarding/account',
-                      params: { seed: mergedSeed },
-                    })
-                  }
-                />
-                <Text className="mt-2 text-center font-inter text-[11px] leading-5 text-md-on-primary-container">
-                  Sign in to access the app. Your reading preview is saved on this device.
-                </Text>
-              </>
-            ) : null}
+            <CosmicButton
+              variant="ghost"
+              label="Save & sync my reading"
+              onPress={() =>
+                router.push({
+                  pathname: '/onboarding/account',
+                  params: { seed: mergedSeed },
+                })
+              }
+            />
+            <Text className="mt-1 text-center font-inter text-[11px] leading-5 text-md-on-primary-container">
+              Sign in to access the app. Your reading preview is saved on this device.
+            </Text>
           </View>
         </BlurContainer>
       </View>

@@ -14,6 +14,7 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import Constants from 'expo-constants';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import 'react-native-reanimated';
 
@@ -22,6 +23,7 @@ import '../global.css';
 import { cosmicGradients } from '@/constants/theme';
 import { subscribeAuthDeepLinks } from '@/services/authCallback';
 import { applyDevAccessGrants } from '@/services/authConfig';
+import { applyDevQuickAccess } from '@/services/devAccess';
 import { subscribeSupabaseSessionMerge } from '@/services/authMerge';
 import { bootstrapIdentity } from '@/services/identity';
 import { configureRevenueCat } from '@/services/revenuecat';
@@ -51,9 +53,9 @@ const AgastyaTheme = {
     ...DarkTheme.colors,
     background: cosmicGradients.aurora[0],
     card: cosmicGradients.aurora[1],
-    text: '#e8e4ff',
+    text: '#e6e1e5',
     border: 'rgba(255,255,255,0.08)',
-    primary: '#a78bfa',
+    primary: '#a855f7',
   },
 };
 
@@ -91,6 +93,7 @@ export default function RootLayout() {
   useEffect(() => {
     if (isServerEnvironment()) return;
     applyDevAccessGrants();
+    applyDevQuickAccess();
     const stopDeepLinks = subscribeAuthDeepLinks();
     const stopMerge = subscribeSupabaseSessionMerge();
     void bootstrapIdentity().then(() => {
@@ -104,6 +107,8 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
+    if (Constants.appOwnership === 'expo') return;
+
     let sub: ReturnType<typeof import('expo-notifications').addNotificationResponseReceivedListener> | undefined;
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -146,6 +151,7 @@ export default function RootLayout() {
           <Stack.Screen name="index" />
           <Stack.Screen name="welcome" />
           <Stack.Screen name="auth/callback" options={{ animation: 'fade' }} />
+          <Stack.Screen name="auth/reset-password" options={{ animation: 'fade' }} />
           <Stack.Screen name="onboarding" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="(main)" />
           <Stack.Screen name="report" options={{ animation: 'slide_from_right' }} />

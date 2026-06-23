@@ -10,11 +10,13 @@ type OnboardingHeaderProps = {
   step?: number;
   total?: number;
   showBack?: boolean;
+  /** Use close (X) instead of back chevron — account / sign-in screens. */
+  useClose?: boolean;
   onBack?: () => void;
 };
 
 /** Clean onboarding top bar: close/back, Agastya wordmark, labeled progress. */
-export function OnboardingHeader({ step, total = 7, showBack = true, onBack }: OnboardingHeaderProps) {
+export function OnboardingHeader({ step, total = 7, showBack = true, useClose = false, onBack }: OnboardingHeaderProps) {
   const frac = step ? Math.min(1, Math.max(0, step / total)) : 0;
 
   return (
@@ -23,10 +25,14 @@ export function OnboardingHeader({ step, total = 7, showBack = true, onBack }: O
         {showBack ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Go back"
+            accessibilityLabel={useClose ? 'Close' : 'Go back'}
             onPress={onBack ?? (() => router.back())}
             className="h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.05] active:opacity-80">
-            <Icon name="chevron_left" size={24} color="rgba(232,225,229,0.92)" />
+            <Icon
+              name={useClose ? 'close' : 'chevron_left'}
+              size={useClose ? 22 : 24}
+              color="rgba(232,225,229,0.92)"
+            />
           </Pressable>
         ) : (
           <View className="h-11 w-11" />

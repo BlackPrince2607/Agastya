@@ -1,7 +1,7 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { MotiPressable } from 'moti/interactions';
 import type { ReactNode } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Platform, Pressable, Text, View } from 'react-native';
 
 import { cosmicGradients } from '@/constants/theme';
 import { stitchMd3 } from '@/constants/stitchWelcome';
@@ -18,6 +18,33 @@ type CosmicButtonProps = {
   icon?: ReactNode;
 };
 
+function PrimaryButtonContent({
+  label,
+  gradient,
+  icon,
+}: {
+  label: string;
+  gradient: keyof Pick<typeof cosmicGradients, 'pulse' | 'nebulaMd3'>;
+  icon?: ReactNode;
+}) {
+  return (
+    <LinearGradient
+      colors={[...cosmicGradients[gradient]]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={{ borderRadius: 999, overflow: 'hidden' }}>
+      <View className="flex-row items-center justify-center gap-3 px-10 py-4" accessibilityRole="button">
+        {icon}
+        <Text
+          className={`text-center font-semibold tracking-[0.2em] ${gradient === 'nebulaMd3' ? 'font-space-grotesk' : 'text-white'}`}
+          style={gradient === 'nebulaMd3' ? { color: stitchMd3.onPrimary } : undefined}>
+          {label}
+        </Text>
+      </View>
+    </LinearGradient>
+  );
+}
+
 export function CosmicButton({
   label,
   onPress,
@@ -26,6 +53,11 @@ export function CosmicButton({
   disabled,
   icon,
 }: CosmicButtonProps) {
+  const handlePress = () => {
+    void triggerLightTap();
+    onPress();
+  };
+
   if (variant === 'ghost') {
     // Single Pressable — nested Pressable without onPress was swallowing taps (MotiPressable never fired).
     return (
@@ -33,16 +65,30 @@ export function CosmicButton({
         accessibilityRole="button"
         accessibilityLabel={label}
         disabled={disabled}
-        onPress={() => {
-          void triggerLightTap();
-          onPress();
-        }}
-        className="items-center rounded-3xl border border-white/25 bg-white/5 px-8 py-4 active:opacity-90"
+        onPress={handlePress}
+        className="items-center rounded-pill border border-white/20 bg-white/[0.06] px-8 py-4 active:opacity-90"
         style={({ pressed }) => ({
           opacity: disabled ? 0.45 : pressed ? 0.88 : 1,
           transform: [{ scale: pressed && !disabled ? 0.98 : 1 }],
         })}>
-        <Text className="font-medium tracking-wide text-mist">{label}</Text>
+        <Text className="font-label uppercase tracking-[0.1em] text-on-surface-variant">{label}</Text>
+      </Pressable>
+    );
+  }
+
+  // MotiPressable can swallow taps on web — use plain Pressable there.
+  if (Platform.OS === 'web') {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        disabled={disabled}
+        onPress={handlePress}
+        style={({ pressed }) => ({
+          opacity: disabled ? 0.55 : pressed ? 0.88 : 1,
+          transform: [{ scale: pressed && !disabled ? 0.97 : 1 }],
+        })}>
+        <PrimaryButtonContent label={label} gradient={gradient} icon={icon} />
       </Pressable>
     );
   }
@@ -53,25 +99,9 @@ export function CosmicButton({
         scale: pressed && !disabled ? 0.97 : 1,
         opacity: disabled ? 0.55 : 1,
       })}
-      onPress={() => {
-        void triggerLightTap();
-        onPress();
-      }}
+      onPress={handlePress}
       disabled={disabled}>
-      <LinearGradient
-        colors={[...cosmicGradients[gradient]]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={{ borderRadius: 999, overflow: 'hidden' }}>
-        <View className="flex-row items-center justify-center gap-3 px-10 py-4" accessibilityRole="button">
-          {icon}
-          <Text
-            className={`text-center font-semibold tracking-[0.2em] ${gradient === 'nebulaMd3' ? 'font-space-grotesk' : 'text-white'}`}
-            style={gradient === 'nebulaMd3' ? { color: stitchMd3.onPrimary } : undefined}>
-            {label}
-          </Text>
-        </View>
-      </LinearGradient>
+      <PrimaryButtonContent label={label} gradient={gradient} icon={icon} />
     </MotiPressable>
   );
 }

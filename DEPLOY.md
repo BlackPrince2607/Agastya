@@ -84,27 +84,72 @@ You can also run them directly in the Supabase SQL editor.
 
 ## 5. Supabase Auth Configuration
 
-In Supabase Dashboard → Authentication → URL Configuration:
-- Add to **Redirect URLs**: `agastya://**`
-- Add to **Redirect URLs**: `https://agastya.app/**` (for universal links)
+### Client env (`.env` in repo root)
 
-For Google OAuth: create an OAuth app in Google Cloud Console and add the Client ID/Secret to Supabase Auth → Providers → Google.
+```env
+EXPO_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=<anon-key>
+# Optional: EXPO_PUBLIC_EMAIL_SIGNIN=false hides magic-link option (email/password stays on)
+EXPO_PUBLIC_BYPASS_AUTH=false
+```
 
-For Apple OAuth: configure Sign in with Apple in your Apple Developer account and add to Supabase Auth → Providers → Apple.
+Restart Metro with cache clear: `npx expo start -c`.
 
-Ensure `SUPABASE_JWT_SECRET` in backend `.env` matches Supabase → Project Settings → API → JWT Secret (required for session merge in production).
+### Backend env (`backend/.env`)
+
+```env
+SUPABASE_URL=https://<project-ref>.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
+SUPABASE_JWT_SECRET=<JWT secret from Project Settings → API>
+```
+
+`SUPABASE_JWT_SECRET` must match Supabase → Project Settings → API → JWT Secret. Without it, sign-in succeeds but `/v1/sessions/merge` returns 503/401.
+
+### Supabase Dashboard → Authentication → URL Configuration
+
+Add to **Redirect URLs**:
+
+- `agastya://**` — standalone / dev builds
+- `exp://**` — Expo Go (copy exact URI from Metro: `[Agastya auth] redirect URI`)
+- `https://agastya.app/**` — web / universal links
+
+### Google OAuth
+
+1. [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Credentials → Create OAuth client ID → **Web application**.
+2. Authorized redirect URI: `https://<project-ref>.supabase.co/auth/v1/callback`
+3. Copy Client ID + Secret into Supabase → Authentication → Providers → **Google** → Enable.
+
+### Apple OAuth
+
+Configure Sign in with Apple in Apple Developer and add credentials to Supabase → Providers → Apple.
+
+### Email provider (magic link + password)
+
+1. Supabase → Authentication → Providers → **Email** → Enable.
+2. Enable **Email signups**.
+3. **Confirm email**: recommended ON for password sign-up; magic links still work.
+4. **Custom SMTP** (Resend, SendGrid, etc.) — required for reliable delivery; free-tier Supabase email limits are very low.
+5. Email sign-in is on when Supabase env vars are set. Set `EXPO_PUBLIC_EMAIL_SIGNIN=false` only to hide the magic-link option.
+
+Password reset links use the same redirect URI and land on `/auth/reset-password`.
 
 ### Auth QA checklist
 
+Test with `EXPO_PUBLIC_BYPASS_AUTH=false`:
+
 | Flow | Platform | Expected |
 |------|----------|----------|
-| Google OAuth | iOS, Android | Browser closes → signed in → merge → cloud restore → correct resume route |
+| Google OAuth | iOS, Android, Web | Browser closes → signed in → merge → cloud restore → correct resume route |
 | Apple OAuth | iOS | Same as Google |
 | Magic link email | All | Email link → `/auth/callback` → session + merge |
+| Password sign-in | All | Email + password → merge → enter app |
+| Password sign-up | All | Create account → confirm email if enabled → sign in → merge |
+| Forgot password | All | Reset email → `/auth/reset-password` → set password → merge |
 | Skip account | Onboarding | Ritual continues anonymously |
 | Sign in from Profile | Main app | Opens account screen; merge preserves reading |
 | Sign out | Profile | Clears Supabase; local ritual data kept |
 | Reinstall + sign in | Native | Cloud reading + premium restored from server bootstrap |
+| Merge failure | All | Sign-in OK but sync notice if backend JWT secret wrong |
 
 ### Auth routing (anonymous-first)
 

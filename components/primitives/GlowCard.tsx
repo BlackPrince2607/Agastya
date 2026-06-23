@@ -10,7 +10,7 @@ export function GlowCard({ muted, className, children, ...rest }: GlowCardProps)
 
   return (
     <View
-      className={`rounded-4xl border bg-white/5 p-5 backdrop-blur ${ring} ${className ?? ''}`}
+      className={`rounded-glass border bg-white/[0.05] p-5 ${ring} ${className ?? ''}`}
       {...rest}>
       {children}
     </View>

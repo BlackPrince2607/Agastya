@@ -1,4 +1,5 @@
-import { Pressable, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Alert, Pressable, Text, View } from 'react-native';
 
 import { PalmScanBriefing } from '@/components/onboarding/PalmScanBriefing';
 import type { PalmScanHand } from '@/store/sessionStore';
@@ -39,22 +40,32 @@ export default function PalmScanWebScreen() {
   const palmScanHand = useSessionStore((s) => s.palmScanHand);
   const setPalmScanHand = useSessionStore((s) => s.setPalmScanHand);
   const setPalmCaptureBase64 = useSessionStore((s) => s.setPalmCaptureBase64);
+  const [uploadBusy, setUploadBusy] = useState(false);
 
   const uploadAndContinue = async () => {
-    const hand: PalmScanHand = palmScanHand ?? 'right';
-    const seed = `${hand}-${Date.now()}`;
-    const base64 = await pickPalmImageWeb();
-    if (!base64) return;
-    setPalmCaptureBase64(base64);
-    deferRouterPush({
-      pathname: '/onboarding/analysis',
-      params: { seed },
-    });
+    if (uploadBusy) return;
+    setUploadBusy(true);
+    try {
+      const hand: PalmScanHand = palmScanHand ?? 'right';
+      const seed = `${hand}-${Date.now()}`;
+      const base64 = await pickPalmImageWeb();
+      if (!base64) {
+        Alert.alert('No photo selected', 'Choose a clear palm photo to continue.');
+        return;
+      }
+      setPalmCaptureBase64(base64);
+      deferRouterPush({
+        pathname: '/onboarding/analysis',
+        params: { seed },
+      });
+    } finally {
+      setUploadBusy(false);
+    }
   };
 
   return (
     <PalmScanBriefing
-      primaryLabel="Upload palm photo"
+      primaryLabel={uploadBusy ? 'Opening…' : 'Upload palm photo'}
       primaryIcon="image"
       onPrimaryPress={() => void uploadAndContinue()}
       beforePrimary={

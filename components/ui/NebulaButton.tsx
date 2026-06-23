@@ -1,9 +1,9 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { MotiPressable } from 'moti/interactions';
 import type { ReactNode } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Platform, Pressable, Text, View } from 'react-native';
 
-import { gradients } from '@/constants/theme';
+import { colors, gradients } from '@/constants/theme';
 import { triggerLightTap } from '@/hooks/useHapticTap';
 
 type NebulaButtonProps = {
@@ -51,7 +51,40 @@ export function NebulaButton({
   }
 
   const palette = variant === 'cta' ? gradients.cta : gradients.nebula;
-  const textColor = variant === 'cta' ? '#ffffff' : '#38294d';
+  const textColor = variant === 'cta' ? '#ffffff' : colors.onPrimary;
+
+  const gradientButton = (
+    <LinearGradient
+      colors={[...palette]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={{ borderRadius: 999, overflow: 'hidden' }}>
+      <View className={`flex-row items-center justify-center gap-3 px-10 py-4 ${className ?? ''}`}>
+        {icon}
+        <Text
+          className="font-label text-center uppercase tracking-[0.1em]"
+          style={{ color: textColor }}>
+          {label}
+        </Text>
+      </View>
+    </LinearGradient>
+  );
+
+  if (Platform.OS === 'web') {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        disabled={disabled}
+        onPress={handlePress}
+        style={({ pressed }) => ({
+          opacity: disabled ? 0.55 : pressed ? 0.88 : 1,
+          transform: [{ scale: pressed && !disabled ? 0.97 : 1 }],
+        })}>
+        {gradientButton}
+      </Pressable>
+    );
+  }
 
   return (
     <MotiPressable
@@ -61,20 +94,7 @@ export function NebulaButton({
       })}
       onPress={handlePress}
       disabled={disabled}>
-      <LinearGradient
-        colors={[...palette]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={{ borderRadius: 999, overflow: 'hidden' }}>
-        <View className={`flex-row items-center justify-center gap-3 px-10 py-4 ${className ?? ''}`}>
-          {icon}
-          <Text
-            className="font-label text-center uppercase tracking-[0.1em]"
-            style={{ color: textColor }}>
-            {label}
-          </Text>
-        </View>
-      </LinearGradient>
+      {gradientButton}
     </MotiPressable>
   );
 }

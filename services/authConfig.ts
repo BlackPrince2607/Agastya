@@ -10,20 +10,30 @@ function readExtraFlag(key: 'bypassAuth' | 'allowDevPremium'): boolean | undefin
   return undefined;
 }
 
-/** Email magic-link sign-in (Supabase OTP). Off by default — enable after custom SMTP / higher limits. */
-export const isEmailSignInEnabled = process.env.EXPO_PUBLIC_EMAIL_SIGNIN === 'true';
+/** Magic-link OTP when Supabase is configured (set EXPO_PUBLIC_EMAIL_SIGNIN=false to hide). */
+export const isMagicLinkEnabled =
+  isSupabaseEnabled && process.env.EXPO_PUBLIC_EMAIL_SIGNIN !== 'false';
+
+/** Email + password whenever the Supabase client is configured. */
+export const isPasswordAuthEnabled = isSupabaseEnabled;
+
+/** Show the email sign-in block (password by default; magic link when not disabled). */
+export const isEmailAuthEnabled = isPasswordAuthEnabled;
+
+/** Google / Apple OAuth when Supabase is configured (set EXPO_PUBLIC_OAUTH_SIGNIN=false to hide). */
+export const isOAuthSignInEnabled =
+  isSupabaseEnabled && process.env.EXPO_PUBLIC_OAUTH_SIGNIN !== 'false';
 
 /**
  * Skip Supabase sign-in requirement for main app.
- * On in dev when EXPO_PUBLIC_BYPASS_AUTH=true (also mirrored in app.config.js extra).
+ * Off by default — set EXPO_PUBLIC_BYPASS_AUTH=true or app.config extra.bypassAuth to enable.
  */
 export const isAuthBypassEnabled = (() => {
   const fromExtra = readExtraFlag('bypassAuth');
   if (fromExtra === true) return true;
   if (fromExtra === false) return false;
   if (process.env.EXPO_PUBLIC_BYPASS_AUTH === 'true') return true;
-  if (process.env.EXPO_PUBLIC_BYPASS_AUTH === 'false') return false;
-  return __DEV__;
+  return false;
 })();
 
 export function requiresSupabaseSignIn(): boolean {

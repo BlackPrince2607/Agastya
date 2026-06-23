@@ -1,5 +1,6 @@
 import { router } from 'expo-router';
-import { Pressable, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Alert, Pressable, Text, View } from 'react-native';
 
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { CosmicButton } from '@/components/primitives';
@@ -42,17 +43,27 @@ export default function PartnerPalmScanWebScreen() {
   const partnerPalmScanHand = useSessionStore((s) => s.partnerPalmScanHand);
   const setPartnerPalmScanHand = useSessionStore((s) => s.setPartnerPalmScanHand);
   const setPartnerPalmCaptureBase64 = useSessionStore((s) => s.setPartnerPalmCaptureBase64);
+  const [uploadBusy, setUploadBusy] = useState(false);
 
   const uploadAndContinue = async () => {
-    const hand: PalmScanHand = partnerPalmScanHand ?? 'right';
-    const seed = `partner-${hand}-${Date.now()}`;
-    const base64 = await pickPalmImageWeb();
-    if (!base64) return;
-    setPartnerPalmCaptureBase64(base64);
-    deferRouterPush({
-      pathname: '/report/partner-palm-analysis' as never,
-      params: { seed },
-    });
+    if (uploadBusy) return;
+    setUploadBusy(true);
+    try {
+      const hand: PalmScanHand = partnerPalmScanHand ?? 'right';
+      const seed = `partner-${hand}-${Date.now()}`;
+      const base64 = await pickPalmImageWeb();
+      if (!base64) {
+        Alert.alert('No photo selected', 'Choose a clear palm photo to continue.');
+        return;
+      }
+      setPartnerPalmCaptureBase64(base64);
+      deferRouterPush({
+        pathname: '/report/partner-palm-analysis' as never,
+        params: { seed },
+      });
+    } finally {
+      setUploadBusy(false);
+    }
   };
 
   return (
@@ -71,7 +82,7 @@ export default function PartnerPalmScanWebScreen() {
           </Text>
         </View>
 
-        <View className="mt-8 gap-6">
+        <View className="mt-6 gap-5">
           <Text className="font-inter text-[15px] leading-6 text-md-on-surface-variant">
             Choose a clear photo of your partner&apos;s open palm. Good lighting helps us read the lines accurately.
           </Text>
@@ -91,7 +102,14 @@ export default function PartnerPalmScanWebScreen() {
             />
           </View>
 
-          <CosmicButton gradient="nebulaMd3" label="Choose palm photo" onPress={() => void uploadAndContinue()} />
+          <View className="mt-2">
+            <CosmicButton
+              gradient="nebulaMd3"
+              label={uploadBusy ? 'Opening…' : 'Choose palm photo'}
+              disabled={uploadBusy}
+              onPress={() => void uploadAndContinue()}
+            />
+          </View>
         </View>
       </View>
     </CosmicScreen>

@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
+import { OnboardingScroll } from '@/components/layout/OnboardingScroll';
 import { OnboardingHeader } from '@/components/onboarding/OnboardingHeader';
-import { GlassCard, NebulaButton } from '@/components/ui';
+import { CosmicTextField, GlassCard, NebulaButton } from '@/components/ui';
+import { colors } from '@/constants/theme';
 import { EntertainmentDisclaimer } from '@/components/legal/EntertainmentDisclaimer';
 import { ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS } from '@/constants/onboarding';
 import { syncProfileRemote } from '@/services/identity';
@@ -52,16 +54,12 @@ export default function ProfileOnboardingScreen() {
   return (
     <CosmicScreen variant="stitch">
       <View className="flex-1">
-        <ScrollView
-          style={{ flex: 1 }}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 180, paddingTop: 8, paddingHorizontal: 24, gap: 32 }}>
+        <OnboardingScroll bottomInset={180}>
           <OnboardingHeader step={ONBOARDING_STEPS.profile} total={ONBOARDING_TOTAL_STEPS} />
 
           <View>
-            <Text className="font-label text-[12px] uppercase tracking-[0.3em] text-primary">About you</Text>
-            <Text className="mt-4 font-headline text-[31px] leading-9 text-on-surface">
+            <Text className="font-label text-[12px] uppercase tracking-[0.1em] text-primary">About you</Text>
+            <Text className="mt-4 font-headline text-[28px] leading-9 text-on-surface">
               Tell us a little about you
             </Text>
             <Text className="mt-3 font-body text-[15px] leading-6 text-on-surface-variant">
@@ -70,26 +68,38 @@ export default function ProfileOnboardingScreen() {
           </View>
 
           <GlassCard className="gap-4 p-5">
-            <Text className="font-label text-[11px] uppercase tracking-[0.28em] text-primary">Your name</Text>
-            <TextInput
+            <CosmicTextField
+              label="Your name"
               value={name}
               onChangeText={setName}
               placeholder="How should Agastya address you?"
-              placeholderTextColor="rgba(255,255,255,0.25)"
               autoCapitalize="words"
-              className="rounded-pill border border-white/10 bg-surface-container-lowest/50 px-5 py-4 font-body text-[16px] text-on-surface"
             />
           </GlassCard>
 
           <GlassCard muted className="gap-4 p-5">
-            <Text className="font-label text-[11px] uppercase tracking-[0.28em] text-primary">Gender</Text>
+            <Text className="font-label text-[11px] uppercase tracking-[0.1em] text-primary">Gender</Text>
             <View className="gap-3">
               {GENDER_OPTIONS.map((opt) => {
                 const active = gender === opt.id;
                 return (
                   <Pressable key={opt.id} onPress={() => setGender(opt.id)}>
-                    <View style={[styles.genderRow, active ? styles.genderRowActive : styles.genderRowIdle]}>
-                      <Text className="font-body-medium text-[15px] font-semibold text-on-surface">{opt.label}</Text>
+                    <View
+                      className={`rounded-pill border px-5 py-4 ${
+                        active
+                          ? 'border-primary bg-primary/10'
+                          : 'border-white/10 bg-surface-container-lowest/50'
+                      }`}
+                      style={
+                        active
+                          ? {
+                              shadowColor: colors.primary,
+                              shadowOpacity: 0.35,
+                              shadowRadius: 12,
+                            }
+                          : undefined
+                      }>
+                      <Text className="font-body-medium text-[15px] text-on-surface">{opt.label}</Text>
                     </View>
                   </Pressable>
                 );
@@ -98,7 +108,7 @@ export default function ProfileOnboardingScreen() {
           </GlassCard>
 
           <EntertainmentDisclaimer dense />
-        </ScrollView>
+        </OnboardingScroll>
 
         <View
           className="absolute bottom-0 left-0 right-0 border-t border-white/10 bg-[#0f0e10]/95 px-6 pt-5"
@@ -109,25 +119,3 @@ export default function ProfileOnboardingScreen() {
     </CosmicScreen>
   );
 }
-
-const styles = StyleSheet.create({
-  genderRow: {
-    borderRadius: 9999,
-    borderWidth: 1,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-  },
-  genderRowActive: {
-    borderColor: '#d3beeb',
-    backgroundColor: 'rgba(211, 190, 235, 0.12)',
-    shadowColor: '#d3beeb',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.4,
-    shadowRadius: 14,
-    elevation: 4,
-  },
-  genderRowIdle: {
-    borderColor: 'rgba(255,255,255,0.1)',
-    backgroundColor: 'rgba(15,14,16,0.5)',
-  },
-});

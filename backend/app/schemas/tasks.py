@@ -22,7 +22,7 @@ class Task(BaseModel):
 class DailyTasksBody(BaseModel):
     session_id: str = Field(alias="sessionId")
     palm_analysis: PalmAnalysis = Field(alias="palmAnalysis")
-    is_premium: bool = Field(alias="isPremium")
+    is_premium: bool = Field(default=False, alias="isPremium")
 
     model_config = {"populate_by_name": True}
 

@@ -9,20 +9,28 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
-let Notifications: typeof import('expo-notifications') | null = null;
+type ExpoNotifications = typeof import('expo-notifications');
 
-function notificationsSupported(): boolean {
-  if (!Notifications || Platform.OS === 'web') return false;
-  // Push/local scheduling is limited in Expo Go (SDK 53+); skip to avoid runtime errors.
-  if (Constants.appOwnership === 'expo') return false;
-  return true;
+let notificationsModule: ExpoNotifications | null | undefined;
+
+function isExpoGo(): boolean {
+  return Constants.appOwnership === 'expo';
 }
 
-try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  Notifications = require('expo-notifications');
-} catch {
-  Notifications = null;
+/** Lazy-load expo-notifications — importing it in Expo Go throws on SDK 53+. */
+function getNotifications(): ExpoNotifications | null {
+  if (notificationsModule !== undefined) return notificationsModule;
+  if (Platform.OS === 'web' || isExpoGo()) {
+    notificationsModule = null;
+    return null;
+  }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    notificationsModule = require('expo-notifications') as ExpoNotifications;
+  } catch {
+    notificationsModule = null;
+  }
+  return notificationsModule;
 }
 
 const DAILY_REMINDER_ID = 'agastya-daily-ritual';
@@ -30,6 +38,7 @@ const DEFAULT_HOUR = 9; // 9 AM local time
 
 /** Configure how foreground notifications are displayed. Call at app start. */
 export function configureNotificationHandler(): void {
+  const Notifications = getNotifications();
   if (!Notifications) return;
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
@@ -44,8 +53,8 @@ export function configureNotificationHandler(): void {
 
 /** Request permission. Returns true if granted. Safe to call multiple times. */
 export async function requestNotificationPermission(): Promise<boolean> {
+  const Notifications = getNotifications();
   if (!Notifications) return false;
-  if (Platform.OS === 'web') return false;
 
   const { status: existing } = await Notifications.getPermissionsAsync();
   if (existing === 'granted') return true;
@@ -62,7 +71,8 @@ export async function scheduleDailyTaskReminder(
   hour = DEFAULT_HOUR,
   minute = 0,
 ): Promise<void> {
-  if (!notificationsSupported()) return;
+  const Notifications = getNotifications();
+  if (!Notifications) return;
 
   const granted = await requestNotificationPermission();
   if (!granted) return;
@@ -70,7 +80,7 @@ export async function scheduleDailyTaskReminder(
   await cancelDailyTaskReminder();
 
   try {
-    await Notifications!.scheduleNotificationAsync({
+    await Notifications.scheduleNotificationAsync({
       identifier: DAILY_REMINDER_ID,
       content: {
         title: 'Your daily rituals await ✦',
@@ -78,7 +88,7 @@ export async function scheduleDailyTaskReminder(
         data: { screen: '/tasks' },
       },
       trigger: {
-        type: Notifications!.SchedulableTriggerInputTypes.DAILY,
+        type: Notifications.SchedulableTriggerInputTypes.DAILY,
         hour,
         minute,
       },
@@ -90,26 +100,28 @@ export async function scheduleDailyTaskReminder(
 
 /** Cancel the standing daily reminder (e.g. after all tasks are completed). */
 export async function cancelDailyTaskReminder(): Promise<void> {
+  const Notifications = getNotifications();
   if (!Notifications) return;
   await Notifications.cancelScheduledNotificationAsync(DAILY_REMINDER_ID).catch(() => {});
 }
 
 /** Schedule a one-time "your reading is ready" notification for ~3 seconds from now. */
 export async function scheduleReadyNotification(): Promise<void> {
-  if (!notificationsSupported()) return;
+  const Notifications = getNotifications();
+  if (!Notifications) return;
 
   const granted = await requestNotificationPermission();
   if (!granted) return;
 
   try {
-    await Notifications!.scheduleNotificationAsync({
+    await Notifications.scheduleNotificationAsync({
       content: {
         title: 'Your palm reading is ready ✦',
         body: 'Agastya has finished reading your life path. Tap to explore.',
         data: { screen: '/report' },
       },
       trigger: {
-        type: Notifications!.SchedulableTriggerInputTypes.TIME_INTERVAL,
+        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
         seconds: 3,
       },
     });

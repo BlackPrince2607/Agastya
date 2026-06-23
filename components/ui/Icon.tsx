@@ -48,7 +48,13 @@ export type IconName =
   | 'cloud_done'
   | 'encrypted'
   | 'devices'
-  | 'mail';
+  | 'mail'
+  | 'description'
+  | 'article'
+  | 'refresh'
+  | 'error_outline'
+  | 'handshake'
+  | 'info';
 
 type IconProps = {
   name: IconName;

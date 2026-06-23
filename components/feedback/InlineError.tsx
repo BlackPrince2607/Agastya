@@ -1,5 +1,6 @@
 import { Pressable, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+
+import { Icon } from '@/components/ui';
 
 type InlineErrorProps = {
   message: string;
@@ -9,13 +10,13 @@ type InlineErrorProps = {
 export function InlineError({ message, onDismiss }: InlineErrorProps) {
   return (
     <View
-      className="w-full flex-row items-start gap-2 rounded-2xl border border-red-400/25 bg-red-500/10 px-4 py-3"
+      className="w-full flex-row items-start gap-3 rounded-2xl border border-error/30 bg-error-muted px-4 py-3"
       accessibilityRole="alert">
-      <Ionicons name="alert-circle-outline" size={20} color="#f87171" style={{ marginTop: 1 }} />
-      <Text className="flex-1 text-[14px] leading-5 text-red-100">{message}</Text>
+      <Icon name="error_outline" size={20} color="#ffb4ab" />
+      <Text className="flex-1 font-body text-[14px] leading-5 text-error">{message}</Text>
       {onDismiss ? (
         <Pressable onPress={onDismiss} hitSlop={10} accessibilityLabel="Dismiss error">
-          <Ionicons name="close" size={18} color="rgba(255,255,255,0.5)" />
+          <Icon name="close" size={18} color="rgba(255,255,255,0.5)" />
         </Pressable>
       ) : null}
     </View>

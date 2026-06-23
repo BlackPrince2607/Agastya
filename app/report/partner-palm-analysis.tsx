@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Text, View } from 'react-native';
+import { Alert, Text, View } from 'react-native';
 
 import { MotiView } from '@/components/moti/MotiView';
 import { CosmicDotGrid } from '@/components/layout/CosmicDotGrid';
@@ -92,10 +92,14 @@ export default function PartnerPalmAnalysisScreen() {
           if (!isLivePalmAnalysis(palm)) {
             setSampleBadge(true);
           }
-        } catch {
+        } catch (err) {
           if (online) {
-            needsRetake = true;
-            return;
+            const msg = err instanceof Error ? err.message : 'Analysis failed';
+            if (msg.toLowerCase().includes('retake') || msg.toLowerCase().includes('palm')) {
+              needsRetake = true;
+              return;
+            }
+            throw err;
           }
           palm = FALLBACK_PALM;
           setSampleBadge(true);
@@ -115,7 +119,11 @@ export default function PartnerPalmAnalysisScreen() {
       } finally {
         if (cancelled) return;
         if (needsRetake) {
-          deferRouterReplace('/report/partner-palm-scan' as never);
+          Alert.alert(
+            'Try again',
+            "We couldn't read that palm clearly. Choose a brighter, open-palm photo.",
+            [{ text: 'OK', onPress: () => deferRouterReplace('/report/partner-palm-scan' as never) }],
+          );
           return;
         }
         deferRouterReplace('/report/compatibility' as never);

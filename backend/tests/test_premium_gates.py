@@ -69,3 +69,45 @@ def test_chat_free_cap_at_five(client):
     res = client.post("/v1/chat", json=body)
     assert res.status_code == 200
     assert "preview ceiling" in res.json()["reply"].lower()
+
+
+def test_chat_accepts_frontend_payload_without_is_premium(client):
+    """Expo client omits isPremium — server uses session bucket instead."""
+    session_id = str(uuid.uuid4())
+    from app.schemas.palm import PalmAnalysis
+
+    bkt = bucket(session_id)
+    bkt.palm = PalmAnalysis(**_palm_payload())
+    set_bucket(session_id, bkt)
+
+    res = client.post(
+        "/v1/chat",
+        json={
+            "sessionId": session_id,
+            "profileSummary": "Name: Test",
+            "palmAnalysis": _palm_payload(),
+            "messages": [{"role": "user", "content": "Hello guide"}],
+        },
+    )
+    assert res.status_code == 200
+    assert res.json()["reply"]
+
+
+def test_daily_tasks_accepts_frontend_payload_without_is_premium(client):
+    session_id = str(uuid.uuid4())
+    from app.schemas.palm import PalmAnalysis
+
+    bkt = bucket(session_id)
+    bkt.palm = PalmAnalysis(**_palm_payload())
+    set_bucket(session_id, bkt)
+
+    res = client.post(
+        "/v1/tasks/daily",
+        json={
+            "sessionId": session_id,
+            "palmAnalysis": _palm_payload(),
+        },
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert len(data["tasks"]) >= 3

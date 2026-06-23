@@ -15,11 +15,9 @@ import { ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS } from '@/constants/onboarding
 import { stitchMd3 } from '@/constants/stitchWelcome';
 import { stitchSignal } from '@/constants/theme';
 import { track } from '@/services/analytics';
-import { isAuthBypassEnabled } from '@/services/authConfig';
 import { unlockPremiumFromStore, finalizeStripeCheckout } from '@/services/premiumUnlock';
 import { isPremiumBypassEnabled, isRevenueCatConfigured, isStripeCheckoutEnabled, isWebPremiumUnlockAvailable } from '@/services/revenuecat';
 import { isWebDemoMode } from '@/utils/webDemo';
-import { enterMainApp } from '@/utils/navigationFlow';
 import { useSessionStore } from '@/store/sessionStore';
 
 const TRUST_HIGHLIGHTS = [
@@ -41,7 +39,7 @@ const FEATURES = [
   },
   {
     icon: 'chatbubble-ellipses-outline' as const,
-    title: 'Unlimited AI Guide',
+    title: 'Unlimited Guide',
     body: 'Ask your Guide anything, anytime—answers personalized to your reading.',
   },
   {
@@ -264,9 +262,7 @@ export default function PaywallScreen() {
           className="absolute bottom-0 left-0 right-0 z-20 rounded-none border-t border-white/14 bg-[#0f0e10]/94 px-6 pt-4"
           style={{ elevation: 24 }}>
           <View style={{ paddingBottom: Math.max(insets.bottom, 16) }} className="gap-y-2.5">
-            {isAuthBypassEnabled ? (
-              <CosmicButton gradient="nebulaMd3" label="Continue to app" onPress={() => enterMainApp()} />
-            ) : premium ? (
+            {premium ? (
               <CosmicButton gradient="nebulaMd3" label="Sign in to enter" onPress={goToAccountSync} />
             ) : (
               <MotiView
@@ -289,9 +285,7 @@ export default function PaywallScreen() {
               </MotiView>
             )}
             <CosmicButton variant="ghost" label="Back to preview" onPress={backToPreview} />
-            {!isAuthBypassEnabled ? (
-              <CosmicButton variant="ghost" label="Save & sign in" onPress={goToAccountSync} />
-            ) : null}
+            <CosmicButton variant="ghost" label="Save & sign in" onPress={goToAccountSync} />
             <View className="mt-1 flex-row items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2.5">
               <Ionicons name="shield-checkmark" size={16} color="#4ade80" />
               <Text className="font-inter text-[12px] text-mist/85">Cancel anytime · Restore from Profile</Text>

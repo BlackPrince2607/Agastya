@@ -1,14 +1,14 @@
 import { useWindowDimensions } from 'react-native';
 
-const MAX_CONTENT = 520;
+import { MAX_CONTENT_WIDTH, PAGE_PADDING, spacing } from '@/constants/layout';
 
 /** Responsive padding and width for phone / tablet / web. */
 export function useLayoutMetrics() {
   const { width } = useWindowDimensions();
   const isWide = width >= 768;
-  const contentWidth = isWide ? MAX_CONTENT : width;
-  const horizontalPad = isWide ? Math.max(20, (width - MAX_CONTENT) / 2) : Math.max(16, Math.round(width * 0.05));
-  const gridGap = width < 360 ? 10 : 12;
+  const contentWidth = isWide ? MAX_CONTENT_WIDTH : width;
+  const horizontalPad = isWide ? Math.max(PAGE_PADDING, (width - MAX_CONTENT_WIDTH) / 2) : Math.max(spacing.lg, Math.round(width * 0.05));
+  const gridGap = width < 360 ? spacing.sm + 2 : spacing.md;
   const tileMinHeight = width < 360 ? 96 : 108;
 
   return {
@@ -18,5 +18,8 @@ export function useLayoutMetrics() {
     horizontalPad,
     gridGap,
     tileMinHeight,
+    pagePadding: PAGE_PADDING,
+    sectionGap: spacing.lg,
+    stackGap: spacing.md,
   };
 }

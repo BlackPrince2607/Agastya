@@ -7,6 +7,8 @@ import { LoadingBlock } from '@/components/feedback';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { completeAuthFromUrl } from '@/services/authCallback';
 import { mapSupabaseAuthError } from '@/services/authErrors';
+import { isAuthCallbackUrl } from '@/services/authRedirect';
+import { readAuthSession } from '@/services/authSession';
 
 async function resolveAuthRedirectUrl(): Promise<string | null> {
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
@@ -24,6 +26,27 @@ export default function AuthCallbackScreen() {
     handled.current = true;
 
     void (async () => {
+      if (Platform.OS !== 'web') {
+        const url = await Linking.getInitialURL();
+        if (url && isAuthCallbackUrl(url)) {
+          const result = await completeAuthFromUrl(url);
+          if (!result.ok) {
+            Alert.alert(
+              'Sign-in incomplete',
+              mapSupabaseAuthError(result.message ?? 'We could not finish signing you in.'),
+              [{ text: 'Try again', onPress: () => router.replace('/onboarding/account') }],
+            );
+          }
+          return;
+        }
+
+        const auth = await readAuthSession();
+        if (!auth.isSignedIn) {
+          router.replace('/onboarding/account');
+        }
+        return;
+      }
+
       const url = await resolveAuthRedirectUrl();
       if (!url) {
         Alert.alert('Sign-in incomplete', 'No sign-in data was received. Try again from the account screen.', [
@@ -39,6 +62,11 @@ export default function AuthCallbackScreen() {
           mapSupabaseAuthError(result.message ?? 'We could not finish signing you in.'),
           [{ text: 'Try again', onPress: () => router.replace('/onboarding/account') }],
         );
+        return;
+      }
+
+      if (typeof window !== 'undefined') {
+        window.history.replaceState({}, document.title, '/auth/callback');
       }
     })();
   }, []);

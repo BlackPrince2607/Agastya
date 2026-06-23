@@ -91,10 +91,11 @@ export default function WelcomeScreen() {
           <View style={styles.headBlock}>
             <Text style={styles.kicker}>Agastya</Text>
             <Text style={styles.headline}>{`Your palm.\nYour guide.`}</Text>
+            <Text style={styles.subhead}>Personalized readings for love, career, and daily clarity.</Text>
           </View>
 
           <Text style={styles.body}>
-            A personalized palm reading and AI Guide for love, career, and daily clarity—for reflection and fun.
+            A personalized palm reading and Guide for reflection and fun—entertainment only, not medical or financial advice.
           </Text>
 
           <View style={styles.ctaStack}>
@@ -199,7 +200,15 @@ const styles = StyleSheet.create({
   },
   headBlock: {
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
+  },
+  subhead: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 15,
+    lineHeight: 22,
+    color: stitchMd3.onSurfaceVariant,
+    textAlign: 'center',
+    maxWidth: 320,
   },
   kicker: {
     fontFamily: 'SpaceGrotesk_600SemiBold',
@@ -229,8 +238,8 @@ const styles = StyleSheet.create({
   },
   ctaStack: {
     width: '100%',
-    gap: 16,
-    marginTop: 8,
+    gap: 20,
+    marginTop: 12,
   },
   primaryGradient: {
     borderRadius: 999,
@@ -264,7 +273,7 @@ const styles = StyleSheet.create({
   },
   secondaryBlur: {
     borderRadius: 999,
-    paddingVertical: 17,
+    paddingVertical: 19,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.03)',

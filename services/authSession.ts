@@ -1,6 +1,8 @@
+import type { Href } from 'expo-router';
 import { router } from 'expo-router';
 
 import { track } from '@/services/analytics';
+import { bootstrapIdentity } from '@/services/identity';
 import { getSupabase, isSupabaseEnabled } from '@/services/supabase';
 import { useSessionStore } from '@/store/sessionStore';
 
@@ -9,6 +11,19 @@ export type AuthSessionSnapshot = {
   userId: string | null;
   email: string | null;
 };
+
+let postSignInReturnHref: Href | null = null;
+
+/** After the next successful sign-in, navigate here instead of the default onboarding route. */
+export function setPostSignInReturn(href: Href | null): void {
+  postSignInReturnHref = href;
+}
+
+export function consumePostSignInReturn(): Href | null {
+  const href = postSignInReturnHref;
+  postSignInReturnHref = null;
+  return href;
+}
 
 export async function readAuthSession(): Promise<AuthSessionSnapshot> {
   const supabase = getSupabase();
@@ -43,13 +58,15 @@ export async function signOutAndReturnToWelcome(): Promise<void> {
     }
   }
   syncAuthUserToStore(null);
+  useSessionStore.getState().setSyncNotice(null);
   leaveMainAppForOnboarding();
   track('auth_signed_out');
   router.replace('/welcome');
 }
 
 export async function signInFromProfile(): Promise<void> {
-  router.push('/onboarding/account');
+  setPostSignInReturn('/(main)/profile');
+  router.push({ pathname: '/onboarding/account', params: { fromProfile: '1' } });
 }
 
 /** Wipe local progress and Supabase session, land on welcome. */
@@ -64,5 +81,6 @@ export async function resetLocalAndSignOut(): Promise<void> {
   }
   useSessionStore.getState().resetDemo();
   track('local_reset');
+  await bootstrapIdentity();
   router.replace('/welcome');
 }

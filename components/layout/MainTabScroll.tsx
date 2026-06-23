@@ -2,9 +2,8 @@ import type { PropsWithChildren } from 'react';
 import { ScrollView, type ScrollViewProps } from 'react-native';
 
 import { ScreenBody } from '@/components/layout/ScreenBody';
+import { SECTION_GAP, TAB_BAR_CLEARANCE } from '@/constants/layout';
 import { useLayoutMetrics } from '@/hooks/useLayoutMetrics';
-
-const TAB_BAR_CLEARANCE = 260;
 
 type MainTabScrollProps = PropsWithChildren<
   Pick<ScrollViewProps, 'contentContainerStyle' | 'showsVerticalScrollIndicator'>
@@ -28,7 +27,7 @@ export function MainTabScroll({
       keyboardShouldPersistTaps="handled"
       contentContainerStyle={[
         {
-          gap: 18,
+          gap: SECTION_GAP,
           paddingTop: 8,
           paddingBottom: TAB_BAR_CLEARANCE,
           paddingHorizontal: pad,

@@ -6,12 +6,13 @@ type SectionHeaderProps = {
   className?: string;
 };
 
+/** Section label above grouped cards — consistent with design system. */
 export function SectionHeader({ title, subtitle, className = '' }: SectionHeaderProps) {
   return (
-    <View className={`w-full gap-1 ${className}`}>
-      <Text className="font-inter-medium text-[15px] text-mist">{title}</Text>
+    <View className={`w-full gap-1 px-0.5 ${className}`}>
+      <Text className="font-headline-md text-[18px] text-on-surface">{title}</Text>
       {subtitle ? (
-        <Text className="text-[13px] leading-5 text-md-on-surface-variant">{subtitle}</Text>
+        <Text className="font-body text-[13px] leading-5 text-on-surface-variant">{subtitle}</Text>
       ) : null}
     </View>
   );

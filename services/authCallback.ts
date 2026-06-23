@@ -1,14 +1,41 @@
 import * as Linking from 'expo-linking';
 import * as QueryParams from 'expo-auth-session/build/QueryParams';
+import { Platform, Alert } from 'react-native';
+import { router } from 'expo-router';
 
-import { ensureSessionMerged } from '@/services/authMerge';
+import { alertForAuthFailure, parseAuthFailure } from '@/services/authErrorUtils';
+import { finishSignIn } from '@/services/authSignIn';
 import { isAuthCallbackUrl } from '@/services/authRedirect';
 import { getSupabase } from '@/services/supabase';
-import { routeAfterSignInIntent } from '@/utils/navigationFlow';
 
 export type AuthUrlResult =
-  | { ok: true }
+  | { ok: true; recovery?: boolean; skipped?: boolean }
   | { ok: false; reason: 'no_client' | 'parse_error' | 'exchange_failed'; message?: string };
+
+const processedAuthUrls = new Set<string>();
+
+function parseAuthQueryParams(url: string): { params: Record<string, string>; errorCode?: string } {
+  const { params, errorCode } = QueryParams.getQueryParams(url);
+  if (params.code || params.access_token || params.error || params.error_description) {
+    return { params, errorCode };
+  }
+
+  const hashIndex = url.indexOf('#');
+  if (hashIndex >= 0) {
+    const hashQuery = url.slice(hashIndex + 1);
+    const fromHash = QueryParams.getQueryParams(`?${hashQuery}`);
+    if (fromHash.params.code || fromHash.params.access_token || fromHash.params.error) {
+      return { params: fromHash.params, errorCode: fromHash.errorCode };
+    }
+  }
+
+  return { params, errorCode };
+}
+
+function isRecoveryUrl(url: string): boolean {
+  const { params } = parseAuthQueryParams(url);
+  return params.type === 'recovery';
+}
 
 /** Parse magic-link / OAuth redirect URLs and establish a Supabase session. */
 export async function createSessionFromUrl(url: string): Promise<boolean> {
@@ -20,12 +47,12 @@ export async function createSessionFromUrlDetailed(url: string): Promise<AuthUrl
   const supabase = getSupabase();
   if (!supabase) return { ok: false, reason: 'no_client' };
 
-  const { params, errorCode } = QueryParams.getQueryParams(url);
+  const { params, errorCode } = parseAuthQueryParams(url);
 
   const oauthError = params.error_description ?? params.error;
   if (errorCode || oauthError) {
     const message = oauthError ?? errorCode ?? 'Sign-in was cancelled.';
-    console.warn('[Agastya auth]', message);
+    if (__DEV__) console.warn('[Agastya auth]', message);
     return { ok: false, reason: 'parse_error', message };
   }
 
@@ -33,10 +60,10 @@ export async function createSessionFromUrlDetailed(url: string): Promise<AuthUrl
   if (code) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (error) {
-      console.warn('[Agastya auth] exchangeCodeForSession failed', error.message);
+      if (__DEV__) console.warn('[Agastya auth] exchangeCodeForSession failed', error.message);
       return { ok: false, reason: 'exchange_failed', message: error.message };
     }
-    return { ok: true };
+    return { ok: true, recovery: params.type === 'recovery' };
   }
 
   const access_token = params.access_token;
@@ -50,29 +77,60 @@ export async function createSessionFromUrlDetailed(url: string): Promise<AuthUrl
     refresh_token: refresh_token ?? '',
   });
   if (error) {
-    console.warn('[Agastya auth] setSession failed', error.message);
+    if (__DEV__) console.warn('[Agastya auth] setSession failed', error.message);
     return { ok: false, reason: 'exchange_failed', message: error.message };
   }
-  return { ok: true };
+  return { ok: true, recovery: params.type === 'recovery' };
 }
 
-/** Complete sign-in after a deep link: session → merge → route. */
+/** Complete sign-in after a deep link: session → merge → route (or reset-password for recovery). */
 export async function completeAuthFromUrl(url: string): Promise<AuthUrlResult> {
+  if (processedAuthUrls.has(url)) {
+    return { ok: true, skipped: true };
+  }
+  processedAuthUrls.add(url);
+
+  const recovery = isRecoveryUrl(url);
   const result = await createSessionFromUrlDetailed(url);
-  if (!result.ok) return result;
-  await ensureSessionMerged();
-  await routeAfterSignInIntent();
+  if (!result.ok) {
+    processedAuthUrls.delete(url);
+    return result;
+  }
+
+  if (recovery || result.recovery) {
+    router.replace('/auth/reset-password');
+    return { ok: true, recovery: true };
+  }
+
+  try {
+    await finishSignIn();
+  } catch (err) {
+    processedAuthUrls.delete(url);
+    const message = err instanceof Error ? err.message : 'Could not finish signing in.';
+    return { ok: false, reason: 'exchange_failed', message };
+  }
+
   return { ok: true };
 }
 
-/** Wire deep links (OTP + OAuth) — call once from root layout. */
+/** Wire deep links (OTP + OAuth) — native only; web uses /auth/callback route. */
 export function subscribeAuthDeepLinks(): () => void {
+  if (Platform.OS === 'web') {
+    return () => {};
+  }
+
   const supabase = getSupabase();
   if (!supabase) return () => {};
 
   const handle = async (url: string | null) => {
     if (!url || !isAuthCallbackUrl(url)) return;
-    await completeAuthFromUrl(url);
+    const result = await completeAuthFromUrl(url);
+    if (!result.ok && !result.skipped) {
+      const alert = alertForAuthFailure(
+        parseAuthFailure(result.message ?? 'We could not finish signing you in from that link.'),
+      );
+      Alert.alert(alert.title, alert.body);
+    }
   };
 
   void Linking.getInitialURL().then((u) => void handle(u));

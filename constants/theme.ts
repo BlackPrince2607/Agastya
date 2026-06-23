@@ -48,6 +48,42 @@ export const colors = {
   health: '#86efac',
 
   error: '#ffb4ab',
+  errorMuted: 'rgba(255,180,171,0.12)',
+  errorBorder: 'rgba(248,113,113,0.35)',
+  success: '#22d3ee',
+  successMuted: 'rgba(34,211,238,0.12)',
+  successBorder: 'rgba(34,211,238,0.35)',
+  placeholder: 'rgba(203,196,206,0.5)',
+  placeholderDim: 'rgba(255,255,255,0.25)',
+} as const;
+
+/** Typography scale — sizes in px; pair with font-headline / font-body / font-label. */
+export const typography = {
+  hero: 28,
+  title: 26,
+  headline: 22,
+  subhead: 18,
+  body: 15,
+  bodySm: 13,
+  caption: 12,
+  label: 11,
+} as const;
+
+/** Shared border radii (px) — mirrors tailwind `rounded-*` tokens. */
+export const radii = {
+  sm: 12,
+  md: 16,
+  lg: 24,
+  glass: 32,
+  pill: 9999,
+} as const;
+
+/** Standard icon sizes for touch targets and inline glyphs. */
+export const iconSize = {
+  sm: 18,
+  md: 20,
+  lg: 24,
+  xl: 28,
 } as const;
 
 /** LinearGradient palettes (arrays consumed by expo-linear-gradient). */

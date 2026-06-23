@@ -2,7 +2,7 @@ import { router, usePathname } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
 
-import { EmptyState, InlineError } from '@/components/feedback';
+import { EmptyState, InlineError, PageTitle } from '@/components/feedback';
 import { MainTabScroll } from '@/components/layout/MainTabScroll';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { MainCosmicHeader } from '@/components/layout/MainCosmicHeader';
@@ -89,7 +89,7 @@ export default function TasksScreen() {
         <MainTabScroll>
           <MainCosmicHeader displayName={displayName} onProfilePress={() => router.push('/profile')} />
           <EmptyState
-            icon="check-circle-o"
+            icon="task_alt"
             title={TASKS_EMPTY_NO_PALM.title}
             body={TASKS_EMPTY_NO_PALM.body}
             actionLabel={TASKS_EMPTY_NO_PALM.action}
@@ -105,12 +105,7 @@ export default function TasksScreen() {
       <MainTabScroll>
         <MainCosmicHeader displayName={displayName} onProfilePress={() => router.push('/profile')} />
 
-        <View className="gap-1">
-          <Text className="font-headline text-[26px] text-on-surface" accessibilityRole="header">
-            Today’s Tasks
-          </Text>
-          <Text className="font-body text-[13px] text-on-surface-variant">{formatToday()}</Text>
-        </View>
+        <PageTitle title="Today’s Tasks" subtitle={formatToday()} />
 
         {loadError ? <InlineError message={loadError} onDismiss={() => setLoadError(null)} /> : null}
 
