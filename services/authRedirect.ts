@@ -22,9 +22,6 @@ export function getAuthRedirectUri(): string {
 
   if (__DEV__) {
     console.log('[Agastya auth] redirect URI:', cachedRedirectUri);
-    console.log(
-      '[Agastya auth] Add this exact URL (or exp://** / agastya://**) to Supabase → Authentication → URL Configuration → Redirect URLs',
-    );
   }
 
   return cachedRedirectUri;

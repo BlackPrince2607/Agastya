@@ -31,10 +31,18 @@ export const isOAuthSignInEnabled =
 export const isAuthBypassEnabled = (() => {
   const fromExtra = readExtraFlag('bypassAuth');
   if (fromExtra === true) return true;
-  if (fromExtra === false) return false;
   if (process.env.EXPO_PUBLIC_BYPASS_AUTH === 'true') return true;
   return false;
 })();
+
+function isDevPremiumFlagEnabled(): boolean {
+  const fromExtra = readExtraFlag('allowDevPremium');
+  if (fromExtra === true) return true;
+  if (process.env.EXPO_PUBLIC_ALLOW_DEV_PREMIUM === 'true') return true;
+  return false;
+}
+
+export { isDevPremiumFlagEnabled };
 
 export function requiresSupabaseSignIn(): boolean {
   return isSupabaseEnabled && !isAuthBypassEnabled;
@@ -43,10 +51,7 @@ export function requiresSupabaseSignIn(): boolean {
 /** Apply dev-only premium unlock from env (called once at startup). */
 export function applyDevAccessGrants(): void {
   if (!__DEV__) return;
-  const allowPremium =
-    readExtraFlag('allowDevPremium') === true ||
-    process.env.EXPO_PUBLIC_ALLOW_DEV_PREMIUM === 'true';
-  if (!allowPremium) return;
+  if (!isDevPremiumFlagEnabled()) return;
   if (!useSessionStore.getState().hasUnlockedPremium) {
     useSessionStore.getState().setPremium(true);
   }

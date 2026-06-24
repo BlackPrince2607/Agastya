@@ -26,13 +26,16 @@ export const spacing = {
 export const PAGE_PADDING = spacing['2xl'];
 
 /** Vertical gap between major sections inside a scroll view. */
-export const SECTION_GAP = spacing.lg;
+export const SECTION_GAP = spacing.xl;
+
+/** Larger gap between major home/profile sections (greeting, cards, grids). */
+export const MAIN_SECTION_GAP = 28;
 
 /** Gap between stacked cards / list items. */
 export const STACK_GAP = spacing.md;
 
 /** Bottom clearance above floating tab bar. */
-export const TAB_BAR_CLEARANCE = 260;
+export const TAB_BAR_CLEARANCE = 120;
 
 /** Max content width on tablet / web. */
 export const MAX_CONTENT_WIDTH = 520;

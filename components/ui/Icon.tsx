@@ -43,6 +43,7 @@ export type IconName =
   | 'auto_graph'
   | 'spa'
   | 'settings'
+  | 'edit'
   | 'logout'
   | 'star'
   | 'cloud_done'

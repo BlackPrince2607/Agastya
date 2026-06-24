@@ -29,8 +29,8 @@ import { track } from '@/services/analytics';
 import { completeAuthFromUrl } from '@/services/authCallback';
 import { isEmailAuthEnabled, isOAuthSignInEnabled } from '@/services/authConfig';
 import { alertForAuthFailure, parseAuthFailure } from '@/services/authErrorUtils';
-import { fetchSupabaseAuthSettings, type SupabaseAuthSettings } from '@/services/authHealth';
 import { getAuthRedirectUri } from '@/services/authRedirect';
+import { setPostSignInReturn } from '@/services/authSession';
 import { getSupabase, isSupabaseEnabled } from '@/services/supabase';
 import { useSessionStore } from '@/store/sessionStore';
 import { useAuthSession } from '@/hooks/useAuthSession';
@@ -62,29 +62,19 @@ export default function SaveJourneyScreen() {
   const hasEnteredMain = useSessionStore((s) => s.hasEnteredMain);
   const { isSignedIn, email: authEmail } = useAuthSession();
   const afterPaywall = fromPaywall === '1';
+  const fromProfileFlow = fromProfile === '1';
 
   const [email, setEmail] = useState('');
   const [oauthBusy, setOauthBusy] = useState<'apple' | 'google' | null>(null);
-  const [authSettings, setAuthSettings] = useState<SupabaseAuthSettings | null>(null);
 
   const redirectUri = getAuthRedirectUri();
-  const googleEnabled = authSettings?.google ?? false;
-  const appleEnabled = authSettings?.apple ?? false;
-  const emailProviderEnabled = authSettings?.email ?? true;
-  const showOAuth =
-    isOAuthSignInEnabled && !isSignedIn && (googleEnabled || appleEnabled);
-  const showOAuthSetupHint =
-    isOAuthSignInEnabled && !isSignedIn && authSettings !== null && !googleEnabled && !appleEnabled;
+  const showOAuth = isOAuthSignInEnabled && !isSignedIn;
 
   useEffect(() => {
-    void fetchSupabaseAuthSettings().then(setAuthSettings);
-  }, []);
-
-  useEffect(() => {
-    if (__DEV__) {
-      console.log('[Agastya auth] Using redirect URI for OAuth/email links:', redirectUri);
+    if (fromProfileFlow) {
+      setPostSignInReturn('/(main)/profile');
     }
-  }, [redirectUri]);
+  }, [fromProfileFlow]);
 
   const handleBack = () => {
     router.replace(
@@ -112,6 +102,7 @@ export default function SaveJourneyScreen() {
       pathname: '/onboarding/account-email',
       params: {
         email: trimmed,
+        mode: fromProfileFlow ? 'signin' : '',
         seed: mergedSeed,
         fromPaywall: fromPaywall ?? '',
         fromProfile: fromProfile ?? '',
@@ -172,7 +163,7 @@ export default function SaveJourneyScreen() {
         }
         track('auth_oauth_attempt', { provider });
       } else if (result.type === 'cancel' || result.type === 'dismiss') {
-        Alert.alert('Sign-in cancelled', 'No changes were made to your account.');
+        return;
       } else {
         Alert.alert(
           'Sign-in incomplete',
@@ -186,6 +177,13 @@ export default function SaveJourneyScreen() {
       setOauthBusy(null);
     }
   };
+
+  const headline = fromProfileFlow
+    ? 'Sign in to your account'
+    : 'Save Your Reading & Continue Your Journey';
+  const subhead = fromProfileFlow
+    ? 'Back up your reading and sync across devices.'
+    : 'Sign in to save your report, chat history, and daily progress on any device.';
 
   return (
     <CosmicScreen variant="stitch">
@@ -222,33 +220,35 @@ export default function SaveJourneyScreen() {
             </View>
 
             <View className="items-center gap-3">
-              <Text className="text-center font-headline text-[30px] leading-9 text-on-surface">
-                Save Your Reading & Continue Your Journey
-              </Text>
-              <Text className="text-center font-body text-[15px] leading-6 text-on-surface-variant">
-                Sign in to save your report, chat history, and daily progress on any device.
-              </Text>
+              <Text className="text-center font-headline text-[30px] leading-9 text-on-surface">{headline}</Text>
+              <Text className="text-center font-body text-[15px] leading-6 text-on-surface-variant">{subhead}</Text>
             </View>
 
             {isSignedIn ? (
               <GlassCard className="w-full px-4 py-3" style={{ borderColor: 'rgba(34,211,238,0.35)' }}>
                 <Text className="font-body text-[14px] leading-6" style={{ color: '#22d3ee' }}>
                   {authEmail ? `Signed in as ${authEmail}.` : 'You’re signed in.'}{' '}
-                  {hasEnteredMain ? 'Return to the app below.' : 'Finish onboarding, then enter the app.'}
+                  {fromProfileFlow
+                    ? 'Return to your profile below.'
+                    : hasEnteredMain
+                      ? 'Return to the app below.'
+                      : 'Finish onboarding, then enter the app.'}
                 </Text>
               </GlassCard>
             ) : null}
 
-            <View className="flex-row gap-3">
-              {TRUST_BADGES.map((b) => (
-                <GlassCard key={b.label} className="min-w-0 flex-1 items-center gap-2 px-3 py-3">
-                  <Icon name={b.icon} size={22} color="#d3beeb" />
-                  <Text className="text-center font-label text-[10px] uppercase tracking-[0.08em] text-on-surface">
-                    {b.label}
-                  </Text>
-                </GlassCard>
-              ))}
-            </View>
+            {!fromProfileFlow ? (
+              <View className="flex-row gap-3">
+                {TRUST_BADGES.map((b) => (
+                  <GlassCard key={b.label} className="min-w-0 flex-1 items-center gap-2 px-3 py-3">
+                    <Icon name={b.icon} size={22} color="#d3beeb" />
+                    <Text className="text-center font-label text-[10px] uppercase tracking-[0.08em] text-on-surface">
+                      {b.label}
+                    </Text>
+                  </GlassCard>
+                ))}
+              </View>
+            ) : null}
 
             {!isSupabaseEnabled && !isSignedIn ? (
               <GlassCard className="w-full px-4 py-3" style={{ borderColor: 'rgba(251,191,36,0.35)' }}>
@@ -256,36 +256,9 @@ export default function SaveJourneyScreen() {
               </GlassCard>
             ) : null}
 
-            {showOAuthSetupHint ? (
-              <GlassCard className="w-full px-4 py-3">
-                <Text className="font-body text-[14px] leading-6 text-on-surface-variant">
-                  Google and Apple are not enabled in your Supabase project yet. Use email sign-in below.
-                </Text>
-              </GlassCard>
-            ) : null}
-
-            {authSettings && !emailProviderEnabled ? (
-              <GlassCard className="w-full px-4 py-3" style={{ borderColor: 'rgba(251,191,36,0.35)' }}>
-                <Text className="font-body text-[14px] leading-6 text-amber-200/90">
-                  Email sign-in is turned off in Supabase → Authentication → Providers → Email.
-                </Text>
-              </GlassCard>
-            ) : null}
-
-            {__DEV__ && isSupabaseEnabled ? (
-              <GlassCard className="w-full px-4 py-3">
-                <Text className="font-label text-[10px] uppercase tracking-[0.08em] text-on-surface-variant">
-                  Dev — add to Supabase redirect URLs
-                </Text>
-                <Text selectable className="mt-2 font-body text-[12px] leading-5 text-on-surface-variant">
-                  {redirectUri}
-                </Text>
-              </GlassCard>
-            ) : null}
-
             {showOAuth ? (
               <View className="gap-4">
-                {appleEnabled ? (
+                {Platform.OS === 'ios' ? (
                   <Pressable
                     onPress={() => void oauth('apple')}
                     disabled={oauthBusy !== null}
@@ -303,23 +276,21 @@ export default function SaveJourneyScreen() {
                   </Pressable>
                 ) : null}
 
-                {googleEnabled ? (
-                  <Pressable
-                    onPress={() => void oauth('google')}
-                    disabled={oauthBusy !== null}
-                    accessibilityRole="button"
-                    accessibilityLabel="Continue with Google"
-                    className="flex-row items-center justify-center gap-3 rounded-pill border border-white/10 bg-white/[0.05] py-4 active:opacity-90">
-                    {oauthBusy === 'google' ? (
-                      <ActivityIndicator color="#d3beeb" />
-                    ) : (
-                      <GoogleLogo size={20} />
-                    )}
-                    <Text className="font-body-medium text-[16px] font-semibold text-on-surface">
-                      {oauthBusy === 'google' ? 'Signing in…' : 'Continue with Google'}
-                    </Text>
-                  </Pressable>
-                ) : null}
+                <Pressable
+                  onPress={() => void oauth('google')}
+                  disabled={oauthBusy !== null}
+                  accessibilityRole="button"
+                  accessibilityLabel="Continue with Google"
+                  className="flex-row items-center justify-center gap-3 rounded-pill border border-white/10 bg-white/[0.05] py-4 active:opacity-90">
+                  {oauthBusy === 'google' ? (
+                    <ActivityIndicator color="#d3beeb" />
+                  ) : (
+                    <GoogleLogo size={20} />
+                  )}
+                  <Text className="font-body-medium text-[16px] font-semibold text-on-surface">
+                    {oauthBusy === 'google' ? 'Signing in…' : 'Continue with Google'}
+                  </Text>
+                </Pressable>
               </View>
             ) : null}
 
@@ -371,7 +342,9 @@ export default function SaveJourneyScreen() {
             className="absolute bottom-0 left-0 right-0 z-20 border-t border-white/10 bg-[#0f0e10]/95 px-6 pt-5"
             style={{ paddingBottom: Math.max(insets.bottom, 16) }}>
             <View className="gap-y-3">
-              {isSignedIn && hasRitualReading() ? (
+              {isSignedIn && fromProfileFlow ? (
+                <NebulaButton label="Back to profile" onPress={() => router.replace('/(main)/profile')} />
+              ) : isSignedIn && hasRitualReading() ? (
                 <NebulaButton label="Enter Agastya" onPress={() => goToMainApp()} />
               ) : isSignedIn ? (
                 <NebulaButton label="Continue onboarding" onPress={() => router.replace(resolveResumeHref())} />
@@ -381,7 +354,7 @@ export default function SaveJourneyScreen() {
                   Sign in above to save your reading and access the app.
                 </Text>
               ) : null}
-              {!afterPaywall && !premium ? (
+              {!afterPaywall && !premium && !fromProfileFlow ? (
                 <Pressable
                   onPress={() => router.push({ pathname: '/onboarding/paywall', params: { seed: mergedSeed } })}
                   className="items-center pb-1">

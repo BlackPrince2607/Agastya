@@ -25,7 +25,7 @@ export function mapSupabaseAuthError(message: string): string {
   }
 
   if (m.includes('redirect') || m.includes('redirect_uri') || m.includes('redirect url')) {
-    return 'Sign-in link was blocked by redirect settings. Add the app redirect URL in Supabase.';
+    return 'Sign-in link was blocked. Try signing in with your password instead.';
   }
 
   if (
@@ -34,7 +34,7 @@ export function mapSupabaseAuthError(message: string): string {
     m.includes('oauth provider not enabled') ||
     (m.includes('provider') && m.includes('not enabled'))
   ) {
-    return 'That sign-in option is not turned on in Supabase yet. Use email instead.';
+    return 'That sign-in option isn’t available right now. Try email instead.';
   }
 
   if (
@@ -43,7 +43,7 @@ export function mapSupabaseAuthError(message: string): string {
     m.includes('no api key') ||
     m.includes('missing api key')
   ) {
-    return 'App auth keys are misconfigured. Check EXPO_PUBLIC_SUPABASE_ANON_KEY in .env and restart Expo.';
+    return 'App auth keys are misconfigured. Restart the app and try again.';
   }
 
   if (
@@ -61,11 +61,11 @@ export function mapSupabaseAuthError(message: string): string {
     m.includes('error sending confirmation email') ||
     m.includes('error sending magic link')
   ) {
-    return 'Supabase could not send email yet. Configure custom SMTP in Supabase → Project Settings → Auth.';
+    return 'We could not send email right now. Try signing in with your password, or wait a few minutes.';
   }
 
   if (m.includes('signups not allowed') || m.includes('signup is disabled')) {
-    return 'New email sign-ups are disabled in Supabase.';
+    return 'New email sign-ups are not available right now.';
   }
 
   if (
@@ -81,7 +81,7 @@ export function mapSupabaseAuthError(message: string): string {
   }
 
   if (m.includes('database error') || m.includes('saving new user')) {
-    return 'Account could not be created on the server. Check Supabase Auth logs for database errors.';
+    return 'Account could not be created. Please try again in a moment.';
   }
 
   if (m.includes('captcha')) {

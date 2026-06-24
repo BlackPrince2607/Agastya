@@ -1,9 +1,11 @@
-/** Browser file picker → base64 JPEG/PNG (web palm-scan demo flow). */
+/** Browser file picker → base64 JPEG/PNG (web palm-scan flow). */
 export function pickPalmImageWeb(): Promise<string | null> {
   if (typeof document === 'undefined') return Promise.resolve(null);
 
   return new Promise((resolve) => {
     let settled = false;
+    let changed = false;
+
     const finish = (value: string | null) => {
       if (settled) return;
       settled = true;
@@ -15,19 +17,20 @@ export function pickPalmImageWeb(): Promise<string | null> {
 
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = 'image/*';
+    input.accept = 'image/jpeg,image/png,image/webp,image/*';
     input.style.display = 'none';
 
     const onWindowFocus = () => {
-      // Browsers often restore focus without firing change when the user cancels.
-      setTimeout(() => {
-        if (!input.files?.length) finish(null);
-      }, 400);
+      // Wait longer so slow file picks don't false-cancel.
+      window.setTimeout(() => {
+        if (!changed && !input.files?.length) finish(null);
+      }, 900);
     };
 
     const cancelTimer = window.setTimeout(() => finish(null), 120_000);
 
     input.onchange = () => {
+      changed = true;
       const file = input.files?.[0];
       if (!file) {
         finish(null);
@@ -50,6 +53,9 @@ export function pickPalmImageWeb(): Promise<string | null> {
       reader.onerror = () => finish(null);
       reader.readAsDataURL(file);
     };
+
+    // Supported in modern Chromium / Safari.
+    input.addEventListener('cancel', () => finish(null));
 
     document.body.appendChild(input);
     window.addEventListener('focus', onWindowFocus);

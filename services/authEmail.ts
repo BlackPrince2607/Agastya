@@ -5,7 +5,7 @@ import {
 } from '@/services/authErrorUtils';
 import { getSupabase, isSupabaseEnabled } from '@/services/supabase';
 import { apiUrl, isApiConfigured } from '@/services/env';
-import { SIGN_IN_UNAVAILABLE } from '@/constants/userCopy';
+import { SIGN_IN_UNAVAILABLE, AUTH_RATE_LIMIT_HINT } from '@/constants/userCopy';
 
 export type AuthEmailResult =
   | { ok: true; needsEmailConfirmation?: boolean }
@@ -181,6 +181,9 @@ export async function signUpWithEmailPassword(
       // Account already exists — Supabase may still resend the confirmation email.
       if (parsed.reason === 'user_exists') {
         return { ok: true, needsEmailConfirmation: true };
+      }
+      if (parsed.reason === 'rate_limit') {
+        return { ok: false, message: AUTH_RATE_LIMIT_HINT, reason: 'rate_limit' };
       }
       if (__DEV__) console.warn('[Agastya auth] signUp failed:', error);
       return failFrom(error);

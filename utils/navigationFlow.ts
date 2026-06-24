@@ -5,6 +5,7 @@ import { restoreSessionFromServer } from '@/services/sessionRestore';
 import { bootstrapIdentity } from '@/services/identity';
 import { requestNotificationPermission } from '@/services/notifications';
 import { requiresSupabaseSignIn } from '@/services/authConfig';
+import { applyDevQuickAccess } from '@/services/devAccess';
 import { useSessionStore } from '@/store/sessionStore';
 import { deferRouterReplace } from '@/utils/routerDefer';
 
@@ -85,6 +86,7 @@ export function replayOnboarding() {
 
 /** Bootstrap + cloud restore, then route sign-in / returning users. */
 export async function prepareReturningUser(forceRestore = false): Promise<Href> {
+  applyDevQuickAccess();
   await bootstrapIdentity();
   if (forceRestore) {
     await restoreSessionFromServer({ force: true });

@@ -2,41 +2,16 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Pressable, Text, View } from 'react-native';
 
+import { HandToggleRow } from '@/components/onboarding/HandToggle';
+import { PalmScanFrame } from '@/components/onboarding/PalmScanFrame';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { CosmicButton } from '@/components/primitives';
 import { Icon } from '@/components/ui';
+import { PAGE_PADDING } from '@/constants/layout';
 import type { PalmScanHand } from '@/store/sessionStore';
 import { useSessionStore } from '@/store/sessionStore';
-import { pickPalmImageWeb } from '@/utils/pickPalmImageWeb';
+import { pickPalmImage } from '@/utils/pickPalmImage';
 import { deferRouterPush } from '@/utils/routerDefer';
-
-function HandToggle({
-  label,
-  sub,
-  selected,
-  onPress,
-}: {
-  label: string;
-  sub: string;
-  selected: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable onPress={onPress} className="min-w-[48%] flex-1">
-      <View
-        className={
-          selected
-            ? 'rounded-full border border-stitch-magenta bg-stitch-magenta/15 px-4 py-3 shadow-glow'
-            : 'rounded-full border border-white/15 bg-black/45 px-4 py-3'
-        }>
-        <Text className="text-center font-space-grotesk text-[11px] font-semibold uppercase tracking-[0.14em] text-mist">
-          {label}
-        </Text>
-        <Text className="mt-1 text-center font-inter text-[11px] text-md-on-surface-variant">{sub}</Text>
-      </View>
-    </Pressable>
-  );
-}
 
 /** Web: upload partner palm photo for compatibility matching. */
 export default function PartnerPalmScanWebScreen() {
@@ -45,22 +20,22 @@ export default function PartnerPalmScanWebScreen() {
   const setPartnerPalmCaptureBase64 = useSessionStore((s) => s.setPartnerPalmCaptureBase64);
   const [uploadBusy, setUploadBusy] = useState(false);
 
+  const hand: PalmScanHand = partnerPalmScanHand ?? 'right';
+
   const uploadAndContinue = async () => {
     if (uploadBusy) return;
     setUploadBusy(true);
     try {
-      const hand: PalmScanHand = partnerPalmScanHand ?? 'right';
       const seed = `partner-${hand}-${Date.now()}`;
-      const base64 = await pickPalmImageWeb();
-      if (!base64) {
-        Alert.alert('No photo selected', 'Choose a clear palm photo to continue.');
-        return;
-      }
+      const base64 = await pickPalmImage();
+      if (!base64) return;
       setPartnerPalmCaptureBase64(base64);
       deferRouterPush({
         pathname: '/report/partner-palm-analysis' as never,
         params: { seed },
       });
+    } catch {
+      Alert.alert('Upload failed', 'We couldn’t read that image. Try a JPG or PNG of their open palm.');
     } finally {
       setUploadBusy(false);
     }
@@ -68,7 +43,7 @@ export default function PartnerPalmScanWebScreen() {
 
   return (
     <CosmicScreen variant="stitch">
-      <View className="flex-1 px-6 pt-2">
+      <View className="flex-1 pb-8 pt-2" style={{ paddingHorizontal: PAGE_PADDING }}>
         <View className="flex-row items-center gap-3">
           <Pressable
             onPress={() => router.back()}
@@ -84,32 +59,21 @@ export default function PartnerPalmScanWebScreen() {
 
         <View className="mt-6 gap-5">
           <Text className="font-inter text-[15px] leading-6 text-md-on-surface-variant">
-            Choose a clear photo of your partner&apos;s open palm. Good lighting helps us read the lines accurately.
+            Choose a clear photo of your partner&apos;s open {hand} palm. Good lighting helps us read the lines accurately.
           </Text>
 
-          <View className="flex-row gap-3">
-            <HandToggle
-              label="Left hand"
-              sub="Receptive energy"
-              selected={partnerPalmScanHand === 'left'}
-              onPress={() => setPartnerPalmScanHand('left')}
-            />
-            <HandToggle
-              label="Right hand"
-              sub="Active energy"
-              selected={partnerPalmScanHand === 'right' || partnerPalmScanHand === null}
-              onPress={() => setPartnerPalmScanHand('right')}
-            />
+          <View className="items-center py-2">
+            <PalmScanFrame size={260} hand={hand} showScanLine={false} />
           </View>
 
-          <View className="mt-2">
-            <CosmicButton
-              gradient="nebulaMd3"
-              label={uploadBusy ? 'Opening…' : 'Choose palm photo'}
-              disabled={uploadBusy}
-              onPress={() => void uploadAndContinue()}
-            />
-          </View>
+          <HandToggleRow hand={partnerPalmScanHand} onSelect={setPartnerPalmScanHand} />
+
+          <CosmicButton
+            gradient="nebulaMd3"
+            label={uploadBusy ? 'Opening…' : 'Choose palm photo'}
+            disabled={uploadBusy}
+            onPress={() => void uploadAndContinue()}
+          />
         </View>
       </View>
     </CosmicScreen>

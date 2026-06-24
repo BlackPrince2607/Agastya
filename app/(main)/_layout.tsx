@@ -77,6 +77,7 @@ export default function MainTabsLayout() {
         name="profile"
         options={{ title: 'Profile', tabBarIcon: ({ color }) => <Glyph name="person" color={color} /> }}
       />
+      <Tabs.Screen name="edit-profile" options={{ href: null }} />
     </Tabs>
   );
 }

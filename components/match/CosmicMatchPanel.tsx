@@ -5,6 +5,7 @@ import { Platform, Pressable, Text, View } from 'react-native';
 
 import { MetricBar } from '@/components/match/MetricBar';
 import { EntertainmentDisclaimer } from '@/components/legal/EntertainmentDisclaimer';
+import { HandToggleRow } from '@/components/onboarding/HandToggle';
 import { CosmicButton, GlowCard, GradientText } from '@/components/primitives';
 import { CosmicTextField, Icon } from '@/components/ui';
 import { colors } from '@/constants/theme';
@@ -19,6 +20,8 @@ import {
   palmCompatibilityAffinity,
   palmCompatibilityDimensions,
 } from '@/utils/palmCompatibilityScore';
+import { pickPalmImage } from '@/utils/pickPalmImage';
+import { deferRouterPush } from '@/utils/routerDefer';
 
 type MatchMode = 'name' | 'palm';
 
@@ -32,11 +35,20 @@ export function CosmicMatchPanel({ defaultSelfName = '', subtitle, onOpenGuide }
   const [mode, setMode] = useState<MatchMode>('name');
   const [selfName, setSelfName] = useState(defaultSelfName);
   const [partnerName, setPartnerName] = useState('');
+  const [uploadBusy, setUploadBusy] = useState(false);
 
   const selfPalm = useSessionStore((s) => s.palmAnalysis);
   const partnerPalm = useSessionStore((s) => s.partnerPalmAnalysis);
+  const partnerPalmScanHand = useSessionStore((s) => s.partnerPalmScanHand);
   const setPartnerPalmAnalysis = useSessionStore((s) => s.setPartnerPalmAnalysis);
+  const setPartnerPalmCaptureBase64 = useSessionStore((s) => s.setPartnerPalmCaptureBase64);
+  const setPartnerPalmScanHand = useSessionStore((s) => s.setPartnerPalmScanHand);
   const hadPartnerPalmRef = useRef(Boolean(partnerPalm));
+
+  useEffect(() => {
+    const trimmed = defaultSelfName.trim();
+    if (trimmed) setSelfName(trimmed);
+  }, [defaultSelfName]);
 
   useEffect(() => {
     if (partnerPalm && !hadPartnerPalmRef.current) {
@@ -47,33 +59,63 @@ export function CosmicMatchPanel({ defaultSelfName = '', subtitle, onOpenGuide }
 
   const palmReady = hasPalmPair(selfPalm, partnerPalm);
   const usePalmScores = mode === 'palm' && palmReady && selfPalm && partnerPalm;
+  const namesReady = Boolean(selfName.trim() && partnerName.trim());
+  const showNameScores = mode === 'name' && namesReady;
+  const showScoreBlock = usePalmScores || showNameScores;
 
   const affinity = useMemo(() => {
-    if (usePalmScores) {
-      return palmCompatibilityAffinity(selfPalm, partnerPalm);
-    }
-    return compatibilityAffinity(selfName || 'you', partnerName || 'partner');
-  }, [usePalmScores, selfPalm, partnerPalm, selfName, partnerName]);
+    if (usePalmScores) return palmCompatibilityAffinity(selfPalm, partnerPalm);
+    if (showNameScores) return compatibilityAffinity(selfName, partnerName);
+    return null;
+  }, [usePalmScores, showNameScores, selfPalm, partnerPalm, selfName, partnerName]);
 
   const dimensions = useMemo(() => {
-    if (usePalmScores) {
-      return palmCompatibilityDimensions(selfPalm, partnerPalm);
-    }
-    return compatibilityDimensions(selfName || 'you', partnerName || 'partner');
-  }, [usePalmScores, selfPalm, partnerPalm, selfName, partnerName]);
+    if (usePalmScores) return palmCompatibilityDimensions(selfPalm, partnerPalm);
+    if (showNameScores) return compatibilityDimensions(selfName, partnerName);
+    return null;
+  }, [usePalmScores, showNameScores, selfPalm, partnerPalm, selfName, partnerName]);
 
-  const strength = matchStrengthLabel(affinity);
+  const strength = affinity != null ? matchStrengthLabel(affinity) : null;
+  const partnerHand = partnerPalmScanHand ?? 'right';
 
   const openPartnerScan = () => {
     router.push('/report/partner-palm-scan' as never);
+  };
+
+  const uploadPartnerPalm = async () => {
+    if (uploadBusy) return;
+    setUploadBusy(true);
+    try {
+      const base64 = await pickPalmImage();
+      if (!base64) return;
+      const seed = `partner-${partnerHand}-${Date.now()}`;
+      setPartnerPalmCaptureBase64(base64);
+      deferRouterPush({
+        pathname: '/report/partner-palm-analysis' as never,
+        params: { seed },
+      });
+    } finally {
+      setUploadBusy(false);
+    }
   };
 
   const clearPartnerPalm = () => {
     setPartnerPalmAnalysis(null);
   };
 
+  const scoreHint =
+    mode === 'palm'
+      ? palmReady
+        ? 'Based on both palm readings'
+        : !selfPalm
+          ? 'Add your palm reading to unlock palm matching'
+          : 'Add your partner’s palm to reveal your match score'
+      : namesReady
+        ? 'Ceremonial score from the names you entered'
+        : 'Enter both names to see your ceremonial match score';
+
   return (
-    <View className="w-full gap-7">
+    <View className="w-full gap-6">
       <View className="w-full flex-row items-center justify-center gap-3 px-1">
         <AvatarRing tint="cyan" filled={Boolean(selfPalm)} />
         <LinearGradient
@@ -92,30 +134,30 @@ export function CosmicMatchPanel({ defaultSelfName = '', subtitle, onOpenGuide }
       </View>
 
       {subtitle ? (
-        <Text className="px-2 text-center font-body text-[14px] leading-5 text-on-surface-variant">{subtitle}</Text>
+        <Text className="px-1 text-center font-body text-[14px] leading-5 text-on-surface-variant">{subtitle}</Text>
       ) : null}
 
-      <View className="w-full items-center gap-1 px-2">
-        {Platform.OS === 'web' ? (
-          <Text
-            className="font-noto-serif text-[44px] font-semibold text-stitch-signal"
-            adjustsFontSizeToFit
-            numberOfLines={1}
-            minimumFontScale={0.7}>
-            {affinity}%
-          </Text>
+      <View className="w-full items-center gap-1.5 px-2">
+        {showScoreBlock && affinity != null ? (
+          Platform.OS === 'web' ? (
+            <Text
+              className="font-noto-serif text-[44px] font-semibold text-stitch-signal"
+              adjustsFontSizeToFit
+              numberOfLines={1}
+              minimumFontScale={0.7}>
+              {affinity}%
+            </Text>
+          ) : (
+            <GradientText className="font-noto-serif text-[44px] font-semibold">{affinity}%</GradientText>
+          )
         ) : (
-          <GradientText className="font-noto-serif text-[44px] font-semibold">{affinity}%</GradientText>
+          <Text className="font-noto-serif text-[36px] font-semibold text-on-surface-variant/50">—</Text>
         )}
-        <Text className="font-body-medium text-[15px] text-primary">{strength}</Text>
-        {usePalmScores ? (
-          <Text className="mt-1 text-center font-body text-[12px] text-on-surface-variant">
-            Based on both palm readings
-          </Text>
-        ) : null}
+        {strength ? <Text className="font-body-medium text-[15px] text-primary">{strength}</Text> : null}
+        <Text className="mt-0.5 text-center font-body text-[12px] leading-5 text-on-surface-variant">{scoreHint}</Text>
         {partnerPalm && mode === 'name' ? (
-          <Text className="mt-2 text-center font-body text-[12px] leading-5 text-primary/90">
-            Switch to By palm to see palm-based scores.
+          <Text className="mt-1 text-center font-body text-[12px] leading-5 text-primary/90">
+            Switch to By palm to compare your palm readings.
           </Text>
         ) : null}
       </View>
@@ -130,12 +172,16 @@ export function CosmicMatchPanel({ defaultSelfName = '', subtitle, onOpenGuide }
           <Text className="font-label text-[11px] uppercase tracking-[0.1em] text-on-surface-variant">
             Compare by name
           </Text>
+          <Text className="font-body text-[13px] leading-5 text-on-surface-variant">
+            Enter both names for a playful ceremonial score — great for a first glimpse before palm readings.
+          </Text>
           <CosmicTextField
             value={selfName}
             onChangeText={setSelfName}
             placeholder="Your name"
             accessibilityLabel="Your name"
             maxLength={40}
+            autoCapitalize="words"
           />
           <CosmicTextField
             value={partnerName}
@@ -143,6 +189,7 @@ export function CosmicMatchPanel({ defaultSelfName = '', subtitle, onOpenGuide }
             placeholder="Their name"
             accessibilityLabel="Their name"
             maxLength={40}
+            autoCapitalize="words"
           />
         </GlowCard>
       ) : (
@@ -150,12 +197,17 @@ export function CosmicMatchPanel({ defaultSelfName = '', subtitle, onOpenGuide }
           <Text className="font-label text-[11px] uppercase tracking-[0.1em] text-on-surface-variant">
             Compare by palm
           </Text>
+          <Text className="font-body text-[13px] leading-5 text-on-surface-variant">
+            Your palm comes from your report. Add your partner’s palm by scanning or uploading a photo.
+          </Text>
 
           <PalmStatusRow
             label="Your palm"
             ready={Boolean(selfPalm)}
-            readyText="Reading on file"
-            pendingText="Complete your palm scan in onboarding"
+            readyText="From your palm report"
+            pendingText="Complete your palm scan from Home"
+            actionLabel={selfPalm ? 'View report' : undefined}
+            onAction={selfPalm ? () => router.push('/report') : undefined}
           />
 
           <PalmStatusRow
@@ -165,11 +217,24 @@ export function CosmicMatchPanel({ defaultSelfName = '', subtitle, onOpenGuide }
             pendingText="Scan or upload their palm photo"
           />
 
-          <View className="gap-4 pt-1">
+          <View className="gap-2">
+            <Text className="font-label text-[11px] uppercase tracking-[0.1em] text-on-surface-variant">
+              Partner&apos;s hand
+            </Text>
+            <HandToggleRow hand={partnerPalmScanHand} onSelect={setPartnerPalmScanHand} />
+          </View>
+
+          <View className="gap-3 pt-1">
             <CosmicButton
               gradient="nebulaMd3"
               label={partnerPalm ? 'Rescan partner palm' : 'Scan partner palm'}
               onPress={openPartnerScan}
+            />
+            <CosmicButton
+              variant="ghost"
+              label={uploadBusy ? 'Opening gallery…' : partnerPalm ? 'Upload new partner photo' : 'Upload partner photo'}
+              disabled={uploadBusy}
+              onPress={() => void uploadPartnerPalm()}
             />
             {partnerPalm ? (
               <Pressable onPress={clearPartnerPalm} className="items-center py-2 active:opacity-80">
@@ -188,14 +253,27 @@ export function CosmicMatchPanel({ defaultSelfName = '', subtitle, onOpenGuide }
         </GlowCard>
       )}
 
-      <View className="gap-4">
-        <Text className="font-label text-[11px] uppercase tracking-[0.1em] text-on-surface-variant">
-          Connection dimensions
-        </Text>
-        {dimensions.map((d) => (
-          <MetricBar key={d.key} label={d.label} pct={d.pct} />
-        ))}
-      </View>
+      {dimensions ? (
+        <View className="gap-4">
+          <Text className="font-label text-[11px] uppercase tracking-[0.1em] text-on-surface-variant">
+            Connection dimensions
+          </Text>
+          {dimensions.map((d) => (
+            <MetricBar key={d.key} label={d.label} pct={d.pct} />
+          ))}
+        </View>
+      ) : (
+        <View className="gap-3 rounded-2xl border border-white/10 bg-surface-container-low/50 px-4 py-5">
+          <Text className="font-label text-[11px] uppercase tracking-[0.1em] text-on-surface-variant">
+            Connection dimensions
+          </Text>
+          <Text className="font-body text-[13px] leading-5 text-on-surface-variant">
+            {mode === 'palm'
+              ? 'Dimension bars appear once both palm readings are on file.'
+              : 'Enter both names above to reveal your connection dimensions.'}
+          </Text>
+        </View>
+      )}
 
       {onOpenGuide ? (
         <CosmicButton gradient="nebulaMd3" label="Ask the Guide" onPress={onOpenGuide} />
@@ -233,11 +311,15 @@ function PalmStatusRow({
   ready,
   readyText,
   pendingText,
+  actionLabel,
+  onAction,
 }: {
   label: string;
   ready: boolean;
   readyText: string;
   pendingText: string;
+  actionLabel?: string;
+  onAction?: () => void;
 }) {
   return (
     <View className="flex-row items-center gap-3 rounded-xl border border-white/10 bg-surface-container-low/60 px-4 py-3">
@@ -258,6 +340,11 @@ function PalmStatusRow({
         <Text className="font-body text-[12px] leading-4 text-on-surface-variant" numberOfLines={2}>
           {ready ? readyText : pendingText}
         </Text>
+        {actionLabel && onAction ? (
+          <Pressable onPress={onAction} className="mt-1 self-start active:opacity-80">
+            <Text className="font-body-medium text-[12px] text-primary">{actionLabel}</Text>
+          </Pressable>
+        ) : null}
       </View>
     </View>
   );

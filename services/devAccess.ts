@@ -1,8 +1,7 @@
 import type { PalmAnalysisDto } from '@/types/palmAnalysis';
+import { isAuthBypassEnabled, isDevPremiumFlagEnabled } from '@/services/authConfig';
 import { buildSimulatedReading } from '@/services/simulatedReading';
 import { useSessionStore } from '@/store/sessionStore';
-
-import { isAuthBypassEnabled } from './authConfig';
 
 const DEV_PALM: PalmAnalysisDto = {
   life_line: 'strong',
@@ -15,11 +14,7 @@ const DEV_PALM: PalmAnalysisDto = {
 
 /** Dev-only: skip sign-in + paywall and seed a reading so the main app opens immediately. */
 export function isDevQuickAccessEnabled(): boolean {
-  return (
-    __DEV__ &&
-    isAuthBypassEnabled &&
-    process.env.EXPO_PUBLIC_ALLOW_DEV_PREMIUM === 'true'
-  );
+  return __DEV__ && isAuthBypassEnabled && isDevPremiumFlagEnabled();
 }
 
 function hasRitualReading(): boolean {
@@ -55,5 +50,11 @@ export function applyDevQuickAccess(): void {
 
   if (!snap.hasUnlockedPremium) {
     useSessionStore.getState().setPremium(true);
+  }
+  if (!snap.hasEnteredMain) {
+    useSessionStore.getState().setEnteredMain(true);
+  }
+  if (__DEV__ && (!snap.hasUnlockedPremium || !snap.hasEnteredMain)) {
+    console.log('[Agastya dev] Quick access — restored main app access');
   }
 }

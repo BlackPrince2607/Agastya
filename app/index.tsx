@@ -6,6 +6,8 @@ import { LoadingBlock } from '@/components/feedback';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { usePersistHydration } from '@/hooks/usePersistHydration';
 import { track } from '@/services/analytics';
+import { applyDevAccessGrants } from '@/services/authConfig';
+import { applyDevQuickAccess } from '@/services/devAccess';
 import { requestNotificationPermission } from '@/services/notifications';
 import { useSessionStore } from '@/store/sessionStore';
 import { canEnterMainApp, prepareReturningUser, resolveResumeHref } from '@/utils/navigationFlow';
@@ -64,6 +66,8 @@ export default function Gate() {
     const bootstrap = async () => {
       track('identity_bootstrap');
       try {
+        applyDevAccessGrants();
+        applyDevQuickAccess();
         const target = await Promise.race([
           prepareReturningUser(),
           new Promise<Href>((resolve) =>

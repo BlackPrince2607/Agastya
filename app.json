@@ -24,7 +24,8 @@
         "webcredentials:agastya.app"
       ],
       "infoPlist": {
-        "NSCameraUsageDescription": "Allow Agastya to open the ritual camera for your palm choreography.",
+        "NSCameraUsageDescription": "Allow Agastya to use your camera to scan your palm for a personalized reading.",
+        "NSPhotoLibraryUsageDescription": "Allow Agastya to access your photos so you can upload a palm image.",
         "UIBackgroundModes": ["remote-notification"]
       }
     },
@@ -63,7 +64,13 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow Agastya to open the ritual camera for your palm choreography."
+          "cameraPermission": "Allow Agastya to use your camera to scan your palm for a personalized reading."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Agastya to access your photos so you can upload a palm image."
         }
       ],
       "expo-web-browser",

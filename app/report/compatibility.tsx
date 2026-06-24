@@ -14,8 +14,8 @@ export default function CompatibilityScreen() {
 
   return (
     <CosmicScreen variant="stitch">
-      <OnboardingScroll>
-        <View className="w-full gap-5">
+      <OnboardingScroll bottomInset={48} keyboardShouldPersistTaps="handled">
+        <View className="w-full gap-6">
           <Pressable
             onPress={() => router.back()}
             accessibilityRole="button"

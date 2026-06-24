@@ -24,10 +24,13 @@ export const AUTH_WRONG_PASSWORD_HINT =
   'That password did not work. If you joined with Google or Apple, use that button instead. If you are new, tap Create account. You can also use Email me a sign-in link — no password needed.';
 
 export const AUTH_ACCOUNT_EXISTS_HINT =
-  'An account already exists for this email. Sign in with your password, Google, or a sign-in link.';
+  'An account already exists for this email. Sign in with your password, Google, or Apple.';
+
+export const AUTH_RATE_LIMIT_HINT =
+  'Too many emails were sent recently. If you already created an account, sign in with your password below. Otherwise wait about an hour and try again.';
 
 export const AUTH_MAGIC_LINK_HELP =
-  'Check spam/promotions. The link must be opened on this same device. If nothing arrives in a few minutes, Supabase email may not be configured yet — try Google sign-in.';
+  'Check spam or promotions. Open the link on this same device.';
 
 export const SYNC_NOTICE_FAILED =
   'We couldn’t sync your latest reading. You’re viewing what’s saved on this device.';
@@ -53,10 +56,10 @@ export type HomeShortcut = {
 };
 
 export const HOME_SHORTCUTS: HomeShortcut[] = [
-  { icon: 'file-text-o', label: 'Palm report', hint: 'Your full reading and scores', action: 'report' },
+  { icon: 'file-text-o', label: 'Palm report', hint: 'Your full reading and line scores', action: 'report' },
   { icon: 'comments-o', label: 'Guide', hint: 'Ask questions about your reading', action: 'guide' },
-  { icon: 'check-circle-o', label: 'Today', hint: 'Personalized daily actions', action: 'tasks' },
-  { icon: 'heart-o', label: 'Compatibility', hint: 'Compare names and vibes', action: 'compat' },
+  { icon: 'check-circle-o', label: 'Daily tasks', hint: 'Personalized actions for today', action: 'tasks' },
+  { icon: 'heart-o', label: 'Compatibility', hint: 'Match by name or palm reading', action: 'compat' },
 ];
 
 export const FALLBACK_DAILY_TASKS = [

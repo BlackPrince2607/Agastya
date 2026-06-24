@@ -98,7 +98,7 @@ export function parseAuthFailure(error: AuthError | Error | string | null | unde
 
 export function userMessageForAuthFailure(failure: ParsedAuthFailure): string {
   if (failure.reason === 'rate_limit') {
-    return 'Too many sign-in emails were sent from this project. Wait about an hour, or configure custom SMTP in Supabase → Project Settings → Auth.';
+    return 'Too many emails were sent recently. If you already created an account, sign in with your password. Otherwise wait about an hour and try again.';
   }
   if (failure.reason === 'user_exists') {
     return 'An account already exists for this email. Sign in instead, or use Forgot password.';

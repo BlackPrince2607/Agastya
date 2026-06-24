@@ -18,7 +18,7 @@ import { CosmicTextField, GlassCard, NebulaButton } from '@/components/ui';
 import { colors } from '@/constants/theme';
 import {
   AUTH_ACCOUNT_EXISTS_HINT,
-  AUTH_MAGIC_LINK_HELP,
+  AUTH_RATE_LIMIT_HINT,
   AUTH_WRONG_PASSWORD_HINT,
   EMAIL_CONFIRM_SENT,
   EMAIL_MAGIC_LINK_SENT,
@@ -29,27 +29,17 @@ import { STITCH_PALM_ART_URI } from '@/constants/stitchWelcome';
 import { track } from '@/services/analytics';
 import { isMagicLinkEnabled } from '@/services/authConfig';
 import {
-  probeEmailAccount,
   sendMagicLink,
   sendPasswordReset,
   signInWithEmailPassword,
   signUpWithEmailPassword,
 } from '@/services/authEmail';
 import { getAuthRedirectUri } from '@/services/authRedirect';
+import { setPostSignInReturn } from '@/services/authSession';
 import { finishSignIn } from '@/services/authSignIn';
 import { resolveAccountBackHref } from '@/utils/navigationFlow';
 
 type EmailStepMode = 'signin' | 'signup';
-
-function redirectBlockedMessage(redirectUri: string): string {
-  return `Add this redirect URL in Supabase → Authentication → URL Configuration:\n\n${redirectUri}`;
-}
-
-function showRedirectBlockedAlert(redirectUri: string, setLastError: (msg: string) => void) {
-  const body = redirectBlockedMessage(redirectUri);
-  setLastError(body);
-  Alert.alert('Email link blocked', body);
-}
 
 export default function AccountEmailScreen() {
   const { email: emailParam, mode: modeParam, seed, fromPaywall, fromProfile } = useLocalSearchParams<{
@@ -62,42 +52,20 @@ export default function AccountEmailScreen() {
 
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [mode, setMode] = useState<EmailStepMode>(
-    modeParam === 'signin' ? 'signin' : modeParam === 'signup' ? 'signup' : 'signup',
-  );
-  const [probing, setProbing] = useState(!modeParam);
-  const [probeUncertain, setProbeUncertain] = useState(false);
+  const [mode, setMode] = useState<EmailStepMode>(modeParam === 'signup' ? 'signup' : 'signin');
   const [busy, setBusy] = useState(false);
   const [inlineMessage, setInlineMessage] = useState<string | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
 
   const email = (emailParam ?? '').trim().toLowerCase();
   const redirectUri = getAuthRedirectUri();
+  const fromProfileFlow = fromProfile === '1';
 
   useEffect(() => {
-    if (!email || modeParam) {
-      setProbing(false);
-      return;
+    if (fromProfileFlow) {
+      setPostSignInReturn('/(main)/profile');
     }
-
-    let cancelled = false;
-    void (async () => {
-      const probe = await probeEmailAccount(email);
-      if (cancelled) return;
-      if (probe.checked) {
-        setMode(probe.exists ? 'signin' : 'signup');
-        setProbeUncertain(false);
-      } else {
-        setMode('signup');
-        setProbeUncertain(true);
-      }
-      setProbing(false);
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [email, modeParam]);
+  }, [fromProfileFlow]);
 
   useEffect(() => {
     if (!email) {
@@ -139,13 +107,12 @@ export default function AccountEmailScreen() {
           ]);
           return;
         }
-        if (result.reason === 'redirect') {
-          showRedirectBlockedAlert(redirectUri, setLastError);
-          return;
-        }
         if (result.reason === 'rate_limit') {
-          setLastError(result.message);
-          Alert.alert('Too many attempts', result.message);
+          if (mode === 'signup') {
+            setMode('signin');
+          }
+          setLastError(AUTH_RATE_LIMIT_HINT);
+          Alert.alert('Try signing in', AUTH_RATE_LIMIT_HINT);
           return;
         }
         if (result.reason === 'user_exists' && mode === 'signup') {
@@ -170,8 +137,12 @@ export default function AccountEmailScreen() {
       try {
         await finishSignIn();
       } catch {
-        Alert.alert('Signed in', 'You’re signed in. Tap Enter Agastya on the account screen to continue.');
-        router.replace('/onboarding/account');
+        if (fromProfileFlow) {
+          router.replace('/(main)/profile');
+        } else {
+          Alert.alert('Signed in', 'You’re signed in. Continue below.');
+          router.replace('/onboarding/account');
+        }
       }
     } finally {
       setBusy(false);
@@ -189,8 +160,9 @@ export default function AccountEmailScreen() {
     try {
       const result = await sendMagicLink(email, redirectUri);
       if (!result.ok) {
-        if (result.reason === 'redirect') {
-          showRedirectBlockedAlert(redirectUri, setLastError);
+        if (result.reason === 'rate_limit') {
+          setLastError(AUTH_RATE_LIMIT_HINT);
+          Alert.alert('Try signing in', AUTH_RATE_LIMIT_HINT);
           return;
         }
         setLastError(result.message);
@@ -198,7 +170,7 @@ export default function AccountEmailScreen() {
         return;
       }
       track('auth_magic_link_dispatched');
-      setInlineMessage(`${EMAIL_MAGIC_LINK_SENT} We sent a link to ${email}. ${AUTH_MAGIC_LINK_HELP}`);
+      setInlineMessage(`${EMAIL_MAGIC_LINK_SENT} We sent a link to ${email}.`);
     } finally {
       setBusy(false);
     }
@@ -215,6 +187,11 @@ export default function AccountEmailScreen() {
             try {
               const result = await sendPasswordReset(email, redirectUri);
               if (!result.ok) {
+                if (result.reason === 'rate_limit') {
+                  setLastError(AUTH_RATE_LIMIT_HINT);
+                  Alert.alert('Try again later', AUTH_RATE_LIMIT_HINT);
+                  return;
+                }
                 setLastError(result.message);
                 Alert.alert('Could not send reset email', result.message);
                 return;
@@ -255,33 +232,10 @@ export default function AccountEmailScreen() {
 
           <View className="gap-3">
             <Text className="text-center font-headline text-[28px] leading-9 text-on-surface">
-              {probing
-                ? 'Checking your account…'
-                : mode === 'signin'
-                  ? 'Welcome back'
-                  : 'Create your account'}
+              {mode === 'signin' ? 'Welcome back' : 'Create your account'}
             </Text>
             <Text className="text-center font-body text-[15px] leading-6 text-on-surface-variant">{email}</Text>
           </View>
-
-          {probeUncertain && !probing ? (
-            <GlassCard className="w-full px-4 py-3">
-              <Text className="font-body text-[14px] leading-6 text-on-surface-variant">
-                We could not verify this email automatically. New here? Use Create account or Email me a sign-in link.
-              </Text>
-            </GlassCard>
-          ) : null}
-
-          {__DEV__ ? (
-            <GlassCard className="w-full px-4 py-3">
-              <Text className="font-label text-[10px] uppercase tracking-[0.08em] text-on-surface-variant">
-                Dev — Supabase redirect URL
-              </Text>
-              <Text selectable className="mt-2 font-body text-[12px] leading-5 text-on-surface-variant">
-                {redirectUri}
-              </Text>
-            </GlassCard>
-          ) : null}
 
           {lastError ? (
             <GlassCard className="w-full px-4 py-3" style={{ borderColor: colors.errorBorder }}>
@@ -295,81 +249,73 @@ export default function AccountEmailScreen() {
             </GlassCard>
           ) : null}
 
-          {!probing ? (
-            <View className="gap-4">
+          <View className="gap-4">
+            <CosmicTextField
+              label="Password"
+              secureTextEntry
+              showPasswordToggle
+              autoCapitalize="none"
+              autoCorrect={false}
+              placeholder={mode === 'signin' ? 'Your password' : 'Choose a password'}
+              value={password}
+              onChangeText={setPassword}
+              editable={!busy}
+            />
+
+            {mode === 'signup' ? (
               <CosmicTextField
-                label="Password"
+                label="Confirm password"
                 secureTextEntry
                 showPasswordToggle
                 autoCapitalize="none"
                 autoCorrect={false}
-                placeholder={mode === 'signin' ? 'Your password' : 'Choose a password'}
-                value={password}
-                onChangeText={setPassword}
+                placeholder="Repeat password"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
                 editable={!busy}
               />
+            ) : null}
 
-              {mode === 'signup' ? (
-                <CosmicTextField
-                  label="Confirm password"
-                  secureTextEntry
-                  showPasswordToggle
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  placeholder="Repeat password"
-                  value={confirmPassword}
-                  onChangeText={setConfirmPassword}
-                  editable={!busy}
-                />
-              ) : null}
+            <NebulaButton
+              label={busy ? 'Please wait…' : mode === 'signin' ? 'Sign in' : 'Create account'}
+              onPress={() => void passwordSubmit()}
+              disabled={busy}
+            />
 
-              <NebulaButton
-                label={
-                  busy
-                    ? 'Please wait…'
-                    : mode === 'signin'
-                      ? 'Sign in'
-                      : 'Create account'
-                }
-                onPress={() => void passwordSubmit()}
-                disabled={busy}
-              />
-
-              {mode === 'signin' ? (
-                <Pressable onPress={forgotPassword} disabled={busy} className="items-center py-2">
-                  <Text className="font-body text-[13px] text-success">Forgot password?</Text>
-                </Pressable>
-              ) : null}
-
-              {isMagicLinkEnabled ? (
-                <>
-                  <View className="flex-row items-center gap-4">
-                    <View className="h-px flex-1 bg-white/10" />
-                    <Text className="font-label text-[10px] uppercase tracking-[0.1em] text-on-surface-variant">
-                      Or
-                    </Text>
-                    <View className="h-px flex-1 bg-white/10" />
-                  </View>
-
-                  <NebulaButton
-                    variant="ghost"
-                    label={busy ? 'Sending…' : 'Email me a sign-in link'}
-                    onPress={() => void magicLink()}
-                    disabled={busy}
-                  />
-                </>
-              ) : null}
-
-              <Pressable
-                onPress={() => setMode(mode === 'signin' ? 'signup' : 'signin')}
-                disabled={busy}
-                className="items-center py-2">
-                <Text className="font-body text-[13px] text-on-surface-variant">
-                  {mode === 'signin' ? 'New here? Create an account' : 'Already have an account? Sign in'}
-                </Text>
+            {mode === 'signin' ? (
+              <Pressable onPress={forgotPassword} disabled={busy} className="items-center py-2">
+                <Text className="font-body text-[13px] text-success">Forgot password?</Text>
               </Pressable>
-            </View>
-          ) : null}
+            ) : null}
+
+            {isMagicLinkEnabled ? (
+              <>
+                <View className="flex-row items-center gap-4">
+                  <View className="h-px flex-1 bg-white/10" />
+                  <Text className="font-label text-[10px] uppercase tracking-[0.1em] text-on-surface-variant">
+                    Or
+                  </Text>
+                  <View className="h-px flex-1 bg-white/10" />
+                </View>
+
+                <NebulaButton
+                  variant="ghost"
+                  label={busy ? 'Sending…' : 'Email me a sign-in link'}
+                  onPress={() => void magicLink()}
+                  disabled={busy}
+                />
+              </>
+            ) : null}
+
+            <Pressable
+              onPress={() => setMode(mode === 'signin' ? 'signup' : 'signin')}
+              disabled={busy}
+              className="items-center py-2">
+              <Text className="font-body text-[13px] text-on-surface-variant">
+                {mode === 'signin' ? 'New here? Create an account' : 'Already have an account? Sign in'}
+              </Text>
+            </Pressable>
+          </View>
         </OnboardingScroll>
       </KeyboardAvoidingView>
     </CosmicScreen>

@@ -8,6 +8,7 @@ import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { OnboardingHeader } from '@/components/onboarding/OnboardingHeader';
 import { CosmicButton } from '@/components/primitives';
 import { ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS } from '@/constants/onboarding';
+import { PAGE_PADDING } from '@/constants/layout';
 import { stitchMd3 } from '@/constants/stitchWelcome';
 import { syncProfileRemote } from '@/services/identity';
 import { deferRouterPush } from '@/utils/routerDefer';
@@ -88,8 +89,8 @@ export default function GoalsScreen() {
           style={{ flex: 1 }}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ paddingBottom: 200, paddingTop: 12 }}>
-          <View className="gap-10 px-7">
+          contentContainerStyle={{ paddingBottom: 200, paddingTop: 12, paddingHorizontal: PAGE_PADDING }}>
+          <View className="gap-8">
             <OnboardingHeader step={ONBOARDING_STEPS.goals} total={ONBOARDING_TOTAL_STEPS} />
 
             <View>
