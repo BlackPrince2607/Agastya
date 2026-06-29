@@ -19,10 +19,10 @@ import {
   PROFILE_DEFAULT_NAME,
   type HomeShortcutAction,
 } from '@/constants/userCopy';
-import { useLayoutMetrics } from '@/hooks/useLayoutMetrics';
 import { getApiHealth } from '@/services/connectivity';
 import { useSessionStore } from '@/store/sessionStore';
 import { useTaskStore } from '@/store/taskStore';
+import { paywallRouteParams } from '@/utils/paywallNavigation';
 
 const SHORTCUT_ICONS: Record<HomeShortcutAction, IconName> = {
   report: 'description',
@@ -43,7 +43,7 @@ function shortcutRoute(action: HomeShortcutAction) {
     case 'compat':
       return () => router.push('/report/compatibility');
     case 'paywall':
-      return () => router.push('/onboarding/paywall');
+      return () => router.push(paywallRouteParams('/(main)/home'));
   }
 }
 
@@ -67,10 +67,6 @@ function calcJourneyDays(history: Record<string, string[]>): number {
 }
 
 export default function HomeDashboardScreen() {
-  const { gridGap, tileMinHeight, width, horizontalPad } = useLayoutMetrics();
-  const contentWidth = width - horizontalPad * 2;
-  const tileWidth = (contentWidth - gridGap) / 2;
-
   const palmAnalysis = useSessionStore((s) => s.palmAnalysis);
   const displayName = useSessionStore((s) => s.userDisplayName);
   const premium = useSessionStore((s) => s.hasUnlockedPremium);
@@ -96,7 +92,7 @@ export default function HomeDashboardScreen() {
   return (
     <CosmicScreen variant="stitch">
       <MainTabScroll sectionGap={MAIN_SECTION_GAP}>
-        <MainCosmicHeader displayName={displayName} onProfilePress={() => router.push('/profile')} />
+        <MainCosmicHeader displayName={displayName} />
 
         <View className="gap-1.5">
           <Text className="font-headline text-[26px] leading-8 text-on-surface" accessibilityRole="header">
@@ -104,7 +100,11 @@ export default function HomeDashboardScreen() {
           </Text>
           {hasCustomName ? (
             <View className="min-w-0 flex-row items-center gap-2">
-              <Text className="min-w-0 flex-1 font-headline-md text-[22px] leading-7 text-on-surface" numberOfLines={1}>
+              <Text
+                className="min-w-0 flex-1 font-headline-md text-[22px] leading-7 text-on-surface"
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.85}>
                 {name}
               </Text>
               {palmAnalysis ? <Icon name="verified_user" size={20} color={colors.purple} /> : null}
@@ -168,7 +168,7 @@ export default function HomeDashboardScreen() {
             <View className="flex-row items-center gap-2">
               <Pressable
                 className="min-w-0 flex-1 active:opacity-90"
-                onPress={() => router.push('/onboarding/paywall')}
+                onPress={() => router.push(paywallRouteParams('/(main)/home'))}
                 accessibilityRole="button"
                 accessibilityLabel="Upgrade to Pro">
                 <Text className="font-headline-md text-[16px] text-on-surface">Unlock your full potential</Text>
@@ -183,26 +183,26 @@ export default function HomeDashboardScreen() {
           </GlassCard>
         ) : null}
 
-        <View className="gap-4">
+        <View className="gap-3">
           <Text className="font-headline-md text-[20px] text-on-surface">Quick access</Text>
-          <View className="flex-row flex-wrap" style={{ gap: gridGap }}>
+          <View className="flex-row flex-wrap justify-between" style={{ rowGap: 12 }}>
             {HOME_SHORTCUTS.map((shortcut) => (
               <Pressable
                 key={shortcut.action}
                 onPress={shortcutRoute(shortcut.action)}
-                style={{ width: tileWidth, minHeight: tileMinHeight + 36 }}
+                style={{ width: '48%' }}
                 className="active:opacity-90"
                 accessibilityRole="button"
                 accessibilityLabel={shortcut.label}
                 accessibilityHint={shortcut.hint}>
-                <GlassCard className="h-full items-center justify-center gap-2.5 p-4">
+                <GlassCard className="w-full items-center gap-2.5 px-3 py-5">
                   <View
-                    className="h-14 w-14 items-center justify-center rounded-2xl border border-white/10"
-                    style={{ backgroundColor: 'rgba(168,85,247,0.12)' }}>
-                    <Icon name={SHORTCUT_ICONS[shortcut.action]} size={28} color={colors.purple} />
+                    className="h-12 w-12 items-center justify-center rounded-2xl border border-white/10"
+                    style={{ backgroundColor: 'rgba(168,85,247,0.15)' }}>
+                    <Icon name={SHORTCUT_ICONS[shortcut.action]} size={26} color={colors.purple} />
                   </View>
                   <Text
-                    className="font-label text-center text-[11px] uppercase tracking-[0.06em] text-on-surface"
+                    className="text-center font-label text-[12px] uppercase tracking-[0.08em] text-on-surface"
                     numberOfLines={2}>
                     {shortcut.label}
                   </Text>
@@ -212,8 +212,7 @@ export default function HomeDashboardScreen() {
           </View>
         </View>
 
-        <View style={{ paddingTop: 8 }}>
-          <GlassCard className="gap-3 p-4">
+        <GlassCard className="gap-3 p-4">
             <View className="flex-row items-center gap-4">
               <View className="h-12 w-12 items-center justify-center rounded-2xl bg-purple/20">
                 <Icon name="local_fire_department" size={24} color={colors.purple} />
@@ -229,8 +228,7 @@ export default function HomeDashboardScreen() {
               ) : null}
             </View>
             <ProgressBar value={streakProgress} height={8} palette="progress" />
-          </GlassCard>
-        </View>
+        </GlassCard>
       </MainTabScroll>
     </CosmicScreen>
   );

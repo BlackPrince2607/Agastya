@@ -35,7 +35,7 @@ export function GlassCard({ muted, glow, className, children, ...rest }: GlassCa
           style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}
         />
       ) : null}
-      {children}
+      <View className="relative z-10">{children}</View>
     </View>
   );
 }

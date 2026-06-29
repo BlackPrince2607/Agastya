@@ -157,3 +157,24 @@ export function resolveAccountBackHref(params: AccountBackParams = {}): Href {
   }
   return '/welcome';
 }
+
+/** Normalize deep-link / notification paths to expo-router hrefs. */
+export function normalizeAppDeepLink(link: string): Href {
+  if (link === '/tasks' || link === '/(main)/tasks') return '/(main)/tasks';
+  if (link === '/chat' || link === '/(main)/chat') return '/(main)/chat';
+  if (link === '/home' || link === '/(main)/home') return '/(main)/home';
+  if (link === '/profile' || link === '/(main)/profile') return '/(main)/profile';
+  if (link === '/report' || link.startsWith('/report/')) return link as Href;
+  return link as Href;
+}
+
+/** Whether a deep link targets the main tab shell. */
+export function isMainTabDeepLink(link: string): boolean {
+  const normalized = normalizeAppDeepLink(link);
+  return (
+    normalized === '/(main)/home' ||
+    normalized === '/(main)/chat' ||
+    normalized === '/(main)/tasks' ||
+    normalized === '/(main)/profile'
+  );
+}

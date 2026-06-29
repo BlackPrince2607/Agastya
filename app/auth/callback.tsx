@@ -9,6 +9,7 @@ import { completeAuthFromUrl } from '@/services/authCallback';
 import { mapSupabaseAuthError } from '@/services/authErrors';
 import { isAuthCallbackUrl } from '@/services/authRedirect';
 import { readAuthSession } from '@/services/authSession';
+import { routeAfterSignInIntent } from '@/utils/navigationFlow';
 
 async function resolveAuthRedirectUrl(): Promise<string | null> {
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
@@ -41,9 +42,11 @@ export default function AuthCallbackScreen() {
         }
 
         const auth = await readAuthSession();
-        if (!auth.isSignedIn) {
-          router.replace('/onboarding/account');
+        if (auth.isSignedIn) {
+          await routeAfterSignInIntent();
+          return;
         }
+        router.replace('/onboarding/account');
         return;
       }
 

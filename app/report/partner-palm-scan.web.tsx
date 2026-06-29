@@ -1,12 +1,12 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Pressable, Text, View } from 'react-native';
+import { Alert, Text, View } from 'react-native';
 
 import { HandToggleRow } from '@/components/onboarding/HandToggle';
 import { PalmScanFrame } from '@/components/onboarding/PalmScanFrame';
+import { BackButton } from '@/components/layout/BackButton';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { CosmicButton } from '@/components/primitives';
-import { Icon } from '@/components/ui';
 import { PAGE_PADDING } from '@/constants/layout';
 import type { PalmScanHand } from '@/store/sessionStore';
 import { useSessionStore } from '@/store/sessionStore';
@@ -45,13 +45,7 @@ export default function PartnerPalmScanWebScreen() {
     <CosmicScreen variant="stitch">
       <View className="flex-1 pb-8 pt-2" style={{ paddingHorizontal: PAGE_PADDING }}>
         <View className="flex-row items-center gap-3">
-          <Pressable
-            onPress={() => router.back()}
-            accessibilityRole="button"
-            accessibilityLabel="Back"
-            className="h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.05]">
-            <Icon name="chevron_left" size={24} color="#22d3ee" />
-          </Pressable>
+          <BackButton />
           <Text className="min-w-0 flex-1 font-headline text-[20px] text-on-surface" numberOfLines={1}>
             Upload partner&apos;s palm
           </Text>

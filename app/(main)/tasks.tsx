@@ -87,7 +87,7 @@ export default function TasksScreen() {
     return (
       <CosmicScreen variant="stitch">
         <MainTabScroll>
-          <MainCosmicHeader displayName={displayName} onProfilePress={() => router.push('/profile')} />
+          <MainCosmicHeader displayName={displayName} />
           <EmptyState
             icon="task_alt"
             title={TASKS_EMPTY_NO_PALM.title}
@@ -103,7 +103,7 @@ export default function TasksScreen() {
   return (
     <CosmicScreen variant="stitch">
       <MainTabScroll>
-        <MainCosmicHeader displayName={displayName} onProfilePress={() => router.push('/profile')} />
+        <MainCosmicHeader displayName={displayName} />
 
         <PageTitle title="Today’s Tasks" subtitle={formatToday()} />
 

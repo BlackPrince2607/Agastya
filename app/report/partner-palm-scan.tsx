@@ -1,15 +1,15 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router } from 'expo-router';
 import { useRef, useState } from 'react';
-import { Alert, Pressable, Text, View } from 'react-native';
+import { Alert, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CosmicDotGrid } from '@/components/layout/CosmicDotGrid';
+import { BackButton } from '@/components/layout/BackButton';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { HandToggleRow } from '@/components/onboarding/HandToggle';
 import { PalmScanFrame } from '@/components/onboarding/PalmScanFrame';
 import { CosmicButton, GradientText } from '@/components/primitives';
-import { Icon } from '@/components/ui';
 import { PAGE_PADDING } from '@/constants/layout';
 import { PALM_CAPTURE_FAILED } from '@/constants/userCopy';
 import type { PalmScanHand } from '@/store/sessionStore';
@@ -66,13 +66,7 @@ export default function PartnerPalmScanScreen() {
           <CosmicDotGrid />
           <View className="flex-1 justify-center gap-8" style={{ paddingHorizontal: PAGE_PADDING, paddingBottom: 32 }}>
             <View className="flex-row items-center gap-3">
-              <Pressable
-                onPress={() => router.back()}
-                accessibilityRole="button"
-                accessibilityLabel="Back"
-                className="h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.05]">
-                <Icon name="chevron_left" size={24} color="#22d3ee" />
-              </Pressable>
+              <BackButton />
               <Text className="font-headline text-[20px] text-on-surface">Partner palm scan</Text>
             </View>
             <View className="gap-3">
@@ -118,13 +112,7 @@ export default function PartnerPalmScanScreen() {
           <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={{ flex: 1 }}>
             <View className="flex-1 pb-4 pt-2" style={{ paddingHorizontal: PAGE_PADDING }}>
               <View className="flex-row items-center gap-3">
-                <Pressable
-                  onPress={() => router.back()}
-                  accessibilityRole="button"
-                  accessibilityLabel="Back"
-                  className="h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.05]">
-                  <Icon name="chevron_left" size={24} color="#22d3ee" />
-                </Pressable>
+                <BackButton />
                 <Text className="min-w-0 flex-1 font-headline text-[20px] text-on-surface" numberOfLines={1}>
                   Scan partner&apos;s {hand} palm
                 </Text>

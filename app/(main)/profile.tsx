@@ -20,6 +20,7 @@ import { isSupabaseEnabled } from '@/services/supabase';
 import { useSessionStore } from '@/store/sessionStore';
 import { initialsFor } from '@/utils/initials';
 import { replayOnboarding } from '@/utils/navigationFlow';
+import { paywallRouteParams } from '@/utils/paywallNavigation';
 
 type RowProps = {
   icon: IconName;
@@ -125,7 +126,7 @@ export default function ProfileScreen() {
   return (
     <CosmicScreen variant="stitch">
       <MainTabScroll sectionGap={MAIN_SECTION_GAP}>
-        <MainCosmicHeader displayName={name} onProfilePress={() => router.push('/profile')} />
+        <MainCosmicHeader displayName={name} />
 
         <GlassCard className="w-full gap-4 p-5">
           <View className="flex-row items-start gap-4">
@@ -166,7 +167,11 @@ export default function ProfileScreen() {
           <SectionHeader title="Subscription" />
           <GlowCard className="w-full py-1">
             {!premium ? (
-              <SettingsRow icon="auto_awesome" label="Upgrade to Pro" onPress={() => router.push('/onboarding/paywall')} />
+              <SettingsRow
+                icon="auto_awesome"
+                label="Upgrade to Pro"
+                onPress={() => router.push(paywallRouteParams('/(main)/profile'))}
+              />
             ) : null}
             <SettingsRow
               icon="refresh"

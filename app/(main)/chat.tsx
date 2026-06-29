@@ -27,6 +27,7 @@ import { requestGuideReply } from '@/services/agastyaApi';
 import { getApiHealth } from '@/services/connectivity';
 import { useChatStore } from '@/store/chatStore';
 import { useSessionStore } from '@/store/sessionStore';
+import { paywallRouteParams } from '@/utils/paywallNavigation';
 
 const FREE_MESSAGE_CAP = 5;
 
@@ -147,7 +148,7 @@ export default function ChatScreen() {
 
               {reachedCap ? (
                 <Pressable
-                  onPress={() => router.push('/onboarding/paywall')}
+                  onPress={() => router.push(paywallRouteParams('/(main)/chat'))}
                   className="rounded-glass border border-primary/30 bg-primary/10 px-4 py-3 active:opacity-90"
                   accessibilityRole="button">
                   <Text className="font-body-medium text-[14px] text-on-surface">

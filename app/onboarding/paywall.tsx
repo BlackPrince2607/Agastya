@@ -19,6 +19,7 @@ import { unlockPremiumFromStore, finalizeStripeCheckout } from '@/services/premi
 import { isPremiumBypassEnabled, isRevenueCatConfigured, isStripeCheckoutEnabled, isWebPremiumUnlockAvailable } from '@/services/revenuecat';
 import { isWebDemoMode } from '@/utils/webDemo';
 import { useSessionStore } from '@/store/sessionStore';
+import { resolvePaywallBackHref } from '@/utils/paywallNavigation';
 
 const TRUST_HIGHLIGHTS = [
   'Personalized palm insights tied to your focus areas',
@@ -51,7 +52,7 @@ const FEATURES = [
 
 export default function PaywallScreen() {
   const insets = useSafeAreaInsets();
-  const { seed, checkout } = useLocalSearchParams<{ seed?: string; checkout?: string }>();
+  const { seed, checkout, returnTo } = useLocalSearchParams<{ seed?: string; checkout?: string; returnTo?: string }>();
   const period = useSessionStore((s) => s.billingPeriod);
   const setPeriod = useSessionStore((s) => s.setBillingPeriod);
   const premium = useSessionStore((s) => s.hasUnlockedPremium);
@@ -152,8 +153,8 @@ export default function PaywallScreen() {
     }
   };
 
-  const backToPreview = () => {
-    router.replace('/onboarding/report-preview');
+  const backFromPaywall = () => {
+    router.replace(resolvePaywallBackHref(returnTo, mergedSeed));
   };
 
   return (
@@ -284,7 +285,7 @@ export default function PaywallScreen() {
                 />
               </MotiView>
             )}
-            <CosmicButton variant="ghost" label="Back to preview" onPress={backToPreview} />
+            <CosmicButton variant="ghost" label="Go back" onPress={backFromPaywall} />
             <CosmicButton variant="ghost" label="Save & sign in" onPress={goToAccountSync} />
             <View className="mt-1 flex-row items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2.5">
               <Ionicons name="shield-checkmark" size={16} color="#4ade80" />

@@ -117,15 +117,13 @@ export default function RootLayout() {
         (response: import('expo-notifications').NotificationResponse) => {
           const link = getNotificationDeepLink(response);
           if (!link) return;
-          void import('@/utils/navigationFlow').then(({ tryEnterMainApp }) => {
+              import('@/utils/navigationFlow').then(({ tryEnterMainApp, normalizeAppDeepLink, isMainTabDeepLink }) => {
             import('@/store/sessionStore').then(({ useSessionStore }) => {
-              if (link.startsWith('/(main)/') || link === '/tasks' || link === '/chat') {
-                if (!useSessionStore.getState().hasEnteredMain) {
-                  void tryEnterMainApp();
-                }
+              const target = normalizeAppDeepLink(link);
+              if (isMainTabDeepLink(link) && !useSessionStore.getState().hasEnteredMain) {
+                void tryEnterMainApp();
               }
               import('expo-router').then(({ router }) => {
-                const target = link === '/tasks' ? '/(main)/tasks' : link;
                 router.push(target as never);
               });
             });

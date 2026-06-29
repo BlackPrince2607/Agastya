@@ -1,14 +1,14 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PageTitle } from '@/components/feedback';
+import { BackButton } from '@/components/layout/BackButton';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { OnboardingScroll } from '@/components/layout/OnboardingScroll';
 import { alertProfileValidationError, ProfileBasicsForm } from '@/components/profile/ProfileBasicsForm';
-import { NebulaButton, Icon } from '@/components/ui';
-import { colors } from '@/constants/theme';
+import { NebulaButton } from '@/components/ui';
 import { syncProfileRemote } from '@/services/identity';
 import type { Gender } from '@/store/sessionStore';
 import { useSessionStore } from '@/store/sessionStore';
@@ -39,13 +39,7 @@ export default function EditProfileScreen() {
     <CosmicScreen variant="stitch">
       <View className="flex-1">
         <OnboardingScroll bottomInset={120}>
-          <Pressable
-            onPress={() => router.back()}
-            accessibilityRole="button"
-            accessibilityLabel="Back"
-            className="h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.05] active:opacity-80">
-            <Icon name="chevron_left" size={24} color={colors.cyan} />
-          </Pressable>
+          <BackButton />
 
           <PageTitle title="Edit profile" subtitle="Update how Agastya addresses you and tailors your reading." />
 

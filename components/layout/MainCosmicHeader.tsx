@@ -1,4 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient';
+import { router, usePathname } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
 
 import { BrandWordmark, Icon } from '@/components/ui';
@@ -12,12 +13,25 @@ type MainCosmicHeaderProps = {
 
 /** Stitch top app bar: menu (left), Agastya wordmark (center), avatar (right). */
 export function MainCosmicHeader({ displayName, onProfilePress, onMenuPress }: MainCosmicHeaderProps) {
+  const pathname = usePathname();
+  const onProfileTab = pathname.includes('/profile');
+
+  const handleProfilePress = () => {
+    if (onProfilePress) {
+      onProfilePress();
+      return;
+    }
+    if (!onProfileTab) {
+      router.push('/(main)/profile');
+    }
+  };
+
   return (
     <View className="w-full flex-row items-center justify-between border-b border-white/10 px-2 pb-3 pt-1">
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Menu"
-        onPress={onMenuPress ?? onProfilePress}
+        onPress={onMenuPress ?? handleProfilePress}
         className="h-10 w-10 items-center justify-center rounded-full active:opacity-80">
         <Icon name="menu" size={24} color="#c084fc" />
       </Pressable>
@@ -27,7 +41,7 @@ export function MainCosmicHeader({ displayName, onProfilePress, onMenuPress }: M
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Open profile"
-        onPress={onProfilePress}
+        onPress={handleProfilePress}
         className="h-10 w-10 overflow-hidden rounded-full border border-white/20 active:opacity-90"
         style={{ borderColor: 'rgba(168,85,247,0.35)' }}>
         <LinearGradient

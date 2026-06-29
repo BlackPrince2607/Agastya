@@ -3,7 +3,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import { EmptyState } from '@/components/feedback';
-import { MainTabScroll } from '@/components/layout/MainTabScroll';
+import { BackButton } from '@/components/layout/BackButton';
+import { StackScroll } from '@/components/layout/StackScroll';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { EntertainmentDisclaimer } from '@/components/legal/EntertainmentDisclaimer';
 import { AuraNebulaCard, GradientText, InsightCard, MetricDonut } from '@/components/primitives';
@@ -17,6 +18,7 @@ import type { PalmAnalysisDto } from '@/types/palmAnalysis';
 import { PREDICTION_PERIODS, type PredictionPeriod } from '@/types/predictions';
 import { buildLocalPredictions } from '@/utils/localPredictions';
 import { palmLineInsights, personalityProfile } from '@/utils/palmInsights';
+import { paywallRouteParams } from '@/utils/paywallNavigation';
 
 type ReportTab = 'overview' | 'lines' | 'personality' | 'predictions';
 
@@ -101,7 +103,7 @@ export default function ReportScreen() {
   if (!palmAnalysis && !hasStoredReading) {
     return (
       <CosmicScreen variant="stitch">
-        <MainTabScroll>
+        <StackScroll>
           <ReportHeader />
           <EmptyState
             icon="file-text-o"
@@ -110,7 +112,7 @@ export default function ReportScreen() {
             actionLabel="Start palm scan"
             onAction={() => router.push('/onboarding/palm-scan')}
           />
-        </MainTabScroll>
+        </StackScroll>
       </CosmicScreen>
     );
   }
@@ -119,7 +121,7 @@ export default function ReportScreen() {
 
   return (
     <CosmicScreen variant="stitch">
-      <MainTabScroll>
+      <StackScroll>
         <ReportHeader />
 
         {/* Pill tab bar */}
@@ -264,14 +266,20 @@ export default function ReportScreen() {
                 <Text className="text-center font-body text-[14px] text-on-surface-variant">
                   Go premium to reveal your 3-month and 1-year forecasts.
                 </Text>
-                <NebulaButton variant="cta" label="Go Premium" onPress={() => router.push('/onboarding/paywall')} />
+                <NebulaButton
+                  variant="cta"
+                  label="Go Premium"
+                  onPress={() =>
+                    router.push(paywallRouteParams('/report', useSessionStore.getState().readingSeed ?? undefined))
+                  }
+                />
               </GlassCard>
             ) : null}
           </>
         ) : null}
 
         <EntertainmentDisclaimer dense />
-      </MainTabScroll>
+      </StackScroll>
     </CosmicScreen>
   );
 }
@@ -279,13 +287,7 @@ export default function ReportScreen() {
 function ReportHeader() {
   return (
     <View className="w-full flex-row items-center gap-3 px-1">
-      <Pressable
-        onPress={() => router.back()}
-        accessibilityRole="button"
-        accessibilityLabel="Back"
-        className="h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.05] active:opacity-80">
-        <Icon name="chevron_left" size={24} color="#c084fc" />
-      </Pressable>
+      <BackButton color="#c084fc" />
       <Text className="font-headline text-[22px] text-on-surface" accessibilityRole="header">
         Palm Report
       </Text>
@@ -300,7 +302,11 @@ function UpgradeBanner() {
       <Text className="text-center font-body text-[14px] text-on-surface-variant">
         Upgrade for full scores, every chapter, and deeper predictions.
       </Text>
-      <NebulaButton variant="cta" label="See plans" onPress={() => router.push('/onboarding/paywall')} />
+      <NebulaButton
+        variant="cta"
+        label="See plans"
+        onPress={() => router.push(paywallRouteParams('/report', useSessionStore.getState().readingSeed ?? undefined))}
+      />
     </GlassCard>
   );
 }
