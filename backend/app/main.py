@@ -49,11 +49,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         log.info("Supabase session persistence enabled")
 
     if settings.groq_enabled:
+        key = settings.groq_api_key or ""
+        log.info("Groq key loaded (%s…%s, len=%d)", key[:7], key[-4:], len(key))
         extras = []
         if settings.palm_analysis_mode in {"groq", "hybrid"}:
             extras.append(f"palm via {settings.palm_analysis_mode}/{settings.groq_vision_model}")
         extras.append(f"chat/reports/tasks via {settings.groq_chat_model}")
         log.info("Groq inference enabled — %s", "; ".join(extras))
+        from app.services.groq_health import groq_is_live
+
+        if not await groq_is_live(settings):
+            log.error(
+                "GROQ_API_KEY is set but Groq rejected it — chat and reports will fail until you "
+                "update the key in backend/.env and restart the API",
+            )
     elif not settings.debug:
         log.warning("GROQ_API_KEY missing in production")
     else:
@@ -66,6 +75,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         log.info("Redis rate limiting enabled")
     elif not settings.debug:
         log.warning("REDIS_URL not set — using in-process rate limits (single worker recommended)")
+
+    if not settings.revenuecat_webhook_secret and not settings.debug:
+        log.warning(
+            "REVENUECAT_WEBHOOK_SECRET not set — premium webhooks disabled until RevenueCat is configured"
+        )
 
     yield
 

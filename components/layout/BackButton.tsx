@@ -1,20 +1,40 @@
-import { router } from 'expo-router';
+import { useLocalSearchParams, usePathname, useSegments } from 'expo-router';
+import type { Href } from 'expo-router';
 import { Pressable } from 'react-native';
 
 import { Icon } from '@/components/ui';
 import { colors } from '@/constants/theme';
+import { goBack, normalizeRouteParams } from '@/utils/navigationBack';
 
 type BackButtonProps = {
   onPress?: () => void;
+  fallback?: Href;
   accessibilityLabel?: string;
   color?: string;
 };
 
 /** Consistent circular back affordance across stack screens. */
-export function BackButton({ onPress, accessibilityLabel = 'Back', color = colors.cyan }: BackButtonProps) {
+export function BackButton({
+  onPress,
+  fallback,
+  accessibilityLabel = 'Back',
+  color = colors.cyan,
+}: BackButtonProps) {
+  const pathname = usePathname();
+  const segments = useSegments();
+  const params = normalizeRouteParams(useLocalSearchParams());
+
   return (
     <Pressable
-      onPress={onPress ?? (() => router.back())}
+      onPress={() =>
+        goBack({
+          pathname,
+          segments: [...segments],
+          params,
+          fallback,
+          onCustomBack: onPress,
+        })
+      }
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       className="h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.05] active:opacity-80">

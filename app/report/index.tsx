@@ -104,14 +104,16 @@ export default function ReportScreen() {
     return (
       <CosmicScreen variant="stitch">
         <StackScroll>
-          <ReportHeader />
-          <EmptyState
-            icon="file-text-o"
-            title="Your palm report isn’t ready yet"
-            body="Complete your palm scan to unlock your personalized report and scores."
-            actionLabel="Start palm scan"
-            onAction={() => router.push('/onboarding/palm-scan')}
-          />
+          <View className="w-full gap-5">
+            <ReportHeader />
+            <EmptyState
+              icon="description"
+              title="Your palm report isn’t ready yet"
+              body="Complete your palm scan to unlock your report and scores."
+              actionLabel="Start palm scan"
+              onAction={() => router.push('/onboarding/palm-scan')}
+            />
+          </View>
         </StackScroll>
       </CosmicScreen>
     );
@@ -122,163 +124,165 @@ export default function ReportScreen() {
   return (
     <CosmicScreen variant="stitch">
       <StackScroll>
-        <ReportHeader />
+        <View className="w-full gap-5">
+          <ReportHeader />
 
-        {/* Pill tab bar */}
-        <View className="flex-row flex-wrap gap-2">
-          {TABS.map((t) => (
-            <Pressable key={t.id} onPress={() => setActive(t.id)} className="active:opacity-80">
-              <View
-                className={`rounded-pill border px-5 py-2 ${
-                  active === t.id ? 'border-transparent bg-primary/15' : 'border-white/12 bg-white/[0.04]'
-                }`}>
-                <Text
-                  className="font-label text-[12px] uppercase tracking-[0.08em]"
-                  style={{ color: active === t.id ? '#d3beeb' : 'rgba(203,196,206,0.8)' }}>
-                  {t.label}
-                </Text>
-              </View>
-            </Pressable>
-          ))}
-        </View>
-
-        {active === 'overview' ? (
-          <>
-            <Text className="w-full font-headline text-[26px] text-on-surface">{dossier.blueprintTitle}</Text>
-            <GlassCard glow className="w-full gap-2 p-5">
-              <GradientText className="text-[12px] uppercase tracking-[0.3em]">{dossier.visionaryTitle}</GradientText>
-              <Text className="mt-2 font-headline-md text-[22px] text-on-surface">{dossier.visionarySubtitle}</Text>
-              <Text className="mt-3 font-body text-[15px] leading-7 text-on-surface-variant">{dossier.archetypeLine}</Text>
-            </GlassCard>
-            <GlassCard muted className={`w-full p-5 ${premium ? '' : 'opacity-80'}`}>
-              <Text className="font-headline-md text-[18px] text-on-surface">Your metrics</Text>
-              <View className="mt-6 flex-row flex-wrap justify-around gap-x-4 gap-y-8">
-                <MetricDonut label="Love" value={dossier.metrics.love} />
-                <MetricDonut label="Career" value={dossier.metrics.career} />
-                <MetricDonut label="Money" value={dossier.metrics.money} />
-                <MetricDonut label="Growth" value={dossier.metrics.growth} />
-              </View>
-            </GlassCard>
-            <AuraNebulaCard aura={dossier.aura} />
-            <GlassCard muted className="w-full gap-2 p-5">
-              <Text className="font-headline-md text-[18px] text-on-surface">Outlook</Text>
-              <Text className="font-body text-[16px] leading-7 text-on-surface-variant">{dossier.boldPrediction}</Text>
-            </GlassCard>
-            {sections.map((sec) => (
-              <InsightCard key={sec.id} insight={sec} />
-            ))}
-            {!premium ? <UpgradeBanner /> : null}
-          </>
-        ) : null}
-
-        {active === 'lines' ? (
-          <>
-            {palm.line_geometry?.length ? (
-              <View className="relative h-56 w-full overflow-hidden rounded-3xl border border-white/10 bg-black/40">
-                <PalmLineOverlay geometry={palm.line_geometry} width={320} height={224} />
-              </View>
-            ) : null}
-            {lines.map((line) => (
-              <PalmLineCard key={line.lineName} {...line} />
-            ))}
-          </>
-        ) : null}
-
-        {active === 'personality' ? (
-          <>
-            <GlassCard glow className="w-full items-center gap-5 p-6">
-              <View className="items-center justify-center">
+          {/* Pill tab bar */}
+          <View className="w-full flex-row flex-wrap gap-2">
+            {TABS.map((t) => (
+              <Pressable key={t.id} onPress={() => setActive(t.id)} className="active:opacity-80">
                 <View
-                  className="absolute h-32 w-32 rounded-full"
-                  style={{
-                    backgroundColor: 'rgba(168,85,247,0.15)',
-                    shadowColor: '#a855f7',
-                    shadowOpacity: 0.5,
-                    shadowRadius: 20,
-                  }}
-                />
-                <View className="h-24 w-24 items-center justify-center overflow-hidden rounded-full border-2 border-purple/50 bg-primary/15">
-                  <Icon name="psychology" size={44} color="#c084fc" />
+                  className={`rounded-pill border px-5 py-2 ${
+                    active === t.id ? 'border-transparent bg-primary/15' : 'border-white/12 bg-white/[0.04]'
+                  }`}>
+                  <Text
+                    className="font-label text-[12px] uppercase tracking-[0.08em]"
+                    style={{ color: active === t.id ? '#d3beeb' : 'rgba(203,196,206,0.8)' }}>
+                    {t.label}
+                  </Text>
                 </View>
-              </View>
-              <View className="flex-row flex-wrap justify-center gap-2">
-                {persona.traits.map((t) => (
-                  <AuraChip key={t} label={t} tint="#c084fc" />
-                ))}
-              </View>
-              <Text className="text-center font-body text-[15px] leading-7 text-on-surface-variant">
-                {persona.description}
-              </Text>
-            </GlassCard>
+              </Pressable>
+            ))}
+          </View>
 
-            <GlassCard muted className="w-full gap-3 p-5">
-              <Text className="font-headline-md text-[18px] text-on-surface">Shadow Traits</Text>
-              <View className="flex-row flex-wrap gap-2">
-                {persona.shadowTraits.map((t) => (
-                  <AuraChip key={t} label={t} tint="#f472b6" />
-                ))}
-              </View>
-            </GlassCard>
-
-            <GlassCard muted className="w-full gap-4 p-5">
-              <Text className="font-headline-md text-[18px] text-on-surface">Your Strengths</Text>
-              {persona.strengths.map((s) => (
-                <StrengthDots key={s.label} label={s.label} value={s.value} />
+          {active === 'overview' ? (
+            <View className="w-full gap-4">
+              <Text className="w-full font-headline text-[26px] text-on-surface">{dossier.blueprintTitle}</Text>
+              <GlassCard glow className="w-full gap-2.5 p-5">
+                <GradientText className="text-[12px] uppercase tracking-[0.3em]">{dossier.visionaryTitle}</GradientText>
+                <Text className="mt-2 font-headline-md text-[22px] text-on-surface">{dossier.visionarySubtitle}</Text>
+                <Text className="mt-3 font-body text-[15px] leading-7 text-on-surface-variant">{dossier.archetypeLine}</Text>
+              </GlassCard>
+              <GlassCard muted className={`w-full p-5 ${premium ? '' : 'opacity-80'}`}>
+                <Text className="font-headline-md text-[18px] text-on-surface">Your metrics</Text>
+                <View className="mt-6 flex-row flex-wrap justify-around gap-x-4 gap-y-8">
+                  <MetricDonut label="Love" value={dossier.metrics.love} />
+                  <MetricDonut label="Career" value={dossier.metrics.career} />
+                  <MetricDonut label="Money" value={dossier.metrics.money} />
+                  <MetricDonut label="Growth" value={dossier.metrics.growth} />
+                </View>
+              </GlassCard>
+              <AuraNebulaCard aura={dossier.aura} />
+              <GlassCard muted className="w-full gap-2.5 p-5">
+                <Text className="font-headline-md text-[18px] text-on-surface">Outlook</Text>
+                <Text className="font-body text-[16px] leading-7 text-on-surface-variant">{dossier.boldPrediction}</Text>
+              </GlassCard>
+              {sections.map((sec) => (
+                <InsightCard key={sec.id} insight={sec} />
               ))}
-            </GlassCard>
-          </>
-        ) : null}
+              {!premium ? <UpgradeBanner /> : null}
+            </View>
+          ) : null}
 
-        {active === 'predictions' ? (
-          <>
-            <View className="flex-row gap-2">
-              {PREDICTION_PERIODS.map((p) => (
-                <Pressable key={p.id} onPress={() => setPeriod(p.id)} className="active:opacity-80">
-                  <View
-                    className={`rounded-pill border px-4 py-2 ${
-                      period === p.id ? 'border-transparent bg-primary/15' : 'border-white/12 bg-white/[0.04]'
-                    }`}>
-                    <Text
-                      className="font-label text-[11px] uppercase tracking-[0.08em]"
-                      style={{ color: period === p.id ? '#d3beeb' : 'rgba(203,196,206,0.8)' }}>
-                      {p.label}
-                    </Text>
-                  </View>
-                </Pressable>
+          {active === 'lines' ? (
+            <View className="w-full gap-4">
+              {palm.line_geometry?.length ? (
+                <View className="relative h-56 w-full overflow-hidden rounded-3xl border border-white/10 bg-black/40">
+                  <PalmLineOverlay geometry={palm.line_geometry} width={320} height={224} />
+                </View>
+              ) : null}
+              {lines.map((line) => (
+                <PalmLineCard key={line.lineName} {...line} />
               ))}
             </View>
+          ) : null}
 
-            {predictions.items.map((item) => (
-              <PredictionCard
-                key={item.category}
-                category={item.category}
-                headline={item.headline}
-                detail={item.detail}
-                locked={!periodUnlocked}
-              />
-            ))}
-
-            {!periodUnlocked ? (
-              <GlassCard glow className="w-full items-center gap-3 p-5">
-                <Text className="text-center font-headline-md text-[18px] text-on-surface">
-                  Unlock longer-range predictions
+          {active === 'personality' ? (
+            <View className="w-full gap-4">
+              <GlassCard glow className="w-full items-center gap-5 p-6">
+                <View className="items-center justify-center">
+                  <View
+                    className="absolute h-32 w-32 rounded-full"
+                    style={{
+                      backgroundColor: 'rgba(168,85,247,0.15)',
+                      shadowColor: '#a855f7',
+                      shadowOpacity: 0.5,
+                      shadowRadius: 20,
+                    }}
+                  />
+                  <View className="h-24 w-24 items-center justify-center overflow-hidden rounded-full border-2 border-purple/50 bg-primary/15">
+                    <Icon name="psychology" size={44} color="#c084fc" />
+                  </View>
+                </View>
+                <View className="flex-row flex-wrap justify-center gap-2">
+                  {persona.traits.map((t) => (
+                    <AuraChip key={t} label={t} tint="#c084fc" />
+                  ))}
+                </View>
+                <Text className="text-center font-body text-[15px] leading-7 text-on-surface-variant">
+                  {persona.description}
                 </Text>
-                <Text className="text-center font-body text-[14px] text-on-surface-variant">
-                  Go premium to reveal your 3-month and 1-year forecasts.
-                </Text>
-                <NebulaButton
-                  variant="cta"
-                  label="Go Premium"
-                  onPress={() =>
-                    router.push(paywallRouteParams('/report', useSessionStore.getState().readingSeed ?? undefined))
-                  }
-                />
               </GlassCard>
-            ) : null}
-          </>
-        ) : null}
 
-        <EntertainmentDisclaimer dense />
+              <GlassCard muted className="w-full gap-3 p-5">
+                <Text className="font-headline-md text-[18px] text-on-surface">Shadow Traits</Text>
+                <View className="flex-row flex-wrap gap-2">
+                  {persona.shadowTraits.map((t) => (
+                    <AuraChip key={t} label={t} tint="#f472b6" />
+                  ))}
+                </View>
+              </GlassCard>
+
+              <GlassCard muted className="w-full gap-4 p-5">
+                <Text className="font-headline-md text-[18px] text-on-surface">Your Strengths</Text>
+                {persona.strengths.map((s) => (
+                  <StrengthDots key={s.label} label={s.label} value={s.value} />
+                ))}
+              </GlassCard>
+            </View>
+          ) : null}
+
+          {active === 'predictions' ? (
+            <View className="w-full gap-4">
+              <View className="w-full flex-row gap-2">
+                {PREDICTION_PERIODS.map((p) => (
+                  <Pressable key={p.id} onPress={() => setPeriod(p.id)} className="active:opacity-80">
+                    <View
+                      className={`rounded-pill border px-4 py-2 ${
+                        period === p.id ? 'border-transparent bg-primary/15' : 'border-white/12 bg-white/[0.04]'
+                      }`}>
+                      <Text
+                        className="font-label text-[11px] uppercase tracking-[0.08em]"
+                        style={{ color: period === p.id ? '#d3beeb' : 'rgba(203,196,206,0.8)' }}>
+                        {p.label}
+                      </Text>
+                    </View>
+                  </Pressable>
+                ))}
+              </View>
+
+              {predictions.items.map((item) => (
+                <PredictionCard
+                  key={item.category}
+                  category={item.category}
+                  headline={item.headline}
+                  detail={item.detail}
+                  locked={!periodUnlocked}
+                />
+              ))}
+
+              {!periodUnlocked ? (
+                <GlassCard glow className="w-full items-center gap-3 p-5">
+                  <Text className="text-center font-headline-md text-[18px] text-on-surface">
+                    Unlock longer-range predictions
+                  </Text>
+                  <Text className="text-center font-body text-[14px] text-on-surface-variant">
+                    Go premium to reveal your 3-month and 1-year forecasts.
+                  </Text>
+                  <NebulaButton
+                    variant="cta"
+                    label="Go Premium"
+                    onPress={() =>
+                      router.push(paywallRouteParams('/report', useSessionStore.getState().readingSeed ?? undefined))
+                    }
+                  />
+                </GlassCard>
+              ) : null}
+            </View>
+          ) : null}
+
+          <EntertainmentDisclaimer dense />
+        </View>
       </StackScroll>
     </CosmicScreen>
   );
@@ -286,7 +290,7 @@ export default function ReportScreen() {
 
 function ReportHeader() {
   return (
-    <View className="w-full flex-row items-center gap-3 px-1">
+    <View className="w-full flex-row items-center gap-3">
       <BackButton color="#c084fc" />
       <Text className="font-headline text-[22px] text-on-surface" accessibilityRole="header">
         Palm Report

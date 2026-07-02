@@ -37,7 +37,6 @@ import {
 import { getAuthRedirectUri } from '@/services/authRedirect';
 import { setPostSignInReturn } from '@/services/authSession';
 import { finishSignIn } from '@/services/authSignIn';
-import { resolveAccountBackHref } from '@/utils/navigationFlow';
 
 type EmailStepMode = 'signin' | 'signup';
 
@@ -72,16 +71,6 @@ export default function AccountEmailScreen() {
       router.replace('/onboarding/account');
     }
   }, [email]);
-
-  const handleBack = () => {
-    router.replace(
-      resolveAccountBackHref({
-        fromPaywall,
-        fromProfile,
-        seed,
-      }),
-    );
-  };
 
   const passwordSubmit = async () => {
     setInlineMessage(null);
@@ -215,7 +204,7 @@ export default function AccountEmailScreen() {
     <CosmicScreen variant="stitch">
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1">
         <OnboardingScroll>
-          <OnboardingHeader showBack useClose onBack={handleBack} />
+          <OnboardingHeader showBack useClose />
 
           <View className="overflow-hidden rounded-glass border border-white/10 shadow-aura" style={{ aspectRatio: 4 / 3 }}>
             <Image

@@ -33,6 +33,8 @@ export type IconName =
   | 'eco'
   | 'flag'
   | 'close'
+  | 'add'
+  | 'delete_outline'
   | 'notifications'
   | 'visibility'
   | 'psychology'
@@ -55,7 +57,10 @@ export type IconName =
   | 'refresh'
   | 'error_outline'
   | 'handshake'
-  | 'info';
+  | 'info'
+  | 'flare'
+  | 'photo_camera'
+  | 'image';
 
 type IconProps = {
   name: IconName;

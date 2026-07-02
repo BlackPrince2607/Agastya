@@ -2,9 +2,9 @@ import { fetchSessionBootstrap } from '@/services/agastyaApi';
 import { isApiConfigured } from '@/services/env';
 import { track } from '@/services/analytics';
 import { normalizeFullReport } from '@/services/normalizeReport';
-import { SYNC_NOTICE_FAILED } from '@/constants/userCopy';
 import type { FocusTopic, Gender } from '@/store/sessionStore';
 import { useSessionStore } from '@/store/sessionStore';
+import { useChatStore } from '@/store/chatStore';
 import type { PalmAnalysisDto } from '@/types/palmAnalysis';
 
 const FOCUS_SET = new Set<FocusTopic>(['love', 'career', 'money', 'growth', 'matching']);
@@ -26,11 +26,18 @@ type RestoreOptions = {
   force?: boolean;
 };
 
+let restoreInFlight: Promise<boolean> | null = null;
+
 /** Pull palm + dossiers from API/Supabase when local ritual state is empty or `force`. */
 export async function restoreSessionFromServer(options?: RestoreOptions): Promise<boolean> {
   if (!isApiConfigured()) return false;
   const snap = useSessionStore.getState();
   if (!snap.sessionId) return false;
+  const sessionId = snap.sessionId;
+
+  if (snap.skipCloudRestore && options?.force !== true) {
+    return false;
+  }
 
   const needsRestore =
     options?.force === true ||
@@ -38,8 +45,13 @@ export async function restoreSessionFromServer(options?: RestoreOptions): Promis
     (!snap.previewReading && !snap.fullReading);
   if (!needsRestore) return false;
 
-  try {
-    const data = await fetchSessionBootstrap(snap.sessionId);
+  if (restoreInFlight) {
+    return restoreInFlight;
+  }
+
+  restoreInFlight = (async () => {
+    try {
+      const data = await fetchSessionBootstrap(sessionId, snap.deviceInstallId);
     const updates: {
       userDisplayName?: string;
       userGender?: Gender;
@@ -79,14 +91,28 @@ export async function restoreSessionFromServer(options?: RestoreOptions): Promis
         preview: Boolean(data.previewReport),
         full: Boolean(data.fullReport),
       });
+    }
+
+    if (data.chatTail?.length) {
+      useChatStore.getState().hydrateFromServer(data.chatTail);
+    }
+
+    if (Object.keys(updates).length > 0 || data.chatTail?.length) {
       return true;
     }
     return false;
-  } catch {
-    track('session_restore_fail');
-    if (options?.force === true) {
-      useSessionStore.getState().setSyncNotice(SYNC_NOTICE_FAILED);
+    } catch {
+      track('session_restore_fail');
+      if (__DEV__) {
+        console.warn('[Agastya] session restore failed');
+      }
+      return false;
     }
-    return false;
+  })();
+
+  try {
+    return await restoreInFlight;
+  } finally {
+    restoreInFlight = null;
   }
 }

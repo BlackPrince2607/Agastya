@@ -1,6 +1,6 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import type { ComponentProps } from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CosmicDotGrid } from '@/components/layout/CosmicDotGrid';
@@ -24,31 +24,31 @@ const FOCUS_TOPIC_OPTIONS: Array<{
   {
     id: 'love',
     label: 'Love & Relationships',
-    blurb: 'Relationships, soulmates & heart connection',
+    blurb: 'Dating, relationships, and connection',
     icon: 'heart',
   },
   {
     id: 'career',
     label: 'Career & Success',
-    blurb: 'Vocation, purpose & professional growth',
+    blurb: 'Work, goals, and direction',
     icon: 'briefcase',
   },
   {
     id: 'money',
     label: 'Money & Abundance',
-    blurb: 'Abundance, stability & financial flow',
+    blurb: 'Savings, income, and stability',
     icon: 'cash-multiple',
   },
   {
     id: 'growth',
     label: 'Personal Growth',
-    blurb: 'Personal evolution & spiritual journey',
+    blurb: 'Habits, learning, and self-understanding',
     icon: 'meditation',
   },
   {
     id: 'matching',
     label: 'Compatibility',
-    blurb: 'Compare your connection with someone special',
+    blurb: 'See how you connect with someone else',
     icon: 'account-heart',
   },
 ];
@@ -67,7 +67,7 @@ export default function GoalsScreen() {
     if (topics.length === 0) {
       Alert.alert(
         'Choose a focus',
-        'Pick at least one area so we can tailor your reading to what matters most to you right now.',
+        'Pick at least one area so we can focus your reading on what matters to you.',
       );
       return;
     }
@@ -83,7 +83,7 @@ export default function GoalsScreen() {
 
   return (
     <CosmicScreen>
-      <View className="flex-1">
+      <View className="flex-1 overflow-hidden">
         <CosmicDotGrid />
         <ScrollView
           style={{ flex: 1 }}
@@ -94,11 +94,11 @@ export default function GoalsScreen() {
             <OnboardingHeader step={ONBOARDING_STEPS.goals} total={ONBOARDING_TOTAL_STEPS} />
 
             <View>
-              <Text className="font-noto-serif text-[36px] leading-[40px] tracking-tight text-mist">
-                What do you seek clarity on?
+              <Text className="font-headline text-[30px] leading-[34px] tracking-tight text-on-surface">
+                What do you want help with?
               </Text>
-              <Text className="mt-4 max-w-md font-inter text-[16px] leading-6 text-md-on-surface-variant">
-                Your choices help us tailor your astral insights and palm readings. Tap every theme that resonates.
+              <Text className="mt-4 max-w-md font-body text-[15px] leading-6 text-on-surface-variant">
+                Your picks shape your reading. Select every topic that applies.
               </Text>
             </View>
 
@@ -138,8 +138,8 @@ export default function GoalsScreen() {
                         />
                       </View>
                       <View className="min-w-0 flex-1">
-                        <Text className="font-noto-serif-md text-[22px] leading-7 text-mist">{opt.label}</Text>
-                        <Text className="mt-1 font-inter text-[14px] leading-5 text-md-on-surface-variant">
+                        <Text className="font-headline-md text-[20px] leading-7 text-on-surface">{opt.label}</Text>
+                        <Text className="mt-1 font-body text-[14px] leading-5 text-on-surface-variant">
                           {opt.blurb}
                         </Text>
                       </View>
@@ -157,18 +157,18 @@ export default function GoalsScreen() {
         </ScrollView>
 
         <View
-          className="absolute bottom-0 left-0 right-0 gap-4 border-t border-white/12 bg-[#0f0e10]/96 px-8 pt-6"
+          className={`${Platform.OS === 'web' ? 'fixed' : 'absolute'} bottom-0 left-0 right-0 gap-4 border-t border-white/10 bg-[#0f0e10]/96 px-6 pt-6`}
           style={{
             paddingBottom: Math.max(insets.bottom, 20),
             zIndex: 20,
             elevation: 24,
           }}>
-          <CosmicButton gradient="nebulaMd3" label="Continue journey" onPress={() => void continueFlow()} />
-          <Text className="text-center font-inter text-[13px] leading-5 text-md-on-surface-variant">
+          <CosmicButton gradient="nebulaMd3" label="Continue" onPress={() => void continueFlow()} />
+          <Text className="text-center font-body text-[13px] leading-5 text-on-surface-variant">
             You can change these focus areas later in your profile.
           </Text>
           <Pressable accessibilityRole="button" onPress={() => void skipFlow()} className="items-center py-2">
-            <Text className="font-space-grotesk text-[12px] uppercase tracking-[0.16em] text-md-on-primary-container">
+            <Text className="font-label text-[12px] uppercase tracking-[0.12em] text-on-surface-variant">
               Skip for now
             </Text>
           </Pressable>

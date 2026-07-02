@@ -9,6 +9,7 @@ dist/
 web-build/
 expo-env.d.ts
 .expo-bundle-test*
+.expo-tmp-*
 
 # Local dev artifacts (QR screenshots, design exports)
 assets/expo-qr*.png

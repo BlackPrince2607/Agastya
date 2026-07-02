@@ -10,6 +10,7 @@ from app.config import Settings
 from app.prompts.templates import PREDICTIONS_SYSTEM
 from app.schemas.palm import PalmAnalysis
 from app.schemas.predictions import PredictionItem, PredictionsResponse
+from app.services.llm_client import groq_chat_completion
 
 _PERIOD_WINDOW = {
     "month": "this month",
@@ -64,12 +65,7 @@ async def build_predictions_payload(
     palm: PalmAnalysis,
     topics: list[str],
 ) -> PredictionsResponse:
-    from app.services.llm_client import groq_client
-
     fallback = deterministic_predictions(seed=seed, period=period)
-    client = groq_client(settings)
-    if client is None:
-        return fallback
 
     payload = {
         "period": period,
@@ -77,7 +73,8 @@ async def build_predictions_payload(
         "palm": palm.model_dump(),
     }
     try:
-        completion = await client.chat.completions.create(
+        completion = await groq_chat_completion(
+            settings,
             model=settings.groq_chat_model,
             response_format={"type": "json_object"},
             messages=[
@@ -86,6 +83,8 @@ async def build_predictions_payload(
             ],
             temperature=0.85,
         )
+        if completion is None:
+            return fallback
         raw = completion.choices[0].message.content or "{}"
         data = json.loads(raw)
         items_raw = data.get("items") or []

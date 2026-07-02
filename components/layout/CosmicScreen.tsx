@@ -27,17 +27,18 @@ export function CosmicScreen({ children, insetTop = true }: CosmicScreenProps) {
   return (
     <View style={{ flex: 1, backgroundColor: '#0f0e10' }}>
       <LinearGradient colors={[...gradients.cosmic]} style={{ flex: 1 }}>
-        {/* Corner nebula glows */}
+        {/* Corner nebula glows — kept behind content */}
         <View
           pointerEvents="none"
-          className="absolute -left-24 -top-24 h-72 w-72 rounded-full bg-primary/10"
+          className="absolute -left-24 -top-32 h-72 w-72 rounded-full bg-primary/10"
+          style={{ zIndex: 0 }}
         />
         <View
           pointerEvents="none"
           className="absolute -bottom-24 -right-24 h-72 w-72 rounded-full"
-          style={{ backgroundColor: 'rgba(34,211,238,0.08)' }}
+          style={{ backgroundColor: 'rgba(34,211,238,0.08)', zIndex: 0 }}
         />
-        {body}
+        <View style={{ flex: 1, zIndex: 1 }}>{body}</View>
       </LinearGradient>
     </View>
   );

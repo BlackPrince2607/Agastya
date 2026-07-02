@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import { readAuthSession, syncAuthUserToStore, type AuthSessionSnapshot } from '@/services/authSession';
+import { syncAuthUserToStore, type AuthSessionSnapshot } from '@/services/authSession';
 import { getSupabase, isSupabaseEnabled } from '@/services/supabase';
 
 const EMPTY: AuthSessionSnapshot = { isSignedIn: false, userId: null, email: null };
@@ -13,16 +13,6 @@ export function useAuthSession(): AuthSessionSnapshot & { loading: boolean } {
   useEffect(() => {
     let active = true;
 
-    const refresh = async () => {
-      const next = await readAuthSession();
-      if (!active) return;
-      setSnap(next);
-      syncAuthUserToStore(next.userId);
-      setLoading(false);
-    };
-
-    void refresh();
-
     const supabase = getSupabase();
     if (!supabase || !isSupabaseEnabled) {
       setLoading(false);
@@ -31,7 +21,8 @@ export function useAuthSession(): AuthSessionSnapshot & { loading: boolean } {
       };
     }
 
-    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!active) return;
       const user = session?.user;
       const next: AuthSessionSnapshot = {
         isSignedIn: Boolean(user?.id),
@@ -40,7 +31,9 @@ export function useAuthSession(): AuthSessionSnapshot & { loading: boolean } {
       };
       setSnap(next);
       syncAuthUserToStore(next.userId);
-      setLoading(false);
+      if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED') {
+        setLoading(false);
+      }
     });
 
     return () => {

@@ -10,7 +10,6 @@ import { ReadingChecklist, type ChecklistItem } from '@/components/onboarding/Re
 import { AnalyzingSeal, GradientText } from '@/components/primitives';
 import {
   ANALYSIS_LOADING_PHRASES,
-  ANALYSIS_OFFLINE_NOTICE,
   SAMPLE_READING_BADGE,
 } from '@/constants/userCopy';
 import { analyzePalm, generateReport } from '@/services/agastyaApi';
@@ -47,7 +46,6 @@ export default function AnalysisScreen() {
   const [phase, setPhase] = useState(0);
   const [pct, setPct] = useState(12);
   const [syncPulse, setSyncPulse] = useState(0.22);
-  const [offlineRitual, setOfflineRitual] = useState(false);
   const [sampleBadge, setSampleBadge] = useState(false);
   const [palmResult, setPalmResult] = useState<PalmAnalysisDto | null>(null);
 
@@ -144,7 +142,8 @@ export default function AnalysisScreen() {
         }
 
         track('analysis_pipeline_complete', { seed_len: resolvedSeed.length });
-        useSessionStore.setState({ palmCaptureBase64: null });
+        useSessionStore.getState().setPalmCaptureBase64(null);
+        useSessionStore.getState().setSkipCloudRestore(false);
         void scheduleReadyNotification();
       };
 
@@ -153,10 +152,10 @@ export default function AnalysisScreen() {
       } catch {
         if (cancelled) return;
         const snap = useSessionStore.getState();
-        setOfflineRitual(true);
         setSampleBadge(true);
         setPalmAnalysis(FALLBACK_PALM);
         setPreviewReading(buildSimulatedReading(resolvedSeed, snap.focusTopics));
+        useSessionStore.getState().setSkipCloudRestore(false);
       } finally {
         if (cancelled) return;
         if (needsRetake) {
@@ -199,7 +198,7 @@ export default function AnalysisScreen() {
           <OnboardingHeader step={ONBOARDING_STEPS.analysis} total={ONBOARDING_TOTAL_STEPS} showBack={false} />
 
           <View className="items-center gap-5">
-            <GradientText className="font-space-grotesk text-[12px] uppercase tracking-[0.5em] text-stitch-signal">
+            <GradientText className="font-label text-[12px] uppercase tracking-[0.12em] text-stitch-signal">
               Analyzing your palm
             </GradientText>
             {sampleBadge ? (
@@ -218,12 +217,12 @@ export default function AnalysisScreen() {
 
           <View className="gap-10">
             <MotiView key={phase} from={{ opacity: 0 }} animate={{ opacity: 1 }}>
-              <Text className="text-center font-inter text-[17px] font-medium leading-7 text-mist/95">{caption}</Text>
+              <Text className="text-center font-body text-[17px] font-medium leading-7 text-on-surface">{caption}</Text>
             </MotiView>
 
             <View className="self-center rounded-glass border border-white/10 bg-white/[0.04] px-6 py-5">
-              <Text className="mb-4 font-label text-[11px] uppercase tracking-[0.2em] text-on-surface-variant">
-                AI is reading your
+              <Text className="mb-4 font-label text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">
+                Reading your
               </Text>
               <ReadingChecklist items={checklist} />
             </View>
@@ -243,9 +242,7 @@ export default function AnalysisScreen() {
               </View>
             </View>
 
-            <Text className="text-center font-inter text-[13px] text-md-on-surface-variant">
-              {offlineRitual ? ANALYSIS_OFFLINE_NOTICE : 'Almost ready…'}
-            </Text>
+            <Text className="text-center font-body text-[13px] text-on-surface-variant">Almost ready</Text>
           </View>
         </View>
       </View>

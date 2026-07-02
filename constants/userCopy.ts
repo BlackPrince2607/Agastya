@@ -21,7 +21,7 @@ export const EMAIL_RESET_SENT =
 export const PASSWORD_MISMATCH = 'Passwords do not match.';
 
 export const AUTH_WRONG_PASSWORD_HINT =
-  'That password did not work. If you joined with Google or Apple, use that button instead. If you are new, tap Create account. You can also use Email me a sign-in link — no password needed.';
+  'That password did not work. If you joined with Google or Apple, use that button instead. If you are new, tap Create account. You can also use Email me a sign-in link. No password needed.';
 
 export const AUTH_ACCOUNT_EXISTS_HINT =
   'An account already exists for this email. Sign in with your password, Google, or Apple.';
@@ -38,12 +38,10 @@ export const SYNC_NOTICE_FAILED =
 export const SYNC_NOTICE_MERGE_FAILED =
   'Sign-in succeeded but we couldn’t link your reading to your account. Try again from Profile.';
 
-export const OFFLINE_LIMITED_LABEL = 'Some features may be limited while offline.';
-
 export const SAMPLE_READING_BADGE = 'Sample reading';
 
 export const GUIDE_FINISH_PALM_FIRST =
-  'Complete your palm reading first—then the Guide can personalize answers for you.';
+  'Complete your palm reading first. Then the Guide can answer questions about your report.';
 
 export type HomeShortcutAction = 'guide' | 'compat' | 'report' | 'tasks' | 'paywall';
 
@@ -58,28 +56,26 @@ export type HomeShortcut = {
 export const HOME_SHORTCUTS: HomeShortcut[] = [
   { icon: 'file-text-o', label: 'Palm report', hint: 'Your full reading and line scores', action: 'report' },
   { icon: 'comments-o', label: 'Guide', hint: 'Ask questions about your reading', action: 'guide' },
-  { icon: 'check-circle-o', label: 'Daily tasks', hint: 'Personalized actions for today', action: 'tasks' },
-  { icon: 'heart-o', label: 'Compatibility', hint: 'Match by name or palm reading', action: 'compat' },
+  { icon: 'check-circle-o', label: 'Daily tasks', hint: 'Daily actions based on your reading', action: 'tasks' },
+  { icon: 'heart-o', label: 'Compatibility', hint: 'Compare palm readings', action: 'compat' },
 ];
 
 export const FALLBACK_DAILY_TASKS = [
-  'Send one honest message you’ve been postponing.',
+  'Send one message you have been putting off.',
   'Take a 10-minute walk without your phone.',
-  'Write down one fear, then one small step past it.',
+  'Write down one worry and one small next step.',
 ];
 
-export const TASKS_FALLBACK_NOTICE = 'Showing general suggestions until we can personalize your list.';
-
 export const TASKS_EMPTY_NO_PALM = {
-  title: 'Personal tasks unlock after your reading',
-  body: 'Finish your palm scan to receive daily actions tailored to your focus areas.',
+  title: 'Tasks unlock after your reading',
+  body: 'Finish your palm scan to get daily actions matched to your focus areas.',
   action: 'Continue setup',
 } as const;
 
 export const ANALYSIS_LOADING_PHRASES = [
-  'Reading your palm lines…',
-  'Matching patterns to your focus areas…',
-  'Preparing your personal report…',
+  'Reading your palm lines',
+  'Matching patterns to your focus areas',
+  'Preparing your report',
 ];
 
 export const ANALYSIS_LOADING_CHIPS: readonly [string, string] = [
@@ -87,23 +83,20 @@ export const ANALYSIS_LOADING_CHIPS: readonly [string, string] = [
   'Building your profile',
 ];
 
-export const ANALYSIS_OFFLINE_NOTICE =
-  'You’re offline—we saved a preview on this device. Connect to sync your full reading.';
-
 export const PALM_CAPTURE_FAILED =
   'We couldn’t capture your palm. Try again in better light with your hand steady.';
 
 export const AI_VOICE_HINTS = [
-  'You often think things through longer than you let on—and that’s a strength when you finally speak.',
-  'The next step doesn’t have to be big; it has to be honest.',
-  'What you’re avoiding naming is usually what wants your attention most.',
+  'You often think things through before you speak. That patience is a strength.',
+  'The next step does not have to be big. It just has to be honest.',
+  'What you keep avoiding is usually what needs your attention.',
 ];
 
 export const PROFILE_DEFAULT_NAME = 'Your profile';
 
-export const JOURNEY_DAY_LABEL = (days: number) => `Day ${days} of your journey`;
+export const JOURNEY_DAY_LABEL = (days: number) => `Day ${days} with Agastya`;
 
-export const JOURNEY_DAY_FOOTNOTE = 'Based on your reading rhythm on this device';
+export const JOURNEY_DAY_FOOTNOTE = 'Days you have opened the app on this device';
 
 const LIFE_LABELS: Record<string, string> = {
   strong: 'Strong life line',
@@ -137,7 +130,7 @@ export function palmReadingChips(p: PalmAnalysisDto): [string, string] {
     typeof p.personality === 'string' && p.personality.trim().length > 0
       ? capitalize(p.personality.trim())
       : '';
-  const second = personality ? `${personality} energy` : heart ?? head ?? 'Personal signature';
+  const second = personality || (heart ?? head ?? 'Personal signature');
   return [life, second];
 }
 
@@ -146,7 +139,7 @@ export function buildDailyInsight(palm: PalmAnalysisDto | null): InsightSection 
     return {
       id: 'daily',
       title: 'Today’s insight',
-      body: 'Take one small step toward what you already know matters. Clarity grows when you stop waiting for a perfect moment.',
+      body: 'Take one small step toward what already matters to you. You do not need a perfect moment to start.',
     };
   }
 
@@ -158,7 +151,7 @@ export function buildDailyInsight(palm: PalmAnalysisDto | null): InsightSection 
   return {
     id: 'daily',
     title: capitalize(palm.personality),
-    body: `Your reading points to ${traits}. Today is a good day for honest conversations and steady progress—not big leaps, but real ones.`,
+    body: `Your reading points to ${traits}. Today is a good day for honest conversations and steady steps.`,
   };
 }
 

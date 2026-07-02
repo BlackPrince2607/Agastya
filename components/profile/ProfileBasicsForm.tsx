@@ -25,7 +25,7 @@ export function validateProfileBasics(name: string, gender?: Gender): string | n
     return 'Please enter at least two characters so we can personalize your reading.';
   }
   if (!gender) {
-    return 'Choose the option that best fits you—this helps tailor your reading.';
+    return 'Choose the option that best fits you. This helps shape your reading.';
   }
   return null;
 }
@@ -47,7 +47,7 @@ export function ProfileBasicsForm({ name, onNameChange, gender, onGenderChange, 
           <Text className="font-label text-[12px] uppercase tracking-[0.1em] text-primary">About you</Text>
           <Text className="mt-4 font-headline text-[28px] leading-9 text-on-surface">Tell us a little about you</Text>
           <Text className="mt-3 font-body text-[15px] leading-6 text-on-surface-variant">
-            We use this to personalize your palm reading. You can sign in later to save it to the cloud.
+            We use this to shape your palm reading. You can sign in later to save it to the cloud.
           </Text>
         </View>
       ) : null}

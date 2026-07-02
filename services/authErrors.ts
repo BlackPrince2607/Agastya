@@ -73,7 +73,7 @@ export function mapSupabaseAuthError(message: string): string {
     m.includes('already been registered') ||
     m.includes('already exists')
   ) {
-    return 'An account exists with this email — sign in or reset your password.';
+    return 'An account exists with this email. Sign in or reset your password.';
   }
 
   if (m.includes('email not confirmed') || m.includes('not confirmed')) {

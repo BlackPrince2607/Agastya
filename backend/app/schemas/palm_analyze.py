@@ -1,7 +1,5 @@
 """Palm analyze request."""
 
-from typing import Any
-
 from pydantic import BaseModel, Field, field_validator
 
 from app.utils.validators import _parse_uuid, validate_device_install_id

@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, usePathname, useSegments } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Alert, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,14 +16,13 @@ import { stitchMd3 } from '@/constants/stitchWelcome';
 import { stitchSignal } from '@/constants/theme';
 import { track } from '@/services/analytics';
 import { unlockPremiumFromStore, finalizeStripeCheckout } from '@/services/premiumUnlock';
-import { isPremiumBypassEnabled, isRevenueCatConfigured, isStripeCheckoutEnabled, isWebPremiumUnlockAvailable } from '@/services/revenuecat';
-import { isWebDemoMode } from '@/utils/webDemo';
+import { isRevenueCatConfigured, isStripeCheckoutEnabled, isWebPremiumUnlockAvailable } from '@/services/revenuecat';
 import { useSessionStore } from '@/store/sessionStore';
-import { resolvePaywallBackHref } from '@/utils/paywallNavigation';
+import { goBack, normalizeRouteParams } from '@/utils/navigationBack';
 
 const TRUST_HIGHLIGHTS = [
-  'Personalized palm insights tied to your focus areas',
-  'Unlimited Guide conversations when you need clarity',
+  'Palm insights tied to your focus areas',
+  'Unlimited Guide conversations about your reading',
   'Full compatibility breakdowns and report chapters',
 ];
 
@@ -41,18 +40,22 @@ const FEATURES = [
   {
     icon: 'chatbubble-ellipses-outline' as const,
     title: 'Unlimited Guide',
-    body: 'Ask your Guide anything, anytime—answers personalized to your reading.',
+    body: 'Ask your Guide anything. Answers are based on your reading.',
   },
   {
     icon: 'checkmark-done-outline' as const,
     title: 'Daily guidance',
-    body: 'Small, personalized actions to keep your momentum going each day.',
+    body: 'Small daily actions to keep your momentum going.',
   },
 ];
 
 export default function PaywallScreen() {
   const insets = useSafeAreaInsets();
-  const { seed, checkout, returnTo } = useLocalSearchParams<{ seed?: string; checkout?: string; returnTo?: string }>();
+  const pathname = usePathname();
+  const segments = useSegments();
+  const searchParams = useLocalSearchParams<{ seed?: string; checkout?: string; returnTo?: string }>();
+  const { seed, checkout, returnTo } = searchParams;
+  const routeParams = normalizeRouteParams(searchParams);
   const period = useSessionStore((s) => s.billingPeriod);
   const setPeriod = useSessionStore((s) => s.setBillingPeriod);
   const premium = useSessionStore((s) => s.hasUnlockedPremium);
@@ -79,7 +82,7 @@ export default function PaywallScreen() {
       } else {
         Alert.alert(
           'Verifying subscription',
-          'Payment received — premium may take a moment to activate. Try again shortly.',
+          'Payment received. Premium may take a moment to activate. Try again shortly.',
         );
       }
       setBusy(false);
@@ -154,7 +157,7 @@ export default function PaywallScreen() {
   };
 
   const backFromPaywall = () => {
-    router.replace(resolvePaywallBackHref(returnTo, mergedSeed));
+    goBack({ pathname, segments: [...segments], params: routeParams });
   };
 
   return (
@@ -172,13 +175,10 @@ export default function PaywallScreen() {
           <OnboardingHeader step={ONBOARDING_STEPS.paywall} total={ONBOARDING_TOTAL_STEPS} />
 
           <View>
-            <Text className="font-space-grotesk text-[11px] font-semibold uppercase tracking-[0.38em] text-md-on-primary-container">
-              Step {ONBOARDING_STEPS.paywall} of {ONBOARDING_TOTAL_STEPS}
-            </Text>
-            <Text className="mt-4 font-noto-serif text-[32px] leading-[40px] tracking-tight text-mist">
+            <Text className="font-headline text-[30px] leading-[34px] tracking-tight text-on-surface">
               Unlock your full reading
             </Text>
-            <Text className="mt-4 font-inter text-[15px] leading-6 text-md-on-surface-variant">
+            <Text className="mt-4 font-body text-[15px] leading-6 text-on-surface-variant">
               Get your complete palm report, daily guidance, and unlimited conversations with Agastya.
             </Text>
             {premium ? (
@@ -188,14 +188,12 @@ export default function PaywallScreen() {
             ) : null}
             {isWebPremiumUnlockAvailable() ? (
               <Text className="mt-3 font-inter text-[13px] leading-5 text-stitch-signal">
-                {isWebDemoMode()
-                  ? 'Web demo — tap below to unlock the full experience without a real purchase.'
-                  : isStripeCheckoutEnabled()
-                    ? 'Subscribe securely with Stripe — billed on the web, synced to your account.'
-                    : 'On web, tap below to unlock the full experience — no app-store purchase required.'}
+                {isStripeCheckoutEnabled()
+                  ? 'Subscribe securely with Stripe. Billing happens on the web and syncs to your account.'
+                  : 'Complete your purchase to unlock the full experience.'}
               </Text>
             ) : null}
-            {Platform.OS !== 'web' && !isRevenueCatConfigured() && !isPremiumBypassEnabled() ? (
+            {Platform.OS !== 'web' && !isRevenueCatConfigured() ? (
               <Text className="mt-3 font-inter text-[13px] leading-5 text-md-on-surface-variant">
                 Subscriptions aren’t available in this version yet. You can continue with the free preview from the previous
                 screen.
@@ -277,9 +275,7 @@ export default function PaywallScreen() {
                       ? 'Processing…'
                       : isStripeCheckoutEnabled()
                         ? 'Subscribe with Stripe'
-                        : isWebPremiumUnlockAvailable()
-                          ? 'Unlock full access'
-                          : 'Start 7-Day Free Trial'
+                        : 'Start 7-Day Free Trial'
                   }
                   onPress={() => void handleSubscribe()}
                 />

@@ -1,16 +1,20 @@
+# Agastya FastAPI backend — built from repo root (Railway / Fly monorepo layout).
+# Railway: railway.toml sets dockerfilePath=backend/Dockerfile, context=repo root.
+# Fly: fly deploy --dockerfile backend/Dockerfile (same COPY paths).
+
 FROM python:3.12-slim
 
 WORKDIR /app
 
 # Install dependencies first for layer caching
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy app source
-COPY . .
+# Copy backend source only
+COPY backend/ .
 
-# Expose the port Fly/Railway will route to
+# Railway injects PORT; default 8000 for local docker run
+ENV PORT=8000
 EXPOSE 8000
 
-# Use production-grade Uvicorn settings: 2 workers, no reload, bind to 0.0.0.0
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --workers 1

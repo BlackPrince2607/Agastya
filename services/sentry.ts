@@ -6,6 +6,7 @@
  */
 
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 
 let Sentry: typeof import('@sentry/react-native') | null = null;
 let Updates: { runtimeVersion?: string | null; updateId?: string | null } | null = null;
@@ -30,8 +31,11 @@ export function initSentry(): void {
   if (!Sentry || !DSN) return;
 
   try {
+    const isExpoGo = Constants.appOwnership === 'expo';
     const integrations =
-      Platform.OS === 'web' || typeof Sentry.mobileReplayIntegration !== 'function'
+      Platform.OS === 'web' ||
+      isExpoGo ||
+      typeof Sentry.mobileReplayIntegration !== 'function'
         ? []
         : [
             Sentry.mobileReplayIntegration({

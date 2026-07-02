@@ -6,10 +6,7 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal",
-      "env": {
-        "EXPO_PUBLIC_ALLOW_DEV_PREMIUM": "true"
-      }
+      "distribution": "internal"
     },
     "preview": {
       "distribution": "internal",
@@ -20,11 +17,17 @@
         "buildType": "apk"
       }
     },
-    "production": {
-      "autoIncrement": true,
+    "prototype": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
       "env": {
-        "EXPO_PUBLIC_ALLOW_DEV_PREMIUM": "false"
+        "EXPO_PUBLIC_REVENUECAT_ENTITLEMENT": "premium"
       }
+    },
+    "production": {
+      "autoIncrement": true
     }
   },
   "submit": {

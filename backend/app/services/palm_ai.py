@@ -142,6 +142,7 @@ async def palm_analysis_from_groq(
             response_format={"type": "json_object"},
             temperature=0.35,
             max_tokens=800,
+            timeout_seconds=settings.groq_vision_timeout_seconds,
         )
         if completion is None:
             return None

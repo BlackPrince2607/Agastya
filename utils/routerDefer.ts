@@ -1,3 +1,4 @@
+import type { Href } from 'expo-router';
 import { router } from 'expo-router';
 
 type PushHref = Parameters<typeof router.push>[0];
@@ -23,4 +24,18 @@ export function deferRouterPush(href: PushHref) {
 
 export function deferRouterReplace(href: ReplaceHref) {
   scheduleNavigation(() => router.replace(href));
+}
+
+/**
+ * Replace a route and peel nested stacks so hardware back cannot return to onboarding.
+ */
+export function resetAppNavigation(href: Href) {
+  scheduleNavigation(() => {
+    let guard = 0;
+    while (router.canDismiss() && guard < 32) {
+      router.dismissAll();
+      guard += 1;
+    }
+    router.replace(href as ReplaceHref);
+  });
 }

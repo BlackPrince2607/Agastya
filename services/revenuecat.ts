@@ -1,7 +1,6 @@
 import { Platform } from 'react-native';
 
 import type { BillingPeriod } from '@/store/sessionStore';
-import { isWebDemoMode } from '@/utils/webDemo';
 
 let Purchases: typeof import('react-native-purchases').default | null = null;
 
@@ -30,21 +29,9 @@ export function isStripeCheckoutEnabled(): boolean {
   return Platform.OS === 'web' && process.env.EXPO_PUBLIC_STRIPE_CHECKOUT_ENABLED === 'true';
 }
 
-export function isDevPremiumBypassEnabled(): boolean {
-  return __DEV__ && process.env.EXPO_PUBLIC_ALLOW_DEV_PREMIUM === 'true';
-}
-
-/** Dev bypass, explicit web demo flag, or web when neither Stripe nor RC is configured. */
-export function isPremiumBypassEnabled(): boolean {
-  if (isDevPremiumBypassEnabled() || isWebDemoMode()) return true;
-  if (Platform.OS === 'web' && isStripeCheckoutEnabled()) return false;
-  if (Platform.OS === 'web' && !isRevenueCatConfigured()) return true;
-  return false;
-}
-
-/** True when web users can unlock premium without a real store purchase. */
+/** True when web checkout can unlock premium (Stripe or RevenueCat). */
 export function isWebPremiumUnlockAvailable(): boolean {
-  return Platform.OS === 'web' && isPremiumBypassEnabled();
+  return Platform.OS === 'web' && (isStripeCheckoutEnabled() || isRevenueCatConfigured());
 }
 
 export async function configureRevenueCat(appUserId?: string) {
@@ -113,10 +100,6 @@ export async function purchasePremiumPlan(period: BillingPeriod): Promise<{
   success: boolean;
   entitled: boolean;
 }> {
-  if (isPremiumBypassEnabled()) {
-    return { success: true, entitled: true };
-  }
-
   if (!Purchases) {
     return { success: false, entitled: false };
   }

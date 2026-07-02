@@ -83,9 +83,9 @@ export async function scheduleDailyTaskReminder(
     await Notifications.scheduleNotificationAsync({
       identifier: DAILY_REMINDER_ID,
       content: {
-        title: 'Your daily rituals await ✦',
-        body: 'Take a moment to align your energy with your cosmic path.',
-        data: { screen: '/tasks' },
+        title: 'Your daily tasks',
+        body: 'You have tasks waiting for today. Tap to open them.',
+        data: { screen: '/(main)/tasks' },
       },
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.DAILY,
@@ -116,8 +116,8 @@ export async function scheduleReadyNotification(): Promise<void> {
   try {
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: 'Your palm reading is ready ✦',
-        body: 'Agastya has finished reading your life path. Tap to explore.',
+        title: 'Your palm reading is ready',
+        body: 'Tap to open your report.',
         data: { screen: '/report' },
       },
       trigger: {

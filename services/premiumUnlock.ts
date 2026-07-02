@@ -3,7 +3,6 @@ import { track } from '@/services/analytics';
 import { normalizeFullReport } from '@/services/normalizeReport';
 import { restoreSessionFromServer } from '@/services/sessionRestore';
 import {
-  isPremiumBypassEnabled,
   isRevenueCatConfigured,
   isStripeCheckoutEnabled,
   purchasePremiumPlan,
@@ -14,7 +13,7 @@ import { startStripeCheckout } from '@/services/stripeBilling';
 import { useSessionStore } from '@/store/sessionStore';
 
 export type UnlockResult =
-  | { ok: true; source: 'purchase' | 'restore' | 'entitlement' | 'dev' | 'stripe' }
+  | { ok: true; source: 'purchase' | 'restore' | 'entitlement' | 'stripe' }
   | { ok: false; reason: 'cancelled' | 'unavailable' | 'not_entitled' };
 
 async function syncPremiumFromServer(): Promise<boolean> {
@@ -50,20 +49,13 @@ async function materializeFullReport(seed?: string) {
   }
 }
 
-/** Subscribe or restore — sets premium when store/webhook confirms entitlement (or dev bypass). */
+/** Subscribe or restore — sets premium when store/webhook confirms entitlement. */
 export async function unlockPremiumFromStore(options: {
   mode: 'purchase' | 'restore';
   seed?: string;
 }): Promise<UnlockResult> {
   const { mode, seed } = options;
   const setPremium = useSessionStore.getState().setPremium;
-
-  if (isPremiumBypassEnabled()) {
-    setPremium(true);
-    await materializeFullReport(seed);
-    track('premium_unlock_dev');
-    return { ok: true, source: 'dev' };
-  }
 
   if (isStripeCheckoutEnabled() && mode === 'purchase') {
     const checkout = await startStripeCheckout();

@@ -1,4 +1,5 @@
 import { Redirect, Stack } from 'expo-router';
+import { useEffect } from 'react';
 import { View } from 'react-native';
 
 import { LoadingBlock } from '@/components/feedback';
@@ -6,8 +7,9 @@ import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { usePersistHydration } from '@/hooks/usePersistHydration';
 import { requiresSupabaseSignIn } from '@/services/authConfig';
+import { leaveMainAppForOnboarding, syncAuthUserToStore } from '@/services/authSession';
 import { useSessionStore } from '@/store/sessionStore';
-import { resolveResumeHref } from '@/utils/navigationFlow';
+import { resolveBlockedAppHref } from '@/utils/navigationFlow';
 
 /** Pushed report stack: detailed report (tabbed) + compatibility. */
 export default function ReportLayout() {
@@ -15,7 +17,15 @@ export default function ReportLayout() {
   const entered = useSessionStore((s) => s.hasEnteredMain);
   const { isSignedIn, loading: authLoading } = useAuthSession();
 
-  if (!hydrated || authLoading) {
+  useEffect(() => {
+    if (!requiresSupabaseSignIn() || authLoading || isSignedIn) return;
+    syncAuthUserToStore(null);
+    if (useSessionStore.getState().hasEnteredMain) {
+      leaveMainAppForOnboarding();
+    }
+  }, [authLoading, isSignedIn]);
+
+  if (!hydrated) {
     return (
       <CosmicScreen variant="stitch">
         <View className="flex-1 items-center justify-center px-8">
@@ -26,8 +36,18 @@ export default function ReportLayout() {
   }
 
   if (!entered) {
-    const resume = resolveResumeHref();
+    const resume = resolveBlockedAppHref(isSignedIn);
     return <Redirect href={resume === '/(main)/home' ? '/welcome' : resume} />;
+  }
+
+  if (requiresSupabaseSignIn() && authLoading) {
+    return (
+      <CosmicScreen variant="stitch">
+        <View className="flex-1 items-center justify-center px-8">
+          <LoadingBlock message="Loading…" />
+        </View>
+      </CosmicScreen>
+    );
   }
 
   if (requiresSupabaseSignIn() && !isSignedIn) {

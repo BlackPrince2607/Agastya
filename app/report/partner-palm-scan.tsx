@@ -21,15 +21,18 @@ import { deferRouterPush } from '@/utils/routerDefer';
 export default function PartnerPalmScanScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [uploadBusy, setUploadBusy] = useState(false);
-  const partnerPalmScanHand = useSessionStore((s) => s.partnerPalmScanHand);
+  const [selectedHand, setSelectedHand] = useState<PalmScanHand>(
+    () => useSessionStore.getState().partnerPalmScanHand ?? 'right',
+  );
   const setPartnerPalmScanHand = useSessionStore((s) => s.setPartnerPalmScanHand);
   const setPartnerPalmCaptureBase64 = useSessionStore((s) => s.setPartnerPalmCaptureBase64);
   const camRef = useRef<CameraView>(null);
 
-  const hand: PalmScanHand = partnerPalmScanHand ?? 'right';
+  const hand = selectedHand;
 
   const continueWithCapture = (base64: string) => {
     const seed = `partner-${hand}-${Date.now()}`;
+    setPartnerPalmScanHand(hand);
     setPartnerPalmCaptureBase64(base64);
     deferRouterPush({
       pathname: '/report/partner-palm-analysis' as never,
@@ -53,7 +56,7 @@ export default function PartnerPalmScanScreen() {
     return (
       <CosmicScreen insetTop={false}>
         <View className="flex-1 items-center justify-center px-8">
-          <Text className="font-inter text-mist">Gathering optics…</Text>
+          <Text className="font-body text-on-surface">Loading camera…</Text>
         </View>
       </CosmicScreen>
     );
@@ -75,7 +78,7 @@ export default function PartnerPalmScanScreen() {
               </GradientText>
               <Text className="font-noto-serif text-[26px] leading-8 text-mist">We need your camera to scan their palm</Text>
               <Text className="font-inter text-[15px] leading-7 text-md-on-surface-variant">
-                Ask your partner to hold their palm steady in a well-lit space. We only capture the hand—not their face.
+                Ask your partner to hold their palm steady in a well-lit space. We only capture the hand, not their face.
               </Text>
             </View>
             <View className="gap-3">
@@ -106,8 +109,9 @@ export default function PartnerPalmScanScreen() {
 
   return (
     <CosmicScreen insetTop={false}>
-      <CameraView ref={camRef} facing="back" style={{ flex: 1 }}>
-        <View className="flex-1 bg-black/45">
+      <View className="flex-1">
+        <CameraView ref={camRef} facing="back" style={{ flex: 1 }} />
+        <View className="absolute inset-0 bg-black/45" pointerEvents="box-none">
           <CosmicDotGrid />
           <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={{ flex: 1 }}>
             <View className="flex-1 pb-4 pt-2" style={{ paddingHorizontal: PAGE_PADDING }}>
@@ -122,12 +126,16 @@ export default function PartnerPalmScanScreen() {
                 Center their palm inside the guide. Hold steady for a clear read.
               </Text>
 
-              <View className="flex-1 items-center justify-center py-4">
+              <View className="flex-1 items-center justify-center py-4" pointerEvents="none">
                 <PalmScanFrame hand={hand} />
               </View>
 
               <View className="gap-4">
-                <HandToggleRow hand={partnerPalmScanHand} onSelect={setPartnerPalmScanHand} />
+                <HandToggleRow
+                  hand={selectedHand}
+                  onSelect={setSelectedHand}
+                  compact
+                />
                 <CosmicButton gradient="nebulaMd3" label="Capture palm" onPress={() => void startScan()} />
                 <CosmicButton
                   variant="ghost"
@@ -142,7 +150,7 @@ export default function PartnerPalmScanScreen() {
             </View>
           </SafeAreaView>
         </View>
-      </CameraView>
+      </View>
     </CosmicScreen>
   );
 }

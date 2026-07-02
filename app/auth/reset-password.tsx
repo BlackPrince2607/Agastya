@@ -99,7 +99,7 @@ export default function ResetPasswordScreen() {
     <CosmicScreen variant="stitch">
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1">
         <OnboardingScroll>
-          <OnboardingHeader showBack useClose onBack={() => router.replace('/onboarding/account')} />
+          <OnboardingHeader showBack useClose />
 
           <View className="gap-6">
             <View className="gap-2">

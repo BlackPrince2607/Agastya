@@ -27,31 +27,38 @@ export function MainCosmicHeader({ displayName, onProfilePress, onMenuPress }: M
   };
 
   return (
-    <View className="w-full flex-row items-center justify-between border-b border-white/10 px-2 pb-3 pt-1">
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Menu"
-        onPress={onMenuPress ?? handleProfilePress}
-        className="h-10 w-10 items-center justify-center rounded-full active:opacity-80">
-        <Icon name="menu" size={24} color="#c084fc" />
-      </Pressable>
+    <View className="relative z-10 w-full px-2 pb-2 pt-1">
+      <View className="min-h-[44px] flex-row items-center justify-between">
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Open menu"
+          onPress={onMenuPress ?? handleProfilePress}
+          className="z-10 h-11 w-11 items-center justify-center rounded-full active:opacity-80">
+          <Icon name="menu" size={24} color="#c084fc" />
+        </Pressable>
 
-      <BrandWordmark />
+        <View
+          pointerEvents="none"
+          className="absolute inset-x-0 items-center justify-center"
+          style={{ top: 0, bottom: 0 }}>
+          <BrandWordmark />
+        </View>
 
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Open profile"
-        onPress={handleProfilePress}
-        className="h-10 w-10 overflow-hidden rounded-full border border-white/20 active:opacity-90"
-        style={{ borderColor: 'rgba(168,85,247,0.35)' }}>
-        <LinearGradient
-          colors={['rgba(168,85,247,0.45)', 'rgba(232,121,249,0.35)']}
-          style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <Text className="font-label text-[13px] tracking-wide text-on-surface">
-            {initialsFor(displayName)}
-          </Text>
-        </LinearGradient>
-      </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Open profile"
+          onPress={handleProfilePress}
+          className="z-10 h-11 w-11 overflow-hidden rounded-full border active:opacity-90"
+          style={{ borderColor: 'rgba(168,85,247,0.35)' }}>
+          <LinearGradient
+            colors={['rgba(168,85,247,0.45)', 'rgba(232,121,249,0.35)']}
+            style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+            <Text className="font-label text-[13px] tracking-wide text-on-surface">
+              {initialsFor(displayName)}
+            </Text>
+          </LinearGradient>
+        </Pressable>
+      </View>
     </View>
   );
 }

@@ -14,6 +14,7 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import 'react-native-reanimated';
@@ -22,8 +23,6 @@ import '../global.css';
 
 import { cosmicGradients } from '@/constants/theme';
 import { subscribeAuthDeepLinks } from '@/services/authCallback';
-import { applyDevAccessGrants } from '@/services/authConfig';
-import { applyDevQuickAccess } from '@/services/devAccess';
 import { subscribeSupabaseSessionMerge } from '@/services/authMerge';
 import { bootstrapIdentity } from '@/services/identity';
 import { configureRevenueCat } from '@/services/revenuecat';
@@ -92,8 +91,6 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (isServerEnvironment()) return;
-    applyDevAccessGrants();
-    applyDevQuickAccess();
     const stopDeepLinks = subscribeAuthDeepLinks();
     const stopMerge = subscribeSupabaseSessionMerge();
     void bootstrapIdentity().then(() => {
@@ -107,27 +104,24 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    if (Constants.appOwnership === 'expo') return;
+    if (Constants.appOwnership === 'expo' || Platform.OS === 'web') return;
+
+    const handleNotification = (response: import('expo-notifications').NotificationResponse) => {
+      const link = getNotificationDeepLink(response);
+      if (!link) return;
+      void import('@/utils/navigationFlow').then(({ navigateFromNotification }) => {
+        void navigateFromNotification(link);
+      });
+    };
 
     let sub: ReturnType<typeof import('expo-notifications').addNotificationResponseReceivedListener> | undefined;
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const Notifications = require('expo-notifications');
-      sub = Notifications.addNotificationResponseReceivedListener(
-        (response: import('expo-notifications').NotificationResponse) => {
-          const link = getNotificationDeepLink(response);
-          if (!link) return;
-              import('@/utils/navigationFlow').then(({ tryEnterMainApp, normalizeAppDeepLink, isMainTabDeepLink }) => {
-            import('@/store/sessionStore').then(({ useSessionStore }) => {
-              const target = normalizeAppDeepLink(link);
-              if (isMainTabDeepLink(link) && !useSessionStore.getState().hasEnteredMain) {
-                void tryEnterMainApp();
-              }
-              import('expo-router').then(({ router }) => {
-                router.push(target as never);
-              });
-            });
-          });
+      sub = Notifications.addNotificationResponseReceivedListener(handleNotification);
+      void Notifications.getLastNotificationResponseAsync().then(
+        (response: import('expo-notifications').NotificationResponse | null) => {
+          if (response) handleNotification(response);
         },
       );
     } catch {

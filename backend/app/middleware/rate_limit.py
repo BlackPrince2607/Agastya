@@ -23,6 +23,10 @@ _LIMITS: dict[str, tuple[int, int]] = {
     "/sessions/register": (10, 60),
     "/sessions/bootstrap": (20, 60),
     "/sessions/profile": (20, 60),
+    "/sessions/merge": (10, 60),
+    "/auth/check-email": (10, 60),
+    "/auth/delete-account": (5, 3600),
+    "/billing/checkout": (5, 60),
 }
 
 _windows: dict[str, deque[float]] = {}
@@ -81,12 +85,12 @@ def _get_redis(settings: Settings):
         return None
 
 
-async def _check_redis(key: str, max_requests: int, window_seconds: int) -> int | None:
-    """Return retry_after seconds if limited, else None."""
+async def _check_redis(key: str, max_requests: int, window_seconds: int) -> tuple[bool, int | None]:
+    """Return (redis_active, retry_after). redis_active is False when Redis is down."""
     settings = get_settings()
     r = _get_redis(settings)
     if r is None:
-        return None
+        return False, None
     try:
         now = time.time()
         pipe = r.pipeline()
@@ -100,12 +104,12 @@ async def _check_redis(key: str, max_requests: int, window_seconds: int) -> int 
             oldest = await r.zrange(key, 0, 0, withscores=True)
             if oldest:
                 retry = int(window_seconds - (now - oldest[0][1])) + 1
-                return max(retry, 1)
-            return window_seconds
-        return None
+                return True, max(retry, 1)
+            return True, window_seconds
+        return True, None
     except Exception as exc:
         logger.warning("Redis rate limit error: %s", exc)
-        return None
+        return False, None
 
 
 def _check_memory(key: str, max_requests: int, window_seconds: int) -> int | None:
@@ -134,17 +138,18 @@ async def check_rate_limit(
     session_id = await _read_session_id(request)
     key = _bucket_key(session_id, request, path)
 
-    retry_after = await _check_redis(key, max_requests, window_seconds)
-    if settings.redis_url and _get_redis(settings) is not None:
+    redis_active = False
+    if settings.redis_url:
+        redis_active, retry_after = await _check_redis(key, max_requests, window_seconds)
         if retry_after is not None:
             raise HTTPException(
                 status_code=429,
                 detail=f"Rate limit reached. Please wait {retry_after}s before retrying.",
                 headers={"Retry-After": str(retry_after)},
             )
-        return
 
-    retry_after = _check_memory(key, max_requests, window_seconds)
+    if not redis_active:
+        retry_after = _check_memory(key, max_requests, window_seconds)
     if retry_after is not None:
         raise HTTPException(
             status_code=429,

@@ -26,20 +26,23 @@ import { ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS } from '@/constants/onboarding
 import { SIGN_IN_UNAVAILABLE } from '@/constants/userCopy';
 import { STITCH_PALM_ART_URI } from '@/constants/stitchWelcome';
 import { track } from '@/services/analytics';
-import { completeAuthFromUrl } from '@/services/authCallback';
+import { completeAuthFromUrl, setPendingAuthReturnUrl } from '@/services/authCallback';
+import { beginAccountOAuth, endAccountOAuth } from '@/services/authFlow';
 import { isEmailAuthEnabled, isOAuthSignInEnabled } from '@/services/authConfig';
 import { alertForAuthFailure, parseAuthFailure } from '@/services/authErrorUtils';
 import { getAuthRedirectUri } from '@/services/authRedirect';
 import { setPostSignInReturn } from '@/services/authSession';
+import { finishSignIn } from '@/services/authSignIn';
+import { warmUpOAuthBrowser } from '@/services/oauthBrowser';
 import { getSupabase, isSupabaseEnabled } from '@/services/supabase';
 import { useSessionStore } from '@/store/sessionStore';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import {
-  enterMainApp as goToMainApp,
   hasRitualReading,
-  resolveAccountBackHref,
-  resolveResumeHref,
+  resolveOnboardingHref,
+  tryEnterMainApp,
 } from '@/utils/navigationFlow';
+import { deferRouterReplace, resetAppNavigation } from '@/utils/routerDefer';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -66,6 +69,7 @@ export default function SaveJourneyScreen() {
 
   const [email, setEmail] = useState('');
   const [oauthBusy, setOauthBusy] = useState<'apple' | 'google' | null>(null);
+  const [enterBusy, setEnterBusy] = useState(false);
 
   const redirectUri = getAuthRedirectUri();
   const showOAuth = isOAuthSignInEnabled && !isSignedIn;
@@ -76,15 +80,9 @@ export default function SaveJourneyScreen() {
     }
   }, [fromProfileFlow]);
 
-  const handleBack = () => {
-    router.replace(
-      resolveAccountBackHref({
-        fromPaywall,
-        fromProfile,
-        seed: mergedSeed,
-      }),
-    );
-  };
+  useEffect(() => {
+    warmUpOAuthBrowser();
+  }, []);
 
   const openLegal = (url: string) => {
     void Linking.openURL(url).catch(() => {
@@ -119,6 +117,7 @@ export default function SaveJourneyScreen() {
     if (oauthBusy) return;
 
     setOauthBusy(provider);
+    beginAccountOAuth();
     try {
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider,
@@ -152,16 +151,25 @@ export default function SaveJourneyScreen() {
       }
 
       const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUri);
+
       if (result.type === 'success' && result.url) {
-        const authResult = await completeAuthFromUrl(result.url);
-        if (!authResult.ok) {
-          const alert = alertForAuthFailure(
-            parseAuthFailure(authResult.message ?? 'We could not finish signing you in.'),
-          );
-          Alert.alert(alert.title, alert.body);
-          return;
+        setPendingAuthReturnUrl(result.url);
+        setEnterBusy(true);
+        try {
+          const authResult = await completeAuthFromUrl(result.url);
+          if (!authResult.ok) {
+            const alert = alertForAuthFailure(
+              parseAuthFailure(authResult.message ?? 'We could not finish signing you in.'),
+            );
+            Alert.alert(alert.title, alert.body);
+            return;
+          }
+          track('auth_oauth_attempt', { provider });
+          await finishSignIn({ userId: authResult.userId, recovery: authResult.recovery });
+        } finally {
+          setEnterBusy(false);
         }
-        track('auth_oauth_attempt', { provider });
+        return;
       } else if (result.type === 'cancel' || result.type === 'dismiss') {
         return;
       } else {
@@ -174,13 +182,35 @@ export default function SaveJourneyScreen() {
       const alert = alertForAuthFailure(parseAuthFailure(err instanceof Error ? err : String(err)));
       Alert.alert(alert.title, alert.body);
     } finally {
+      endAccountOAuth();
       setOauthBusy(null);
     }
   };
 
+  const continueOnboarding = () => {
+    if (enterBusy) return;
+    setEnterBusy(true);
+    resetAppNavigation(resolveOnboardingHref());
+    setEnterBusy(false);
+  };
+
+  const enterApp = () => {
+    if (enterBusy) return;
+    setEnterBusy(true);
+    void tryEnterMainApp()
+      .then((result) => {
+        if (result === 'need_ritual') {
+          deferRouterReplace(resolveOnboardingHref());
+        } else if (result === 'need_sign_in') {
+          Alert.alert('Sign-in required', 'Please sign in again to enter the app.');
+        }
+      })
+      .finally(() => setEnterBusy(false));
+  };
+
   const headline = fromProfileFlow
     ? 'Sign in to your account'
-    : 'Save Your Reading & Continue Your Journey';
+    : 'Save your reading';
   const subhead = fromProfileFlow
     ? 'Back up your reading and sync across devices.'
     : 'Sign in to save your report, chat history, and daily progress on any device.';
@@ -203,7 +233,6 @@ export default function SaveJourneyScreen() {
               total={ONBOARDING_TOTAL_STEPS}
               showBack
               useClose
-              onBack={handleBack}
             />
 
             <View className="overflow-hidden rounded-glass border border-white/10 shadow-aura" style={{ aspectRatio: 4 / 3 }}>
@@ -230,9 +259,9 @@ export default function SaveJourneyScreen() {
                   {authEmail ? `Signed in as ${authEmail}.` : 'You’re signed in.'}{' '}
                   {fromProfileFlow
                     ? 'Return to your profile below.'
-                    : hasEnteredMain
-                      ? 'Return to the app below.'
-                      : 'Finish onboarding, then enter the app.'}
+                    : hasRitualReading() || hasEnteredMain
+                      ? 'Tap Enter Agastya below.'
+                      : 'Tap Continue onboarding below to pick up where you left off.'}
                 </Text>
               </GlassCard>
             ) : null}
@@ -333,7 +362,7 @@ export default function SaveJourneyScreen() {
                 </Pressable>
               </View>
               <Text className="font-label text-[10px] uppercase tracking-[0.08em] text-on-surface-variant/70">
-                © {new Date().getFullYear()} Agastya AI Spirituality
+                © {new Date().getFullYear()} Agastya
               </Text>
             </View>
           </ScrollView>
@@ -344,10 +373,18 @@ export default function SaveJourneyScreen() {
             <View className="gap-y-3">
               {isSignedIn && fromProfileFlow ? (
                 <NebulaButton label="Back to profile" onPress={() => router.replace('/(main)/profile')} />
-              ) : isSignedIn && hasRitualReading() ? (
-                <NebulaButton label="Enter Agastya" onPress={() => goToMainApp()} />
+              ) : isSignedIn && (hasRitualReading() || hasEnteredMain) ? (
+                <NebulaButton
+                  label={enterBusy ? 'Opening Agastya…' : 'Enter Agastya'}
+                  disabled={enterBusy || oauthBusy !== null}
+                  onPress={enterApp}
+                />
               ) : isSignedIn ? (
-                <NebulaButton label="Continue onboarding" onPress={() => router.replace(resolveResumeHref())} />
+                <NebulaButton
+                  label={enterBusy ? 'Loading…' : 'Continue onboarding'}
+                  disabled={enterBusy || oauthBusy !== null}
+                  onPress={continueOnboarding}
+                />
               ) : null}
               {!isSignedIn ? (
                 <Text className="mt-1 text-center font-inter text-[12px] leading-5 text-md-on-surface-variant">

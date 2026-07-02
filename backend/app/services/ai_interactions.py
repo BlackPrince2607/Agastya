@@ -25,6 +25,10 @@ _FALLBACK_SUGGESTIONS = [
 ]
 
 
+class GuideLlmUnavailableError(Exception):
+    """Groq is configured but the completion request failed."""
+
+
 def _split_suggestions(text: str) -> tuple[str, list[str]]:
     """Strip a trailing ``SUGGESTIONS: [...]`` line and parse the chips."""
     match = _SUGGESTION_LINE.search(text)
@@ -58,10 +62,19 @@ async def generate_chat_reply(
     settings: Settings,
     body: ChatRequest,
     server_is_premium: bool = False,
+    prior_chat_tail: list[dict[str, str]] | None = None,
 ) -> tuple[str, list[str]]:
     # Use server-authoritative premium flag only.
     is_premium = server_is_premium
-    if not is_premium and len(body.messages) > 5:
+    tail = prior_chat_tail or []
+    body_user_count = sum(1 for m in body.messages if m.role in {"user", "you"})
+    tail_user_count = sum(1 for t in tail if t.get("role") in {"user", "you"})
+    if body_user_count <= 1 and tail_user_count > 0:
+        effective_user_count = tail_user_count + 1
+    else:
+        effective_user_count = body_user_count
+
+    if not is_premium and effective_user_count > 5:
         return (
             "You've reached the luminous preview ceiling—unlock unlimited guide transmissions "
             "to continue this thread without interruption.",
@@ -94,17 +107,25 @@ async def generate_chat_reply(
         max_tokens=480,
     )
     if completion is None:
+        if settings.groq_enabled:
+            raise GuideLlmUnavailableError()
         return _heuristic_chat(body), list(_FALLBACK_SUGGESTIONS)
 
     try:
         text = completion.choices[0].message.content or ""
         reply, suggestions = _split_suggestions(text)
         if not reply:
+            if settings.groq_enabled:
+                raise GuideLlmUnavailableError()
             return _heuristic_chat(body), list(_FALLBACK_SUGGESTIONS)
         return reply, suggestions or list(_FALLBACK_SUGGESTIONS)
+    except GuideLlmUnavailableError:
+        raise
     except Exception as exc:
         logger.exception("Chat reply parse failed: %s", exc)
         sentry_sdk.capture_exception(exc)
+        if settings.groq_enabled:
+            raise GuideLlmUnavailableError() from exc
         return _heuristic_chat(body), list(_FALLBACK_SUGGESTIONS)
 
 

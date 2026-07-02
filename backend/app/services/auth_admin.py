@@ -73,3 +73,26 @@ async def user_exists_by_email(email: str, settings: Settings) -> bool | None:
             page += 1
 
     return None
+
+
+async def delete_user_by_id(user_id: str, settings: Settings) -> bool:
+    """Delete a Supabase Auth user via the admin API."""
+    if not settings.supabase_url or not settings.supabase_service_role_key:
+        return False
+
+    base = settings.supabase_url.rstrip("/")
+    key = settings.supabase_service_role_key
+    headers = {
+        "Authorization": f"Bearer {key}",
+        "apikey": key,
+    }
+
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        try:
+            res = await client.delete(f"{base}/auth/v1/admin/users/{user_id}", headers=headers)
+            if res.status_code in (200, 204):
+                return True
+            logger.warning("auth admin delete user %s: %s %s", user_id, res.status_code, res.text[:200])
+        except httpx.HTTPError as exc:
+            logger.warning("auth admin delete user failed: %s", exc)
+    return False

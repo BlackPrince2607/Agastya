@@ -12,8 +12,8 @@ from app.services.palm_cv import extract_line_geometry
 
 @pytest.fixture
 def client(monkeypatch):
-    monkeypatch.setenv("DEBUG", "true")
     monkeypatch.setenv("PALM_ANALYSIS_MODE", "dummy")
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
     get_settings.cache_clear()
     return TestClient(create_app())
 

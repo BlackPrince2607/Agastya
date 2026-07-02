@@ -4,7 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.utils.validators import _parse_uuid, validate_device_install_id, validate_session_id
+from app.utils.validators import _parse_uuid, validate_device_install_id
 
 
 class SessionRegisterBody(BaseModel):
@@ -72,6 +72,7 @@ class SessionProfileResponse(BaseModel):
 class SessionMergeBody(BaseModel):
     anonymous_session_id: str = Field(alias="anonymousSessionId")
     supabase_user_id: str = Field(alias="supabaseUserId")
+    device_install_id: str | None = Field(default=None, alias="deviceInstallId")
 
     model_config = {"populate_by_name": True}
 
@@ -79,6 +80,13 @@ class SessionMergeBody(BaseModel):
     @classmethod
     def _uuid_fields(cls, v: str) -> str:
         return _parse_uuid(v)
+
+    @field_validator("device_install_id")
+    @classmethod
+    def _device_id(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        return validate_device_install_id(v)
 
 
 class SessionMergeResponse(BaseModel):
@@ -100,5 +108,6 @@ class SessionBootstrapResponse(BaseModel):
     preview_report: dict[str, Any] | None = Field(default=None, alias="previewReport")
     full_report: dict[str, Any] | None = Field(default=None, alias="fullReport")
     is_premium: bool = Field(default=False, alias="isPremium")
+    chat_tail: list[dict[str, str]] = Field(default_factory=list, alias="chatTail")
 
     model_config = {"populate_by_name": True}

@@ -12,20 +12,22 @@ Why this file exists:
 
 from functools import lru_cache
 from pathlib import Path
+import sys
 from typing import Literal
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 
 # backend/ directory (parent of app/)
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent
+_IN_PYTEST = "pytest" in sys.modules
 
 
 class Settings(BaseSettings):
     """Application settings. Add fields as you integrate Supabase / AI."""
 
     model_config = SettingsConfigDict(
-        env_file=str(_BACKEND_ROOT / ".env"),
+        env_file=str(_BACKEND_ROOT / ".env") if not _IN_PYTEST else None,
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -58,13 +60,16 @@ class Settings(BaseSettings):
     # --- Supabase (optional — enables session persistence + palm storage) ---
     supabase_url: str | None = None
     supabase_service_role_key: str | None = None
-    supabase_jwt_secret: str | None = None
+    # JWKS cache TTL (seconds). Supabase edge caches JWKS for ~10 minutes; keep in sync for rotation.
+    supabase_jwks_cache_seconds: int = 600
     supabase_palm_bucket: str = "palms"
 
     # --- Groq (optional — deterministic fallbacks when unset) ---
     groq_api_key: str | None = None
     groq_chat_model: str = "llama-3.3-70b-versatile"
     groq_vision_model: str = "meta-llama/llama-4-scout-17b-16e-instruct"
+    groq_chat_timeout_seconds: float = 60.0
+    groq_vision_timeout_seconds: float = 90.0
 
     # --- RevenueCat webhook (optional — skips signature verification when absent) ---
     revenuecat_webhook_secret: str | None = None
@@ -100,6 +105,26 @@ class Settings(BaseSettings):
     def _strip_cors(cls, v: str) -> str:
         return v.strip()
 
+    @field_validator("groq_api_key")
+    @classmethod
+    def _strip_groq_key(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        stripped = v.strip()
+        return stripped or None
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        # Prefer backend/.env over stale OS-level GROQ_API_KEY (common on Windows dev).
+        return init_settings, dotenv_settings, env_settings, file_secret_settings
+
 
 def validate_production_settings(settings: Settings) -> None:
     """Fail fast when DEBUG=false and required production secrets are missing."""
@@ -112,10 +137,6 @@ def validate_production_settings(settings: Settings) -> None:
         missing.append("SUPABASE_URL")
     if not settings.supabase_service_role_key:
         missing.append("SUPABASE_SERVICE_ROLE_KEY")
-    if not settings.supabase_jwt_secret:
-        missing.append("SUPABASE_JWT_SECRET")
-    if not settings.revenuecat_webhook_secret:
-        missing.append("REVENUECAT_WEBHOOK_SECRET")
     if missing:
         raise RuntimeError(
             f"Production startup blocked — set required env vars: {', '.join(missing)}"

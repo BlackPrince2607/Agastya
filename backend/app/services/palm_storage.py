@@ -95,3 +95,31 @@ async def upload_palm_capture_if_configured(
     except Exception as exc:
         logger.warning("palm storage upload error: %s", exc)
     return None
+
+
+async def delete_palm_capture_if_configured(settings: Settings, *, storage_path: str | None) -> None:
+    """Best-effort delete of a stored palm capture."""
+    if not storage_path or not settings.supabase_url or not settings.supabase_service_role_key:
+        return
+
+    path = storage_path.strip()
+    if path.startswith("palms/"):
+        path = path[len("palms/") :]
+    if not path or ".." in path:
+        return
+
+    base = settings.supabase_url.rstrip("/")
+    bucket = settings.supabase_palm_bucket.strip() or "palms"
+    url = f"{base}/storage/v1/object/{bucket}/{path}"
+    headers = {
+        "Authorization": f"Bearer {settings.supabase_service_role_key}",
+        "apikey": settings.supabase_service_role_key,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            res = await client.delete(url, headers=headers)
+        if res.status_code not in (200, 204):
+            logger.warning("palm storage delete failed: %s %s", res.status_code, res.text[:200])
+    except Exception as exc:
+        logger.warning("palm storage delete error: %s", exc)

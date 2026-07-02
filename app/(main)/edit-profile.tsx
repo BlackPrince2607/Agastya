@@ -1,6 +1,5 @@
-import { router } from 'expo-router';
 import { useState } from 'react';
-import { View } from 'react-native';
+import { Alert, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PageTitle } from '@/components/feedback';
@@ -8,28 +7,54 @@ import { BackButton } from '@/components/layout/BackButton';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { OnboardingScroll } from '@/components/layout/OnboardingScroll';
 import { alertProfileValidationError, ProfileBasicsForm } from '@/components/profile/ProfileBasicsForm';
+import { FocusTopicsPicker, validateFocusTopics } from '@/components/profile/FocusTopicsPicker';
 import { NebulaButton } from '@/components/ui';
+import { patchSessionProfile } from '@/services/agastyaApi';
+import { isApiConfigured } from '@/services/env';
 import { syncProfileRemote } from '@/services/identity';
-import type { Gender } from '@/store/sessionStore';
+import type { FocusTopic, Gender } from '@/store/sessionStore';
 import { useSessionStore } from '@/store/sessionStore';
+import { goBack } from '@/utils/navigationBack';
 
 export default function EditProfileScreen() {
   const insets = useSafeAreaInsets();
   const storedName = useSessionStore((s) => s.userDisplayName);
   const storedGender = useSessionStore((s) => s.userGender);
+  const storedTopics = useSessionStore((s) => s.focusTopics);
   const setProfileBasics = useSessionStore((s) => s.setProfileBasics);
+  const setFocusTopics = useSessionStore((s) => s.setFocusTopics);
 
   const [name, setName] = useState(storedName ?? '');
   const [gender, setGender] = useState<Gender | undefined>(storedGender);
+  const [topics, setTopics] = useState<FocusTopic[]>(storedTopics.length ? storedTopics : ['growth']);
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
     if (!alertProfileValidationError(name, gender)) return;
+    const topicError = validateFocusTopics(topics);
+    if (topicError) {
+      Alert.alert('Focus areas', topicError);
+      return;
+    }
+
     setSaving(true);
     try {
       setProfileBasics({ displayName: name.trim(), gender });
+      setFocusTopics(topics);
       await syncProfileRemote();
-      router.back();
+
+      const snap = useSessionStore.getState();
+      if (isApiConfigured() && snap.sessionId && snap.deviceInstallId) {
+        await patchSessionProfile({
+          sessionId: snap.sessionId,
+          deviceInstallId: snap.deviceInstallId,
+          displayName: name.trim(),
+          gender,
+          focusTopics: topics,
+        });
+      }
+
+      goBack({ pathname: '/edit-profile' });
     } finally {
       setSaving(false);
     }
@@ -41,7 +66,7 @@ export default function EditProfileScreen() {
         <OnboardingScroll bottomInset={120}>
           <BackButton />
 
-          <PageTitle title="Edit profile" subtitle="Update how Agastya addresses you and tailors your reading." />
+          <PageTitle title="Edit profile" subtitle="Update how Agastya addresses you and shapes your reading." />
 
           <ProfileBasicsForm
             name={name}
@@ -49,6 +74,10 @@ export default function EditProfileScreen() {
             gender={gender}
             onGenderChange={setGender}
           />
+
+          <View className="mt-8">
+            <FocusTopicsPicker topics={topics} onChange={setTopics} />
+          </View>
         </OnboardingScroll>
 
         <View

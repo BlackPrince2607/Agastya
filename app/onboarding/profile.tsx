@@ -7,7 +7,6 @@ import { OnboardingScroll } from '@/components/layout/OnboardingScroll';
 import { OnboardingHeader } from '@/components/onboarding/OnboardingHeader';
 import { alertProfileValidationError, ProfileBasicsForm } from '@/components/profile/ProfileBasicsForm';
 import { NebulaButton } from '@/components/ui';
-import { EntertainmentDisclaimer } from '@/components/legal/EntertainmentDisclaimer';
 import { ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS } from '@/constants/onboarding';
 import { syncProfileRemote } from '@/services/identity';
 import { deferRouterPush } from '@/utils/routerDefer';
@@ -50,7 +49,6 @@ export default function ProfileOnboardingScreen() {
             onGenderChange={setGender}
           />
 
-          <EntertainmentDisclaimer dense />
         </OnboardingScroll>
 
         <View

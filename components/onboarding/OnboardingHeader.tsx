@@ -1,9 +1,11 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
+import { useLocalSearchParams, usePathname, useSegments } from 'expo-router';
+import type { Href } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
 
 import { BrandWordmark, Icon } from '@/components/ui';
 import { gradients } from '@/constants/theme';
+import { goBack, normalizeRouteParams } from '@/utils/navigationBack';
 
 type OnboardingHeaderProps = {
   /** Current ritual step (1-indexed). */
@@ -13,11 +15,33 @@ type OnboardingHeaderProps = {
   /** Use close (X) instead of back chevron — account / sign-in screens. */
   useClose?: boolean;
   onBack?: () => void;
+  /** Override automatic back routing when history is empty. */
+  backHref?: Href;
 };
 
 /** Clean onboarding top bar: close/back, Agastya wordmark, labeled progress. */
-export function OnboardingHeader({ step, total = 7, showBack = true, useClose = false, onBack }: OnboardingHeaderProps) {
+export function OnboardingHeader({
+  step,
+  total = 7,
+  showBack = true,
+  useClose = false,
+  onBack,
+  backHref,
+}: OnboardingHeaderProps) {
+  const pathname = usePathname();
+  const segments = useSegments();
+  const params = normalizeRouteParams(useLocalSearchParams());
   const frac = step ? Math.min(1, Math.max(0, step / total)) : 0;
+
+  const handleBack = () => {
+    goBack({
+      pathname,
+      segments: [...segments],
+      params,
+      fallback: backHref,
+      onCustomBack: onBack,
+    });
+  };
 
   return (
     <View className="mb-5 px-1">
@@ -26,7 +50,7 @@ export function OnboardingHeader({ step, total = 7, showBack = true, useClose = 
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={useClose ? 'Close' : 'Go back'}
-            onPress={onBack ?? (() => router.back())}
+            onPress={handleBack}
             className="h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.05] active:opacity-80">
             <Icon
               name={useClose ? 'close' : 'chevron_left'}
@@ -37,7 +61,7 @@ export function OnboardingHeader({ step, total = 7, showBack = true, useClose = 
         ) : (
           <View className="h-11 w-11" />
         )}
-        <BrandWordmark className="text-[13px] tracking-[0.42em]" />
+        <BrandWordmark size="sm" />
         <View className="h-11 w-11" />
       </View>
 

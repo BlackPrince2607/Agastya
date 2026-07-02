@@ -11,16 +11,49 @@ const easProjectId = appJson.expo.extra?.eas?.projectId ?? '';
 const updatesConfigured =
   Boolean(easProjectId) && !String(easProjectId).includes('REPLACE_WITH');
 
-const truthy = (v) => v === true || v === 'true';
+/** Dev machine LAN IP for physical phones (Metro tunnel does not expose port 8000). */
+function getDevLanApiUrl() {
+  const explicit = process.env.EXPO_PUBLIC_AGASTYA_API_LAN_URL?.trim();
+  if (explicit) return explicit.replace(/\/$/, '');
+
+  const api = process.env.EXPO_PUBLIC_AGASTYA_API_URL?.trim() ?? '';
+  if (!api.includes('localhost') && !api.includes('127.0.0.1')) return undefined;
+
+  const os = require('os');
+  const nets = os.networkInterfaces();
+  for (const iface of Object.values(nets)) {
+    if (!iface) continue;
+    for (const net of iface) {
+      if (net.family !== 'IPv4' || net.internal) continue;
+      const { address } = net;
+      if (
+        address.startsWith('192.168.') ||
+        address.startsWith('10.') ||
+        /^172\.(1[6-9]|2\d|3[01])\./.test(address)
+      ) {
+        return `http://${address}:8000`;
+      }
+    }
+  }
+  return undefined;
+}
+
+const basePlugins = appJson.expo.plugins ?? [];
+const hasSentryNativePlugin = basePlugins.some(
+  (entry) =>
+    entry === '@sentry/react-native' ||
+    (Array.isArray(entry) && entry[0] === '@sentry/react-native'),
+);
+const plugins = hasSentryNativePlugin ? basePlugins : [...basePlugins, '@sentry/react-native'];
 
 module.exports = {
   expo: {
     ...appJson.expo,
+    plugins,
     extra: {
       ...(appJson.expo.extra ?? {}),
       agastyaApiUrl: process.env.EXPO_PUBLIC_AGASTYA_API_URL || undefined,
-      bypassAuth: truthy(process.env.EXPO_PUBLIC_BYPASS_AUTH),
-      allowDevPremium: truthy(process.env.EXPO_PUBLIC_ALLOW_DEV_PREMIUM),
+      agastyaApiLanUrl: getDevLanApiUrl(),
     },
     // Disable OTA updates until EAS project ID is configured — avoids dev/build errors.
     updates: updatesConfigured ? appJson.expo.updates : { enabled: false },

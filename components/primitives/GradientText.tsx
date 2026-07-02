@@ -1,8 +1,7 @@
 import MaskedView from '@react-native-masked-view/masked-view';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { PropsWithChildren } from 'react';
-import type { ColorValue } from 'react-native';
-import { Text, type StyleProp, type TextStyle } from 'react-native';
+import { Platform, Text, type ColorValue, type StyleProp, type TextStyle } from 'react-native';
 
 import { cosmicGradients } from '@/constants/theme';
 
@@ -14,6 +13,12 @@ type GradientTextProps = PropsWithChildren<{
   textStyle?: StyleProp<TextStyle>;
 }>;
 
+function gradientCss(stops: GradientStops): string {
+  const [a, b, ...rest] = stops;
+  const colors = [a, b, ...rest].join(', ');
+  return `linear-gradient(135deg, ${colors})`;
+}
+
 /** Large display lines with ion → violet bleed */
 export function GradientText({
   children,
@@ -21,6 +26,25 @@ export function GradientText({
   className,
   textStyle,
 }: GradientTextProps) {
+  if (Platform.OS === 'web') {
+    return (
+      <Text
+        className={`font-semibold ${className ?? ''}`}
+        style={[
+          textStyle,
+          {
+            backgroundImage: gradientCss(gradient),
+            // RN Web passes these through to the DOM for gradient-filled text.
+            backgroundClip: 'text',
+            WebkitBackgroundClip: 'text',
+            color: 'transparent',
+          } as TextStyle,
+        ]}>
+        {children}
+      </Text>
+    );
+  }
+
   return (
     <MaskedView maskElement={<Text className={`font-semibold ${className ?? ''}`}>{children}</Text>}>
       <LinearGradient colors={[...gradient]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>

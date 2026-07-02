@@ -1,60 +1,137 @@
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { PalmScanHand } from '@/store/sessionStore';
 
 type HandToggleProps = {
   hand: PalmScanHand | null;
   onSelect: (hand: PalmScanHand) => void;
+  /** Shorter chips for camera dock. */
+  compact?: boolean;
 };
+
+const CHIP = {
+  magenta: '#e879f9',
+  magentaBg: 'rgba(232,121,249,0.15)',
+  borderIdle: 'rgba(255,255,255,0.15)',
+  bgIdle: 'rgba(0,0,0,0.45)',
+  mist: '#e6e1e5',
+  subtext: '#cbc4ce',
+} as const;
 
 function ToggleOption({
   label,
   sub,
   selected,
   onPress,
+  compact,
 }: {
   label: string;
-  sub: string;
+  sub?: string;
   selected: boolean;
   onPress: () => void;
+  compact?: boolean;
 }) {
   return (
-    <Pressable onPress={onPress} className="min-w-0 flex-1" accessibilityRole="button" accessibilityState={{ selected }}>
+    <Pressable
+      onPress={onPress}
+      style={styles.pressable}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}>
       <View
-        className={
-          selected
-            ? 'min-h-[58px] justify-center rounded-full border border-stitch-magenta bg-stitch-magenta/15 px-3 py-2.5 shadow-glow'
-            : 'min-h-[58px] justify-center rounded-full border border-white/15 bg-black/45 px-3 py-2.5'
-        }>
-        <Text className="text-center font-space-grotesk text-[11px] font-semibold uppercase tracking-[0.12em] text-mist" numberOfLines={1}>
+        style={[
+          styles.chip,
+          compact ? styles.chipCompact : styles.chipRegular,
+          selected ? styles.chipSelected : styles.chipIdle,
+        ]}>
+        <Text style={styles.label} numberOfLines={1}>
           {label}
         </Text>
-        <Text className="mt-0.5 text-center font-inter text-[10px] leading-4 text-md-on-surface-variant" numberOfLines={2}>
-          {sub}
-        </Text>
+        {!compact && sub ? (
+          <Text style={styles.sub} numberOfLines={2}>
+            {sub}
+          </Text>
+        ) : null}
       </View>
     </Pressable>
   );
 }
 
-/** Left / right hand picker — fixed height prevents layout shift when switching. */
-export function HandToggleRow({ hand, onSelect }: HandToggleProps) {
+/** Left / right hand picker — static styles avoid NativeWind dynamic className crashes. */
+export function HandToggleRow({ hand, onSelect, compact }: HandToggleProps) {
   const resolved = hand ?? 'right';
 
   return (
-    <View className="w-full flex-row gap-3">
+    <View style={styles.row}>
       <ToggleOption
-        label="Left hand"
-        sub="Receptive energy"
+        label={compact ? 'Left' : 'Left hand'}
+        sub="Non-dominant hand"
         selected={resolved === 'left'}
         onPress={() => onSelect('left')}
+        compact={compact}
       />
       <ToggleOption
-        label="Right hand"
-        sub="Active energy"
+        label={compact ? 'Right' : 'Right hand'}
+        sub="Dominant hand"
         selected={resolved === 'right'}
         onPress={() => onSelect('right')}
+        compact={compact}
       />
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  row: {
+    width: '100%',
+    flexDirection: 'row',
+    gap: 12,
+  },
+  pressable: {
+    minWidth: 0,
+    flex: 1,
+  },
+  chip: {
+    justifyContent: 'center',
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+  },
+  chipCompact: {
+    minHeight: 44,
+    paddingVertical: 8,
+  },
+  chipRegular: {
+    minHeight: 58,
+    paddingVertical: 10,
+  },
+  chipIdle: {
+    borderColor: CHIP.borderIdle,
+    backgroundColor: CHIP.bgIdle,
+  },
+  chipSelected: {
+    borderColor: CHIP.magenta,
+    backgroundColor: CHIP.magentaBg,
+    shadowColor: CHIP.magenta,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  label: {
+    textAlign: 'center',
+    fontFamily: 'SpaceGrotesk_600SemiBold',
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 1.32,
+    textTransform: 'uppercase',
+    color: CHIP.mist,
+  },
+  sub: {
+    marginTop: 2,
+    textAlign: 'center',
+    fontFamily: 'Inter_400Regular',
+    fontSize: 10,
+    lineHeight: 16,
+    color: CHIP.subtext,
+  },
+});

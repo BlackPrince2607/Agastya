@@ -56,7 +56,7 @@ cp backend/.env.example backend/.env
 ```
 Fill in:
 - `GROQ_API_KEY` — from console.groq.com
-- `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET` — from Supabase
+- `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` — from Supabase (user JWTs verified via JWKS; no JWT secret needed)
 - `REVENUECAT_WEBHOOK_SECRET` — from RevenueCat → Integrations → Webhooks → Authorization header value
 - `SENTRY_DSN` — from Sentry → Python project → Client Keys
 
@@ -100,10 +100,9 @@ Restart Metro with cache clear: `npx expo start -c`.
 ```env
 SUPABASE_URL=https://<project-ref>.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
-SUPABASE_JWT_SECRET=<JWT secret from Project Settings → API>
 ```
 
-`SUPABASE_JWT_SECRET` must match Supabase → Project Settings → API → JWT Secret. Without it, sign-in succeeds but `/v1/sessions/merge` returns 503/401.
+User access tokens are verified via JWKS at `{SUPABASE_URL}/auth/v1/.well-known/jwks.json` (ES256 signing keys). Ensure `SUPABASE_URL` matches your project; the backend must be able to reach that JWKS endpoint.
 
 ### Supabase Dashboard → Authentication → URL Configuration
 
@@ -208,7 +207,6 @@ fly secrets set \
   GROQ_API_KEY=sk-... \
   SUPABASE_URL=https://xxx.supabase.co \
   SUPABASE_SERVICE_ROLE_KEY=ey... \
-  SUPABASE_JWT_SECRET=... \
   REVENUECAT_WEBHOOK_SECRET=... \
   SENTRY_DSN=https://... \
   DEBUG=false \
@@ -217,12 +215,26 @@ fly deploy --config fly.toml
 ```
 
 ### Option B: Railway
-```bash
-# Install Railway CLI: https://railway.app/
-railway login
-railway up
-# Set env vars in Railway Dashboard → Variables
-```
+
+**Via GitHub (recommended)**
+
+1. Push repo to GitHub
+2. [railway.app](https://railway.app) → **New Project** → **Deploy from GitHub repo** → select this repo
+3. Railway uses `railway.toml` + `backend/Dockerfile` automatically
+4. Set variables from `railway.env.example` in **Railway Dashboard → Variables**
+5. **Settings → Networking → Generate Domain** → copy the public HTTPS URL
+6. Verify: `curl https://YOUR-APP.up.railway.app/v1/health`
+7. Set `EXPO_PUBLIC_AGASTYA_API_URL` to that URL for the APK build
+
+Pushes to `main` that touch `backend/**` auto-redeploy.
+
+**Via GitHub Actions** (alternative): add `RAILWAY_TOKEN` to GitHub Secrets; `.github/workflows/backend-deploy.yml` deploys on push.
+
+**Via CLI:** `railway login && railway init && npm run deploy:railway`
+
+Required Railway variables: `GROQ_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DEBUG=false`
+
+If deploy crashes on startup, open **Deploy Logs** — missing `GROQ_API_KEY` or Supabase keys is the usual cause.
 
 ---
 
@@ -284,7 +296,8 @@ Add these secrets in GitHub → Settings → Secrets → Actions:
 | `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY` | RevenueCat Android key |
 | `EXPO_PUBLIC_SENTRY_DSN` | Sentry client DSN |
 | `EXPO_PUBLIC_POSTHOG_KEY` | PostHog key (optional) |
-| `FLY_API_TOKEN` | From fly.io → Account → Access Tokens (for backend deploy) |
+| `RAILWAY_TOKEN` | Railway → Account Settings → Tokens (only if using GitHub Actions deploy; not needed for Railway native GitHub integration) |
+| `FLY_API_TOKEN` | Optional — only if using Fly.io instead of Railway |
 
 ---
 

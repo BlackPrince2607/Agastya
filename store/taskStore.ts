@@ -49,12 +49,13 @@ export const useTaskStore = create<TaskStore>()(
 
       toggleComplete: (id) => {
         const { completedIds, tasks, taskDate, history, streak } = get();
+        const activeCount = tasks.length;
         const has = completedIds.includes(id);
         const nextCompleted = has ? completedIds.filter((c) => c !== id) : [...completedIds, id];
 
         let nextStreak = streak;
         const nextHistory = { ...history };
-        if (taskDate && !has && tasks.length > 0 && nextCompleted.length === tasks.length) {
+        if (taskDate && !has && activeCount > 0 && nextCompleted.length === activeCount) {
           // All tasks done for the day → record + bump streak.
           if (!history[taskDate]) {
             const dates = Object.keys(history).sort();

@@ -3,6 +3,7 @@ import { Stack } from 'expo-router';
 export default function OnboardingLayout() {
   return (
     <Stack
+      initialRouteName="index"
       screenOptions={{
         headerShown: false,
         /** Horizontal push reads as “next step” in the ritual; fades felt abrupt between trust → profile. */

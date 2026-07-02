@@ -13,15 +13,16 @@ export default function PalmScanWebScreen() {
   const setPalmScanHand = useSessionStore((s) => s.setPalmScanHand);
   const setPalmCaptureBase64 = useSessionStore((s) => s.setPalmCaptureBase64);
   const [uploadBusy, setUploadBusy] = useState(false);
+  const [selectedHand, setSelectedHand] = useState<PalmScanHand>(palmScanHand ?? 'right');
 
-  const uploadAndContinue = async () => {
+  const uploadAndContinue = async (hand: PalmScanHand) => {
     if (uploadBusy) return;
     setUploadBusy(true);
     try {
-      const hand: PalmScanHand = palmScanHand ?? 'right';
       const seed = `${hand}-${Date.now()}`;
       const base64 = await pickPalmImage();
       if (!base64) return;
+      setPalmScanHand(hand);
       setPalmCaptureBase64(base64);
       deferRouterPush({
         pathname: '/onboarding/analysis',
@@ -36,11 +37,11 @@ export default function PalmScanWebScreen() {
 
   return (
     <PalmScanBriefing
-      hand={palmScanHand}
-      onHandChange={setPalmScanHand}
+      hand={palmScanHand ?? selectedHand}
+      onHandChange={setSelectedHand}
       primaryLabel={uploadBusy ? 'Opening…' : 'Upload palm photo'}
       primaryIcon="image"
-      onPrimaryPress={() => void uploadAndContinue()}
+      onPrimaryPress={(hand) => void uploadAndContinue(hand)}
     />
   );
 }

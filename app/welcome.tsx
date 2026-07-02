@@ -1,4 +1,4 @@
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+﻿import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MotiPressable } from 'moti/interactions';
 import { router } from 'expo-router';
@@ -22,10 +22,10 @@ import { triggerLightTap } from '@/hooks/useHapticTap';
 import { readAuthSession } from '@/services/authSession';
 import { isSupabaseEnabled } from '@/services/supabase';
 import { SIGN_IN_UNAVAILABLE } from '@/constants/userCopy';
-import { routeAfterSignInIntent, resolveResumeHref } from '@/utils/navigationFlow';
+import { resolveOnboardingHref, routeAfterSignInIntent } from '@/utils/navigationFlow';
 import { deferRouterReplace } from '@/utils/routerDefer';
 
-/** Pixel translation of Stitch HTML export — MD3 tokens, Inter / Noto Serif / Space Grotesk */
+/** Pixel translation of Stitch HTML export ΓÇö MD3 tokens, Inter / Noto Serif / Space Grotesk */
 const WIN = Dimensions.get('window');
 
 export default function WelcomeScreen() {
@@ -95,14 +95,14 @@ export default function WelcomeScreen() {
           </View>
 
           <Text style={styles.body}>
-            A personalized palm reading and Guide for reflection and fun—entertainment only, not medical or financial advice.
+            A personalized palm reading and Guide for reflection and funΓÇöentertainment only, not medical or financial advice.
           </Text>
 
           <View style={styles.ctaStack}>
             <MotiPressable
               onPress={() => {
                 void triggerLightTap();
-                deferRouterReplace(resolveResumeHref());
+                deferRouterReplace(resolveOnboardingHref());
               }}
               animate={({ pressed }) => ({ scale: pressed ? 0.97 : 1 })}
               transition={{ type: 'timing', duration: 160 }}>
@@ -140,7 +140,7 @@ export default function WelcomeScreen() {
 
       <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 28) }]}>
         <View style={styles.footerRule} />
-        <Text style={styles.footerLine}>Entertainment only · Not medical or financial advice</Text>
+        <Text style={styles.footerLine}>Entertainment only ┬╖ Not medical or financial advice</Text>
       </View>
     </View>
   );

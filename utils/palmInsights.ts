@@ -23,7 +23,7 @@ const HEART: Record<string, { descriptor: string; text: string }> = {
 const HEAD: Record<string, { descriptor: string; text: string }> = {
   long: { descriptor: 'Long & deep', text: 'Your head line is long and thoughtful. You are intuitive, creative, and think several steps ahead.' },
   medium: { descriptor: 'Balanced', text: 'Your head line is balanced. You weigh logic and feeling well before you decide.' },
-  short: { descriptor: 'Focused', text: 'Your head line is focused and decisive. You cut through noise and act with clarity.' },
+  short: { descriptor: 'Focused', text: 'Your head line is focused and decisive. You cut through noise and move with purpose.' },
 };
 
 function pick<T>(map: Record<string, T>, key: string, fallback: T): T {
@@ -90,7 +90,7 @@ export function personalityProfile(palm: PalmAnalysisDto, seed: string): Persona
   ];
 
   const persona = capitalize(palm.personality || 'visionary');
-  const description = `You are ${traits.slice(0, 3).map((t) => t.toLowerCase()).join(', ')} and highly intuitive. You value freedom but also deeply care for the people around you. Your ${persona.toLowerCase()} nature is a strong inner voice—trust it.`;
+  const description = `You are ${traits.slice(0, 3).map((t) => t.toLowerCase()).join(', ')} and highly intuitive. You value freedom but also deeply care for the people around you. Your ${persona.toLowerCase()} nature is a strong inner voice. Trust it.`;
 
   return { traits, shadowTraits, strengths, description };
 }

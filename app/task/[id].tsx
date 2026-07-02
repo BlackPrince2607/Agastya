@@ -1,4 +1,4 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useEffect } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,6 +8,7 @@ import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { PAGE_PADDING } from '@/constants/layout';
 import { GlassCard, Icon, NebulaButton } from '@/components/ui';
 import { useTaskStore } from '@/store/taskStore';
+import { goBack } from '@/utils/navigationBack';
 import { LOCAL_TASKS } from '@/utils/localTasks';
 
 const DIFFICULTY_LABEL: Record<string, string> = {
@@ -28,8 +29,8 @@ export default function TaskDetailScreen() {
   const completed = task ? completedIds.includes(task.id) : false;
 
   useEffect(() => {
-    if (!task) router.back();
-  }, [task]);
+    if (!task) goBack({ pathname: id ? `/task/${id}` : '/task' });
+  }, [task, id]);
 
   if (!task) {
     return null;
@@ -74,7 +75,7 @@ export default function TaskDetailScreen() {
             variant={completed ? 'ghost' : 'nebula'}
             onPress={() => {
               toggleComplete(task.id);
-              if (!completed) router.back();
+              if (!completed) goBack({ pathname: `/task/${task.id}` });
             }}
           />
         </View>

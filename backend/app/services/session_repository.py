@@ -134,11 +134,36 @@ async def link_user(
     client = _client(settings)
     if client is None:
         return False
+    existing = await client.select_one(TABLE, filters={"session_id": anonymous_session_id})
+    if existing:
+        linked_user = existing.get("supabase_user_id")
+        if linked_user and str(linked_user) != supabase_user_id:
+            return False
     return await client.patch(
         TABLE,
         filters={"session_id": anonymous_session_id},
         values={"supabase_user_id": supabase_user_id},
     )
+
+
+async def list_sessions_for_user(
+    supabase_user_id: str,
+    settings: Settings | None = None,
+) -> list[dict[str, Any]]:
+    client = _client(settings)
+    if client is None:
+        return []
+    return await client.select_many(TABLE, filters={"supabase_user_id": supabase_user_id})
+
+
+async def delete_sessions_for_user(
+    supabase_user_id: str,
+    settings: Settings | None = None,
+) -> bool:
+    client = _client(settings)
+    if client is None:
+        return False
+    return await client.delete_rows(TABLE, filters={"supabase_user_id": supabase_user_id})
 
 
 async def set_premium_by_user(

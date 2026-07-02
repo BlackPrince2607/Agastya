@@ -43,6 +43,34 @@ class SupabaseRest:
         rows = res.json()
         return rows[0] if rows else None
 
+    async def select_many(
+        self,
+        table: str,
+        *,
+        filters: dict[str, str],
+        columns: str = "*",
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        params: dict[str, str] = {"select": columns, "limit": str(limit)}
+        for key, value in filters.items():
+            params[key] = f"eq.{value}"
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            res = await client.get(f"{self._base}/{table}", headers=self._headers, params=params)
+        if res.status_code != 200:
+            logger.warning("supabase select_many %s failed: %s", table, res.status_code)
+            return []
+        rows = res.json()
+        return rows if isinstance(rows, list) else []
+
+    async def delete_rows(self, table: str, *, filters: dict[str, str]) -> bool:
+        params = {key: f"eq.{value}" for key, value in filters.items()}
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            res = await client.delete(f"{self._base}/{table}", headers=self._headers, params=params)
+        if res.status_code not in (200, 204):
+            logger.warning("supabase delete %s failed: %s %s", table, res.status_code, res.text[:240])
+            return False
+        return True
+
     async def upsert(self, table: str, row: dict[str, Any], *, on_conflict: str) -> dict[str, Any] | None:
         headers = {**self._headers, "Prefer": "resolution=merge-duplicates,return=representation"}
         params = {"on_conflict": on_conflict}

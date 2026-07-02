@@ -10,6 +10,8 @@ type GlassCardProps = PropsWithChildren<
     muted?: boolean;
     /** Adds the soft lavender aura outer glow. */
     glow?: boolean;
+    /** Flex/layout classes for the content layer above the gradient. */
+    innerClassName?: string;
   }
 >;
 
@@ -18,7 +20,7 @@ type GlassCardProps = PropsWithChildren<
  * (RN has no live backdrop blur for arbitrary content, so we approximate with
  * a translucent fill that reads identically against the cosmic void.)
  */
-export function GlassCard({ muted, glow, className, children, ...rest }: GlassCardProps) {
+export function GlassCard({ muted, glow, className, innerClassName, children, ...rest }: GlassCardProps) {
   const ring = muted ? 'border-white/10' : 'border-white/[0.12]';
   const aura = glow ? 'shadow-aura' : '';
 
@@ -35,7 +37,7 @@ export function GlassCard({ muted, glow, className, children, ...rest }: GlassCa
           style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}
         />
       ) : null}
-      <View className="relative z-10">{children}</View>
+      <View className={`relative z-10 w-full ${innerClassName ?? ''}`}>{children}</View>
     </View>
   );
 }

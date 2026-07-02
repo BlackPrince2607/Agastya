@@ -21,6 +21,8 @@ import { buildSimulatedReading } from '@/services/simulatedReading';
 import type { FocusTopic } from '@/store/sessionStore';
 import { useSessionStore } from '@/store/sessionStore';
 import { ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS } from '@/constants/onboarding';
+import { useAuthSession } from '@/hooks/useAuthSession';
+import { enterMainApp } from '@/utils/navigationFlow';
 
 const FOCUS_LABEL: Record<FocusTopic, string> = {
   love: 'Love',
@@ -45,6 +47,7 @@ export default function ReportPreviewScreen() {
   const displayName = useSessionStore((s) => s.userDisplayName);
   const premium = useSessionStore((s) => s.hasUnlockedPremium);
   const mergedSeed = seed ?? storeSeed ?? 'stillness';
+  const { isSignedIn } = useAuthSession();
 
   const reading = previewReading ?? buildSimulatedReading(mergedSeed, focus);
   const previewSections = reading.sections.slice(0, 2);
@@ -81,16 +84,18 @@ export default function ReportPreviewScreen() {
             <Text className="mt-4 font-space-grotesk text-[13px] font-semibold uppercase tracking-[0.12em] text-mist/80">
               {reading.blueprintTitle}
             </Text>
-            <Text className="mt-3 font-noto-serif text-[32px] leading-[40px] tracking-tight text-mist">
+            <Text className="mt-3 font-headline text-[30px] leading-[34px] tracking-tight text-on-surface">
               {reading.headline}
             </Text>
             {displayName?.trim() ? (
-              <Text className="mt-2 font-inter text-[14px] text-stitch-signal/90">
+              <Text className="mt-2 font-body text-[14px] text-primary">
                 Prepared for {displayName.trim()}
               </Text>
             ) : null}
-            <Text className="mt-4 font-inter text-[14px] leading-6 text-md-on-surface-variant">
-              For entertainment and reflection only. Upgrade to unlock your complete report.
+            <Text className="mt-4 font-body text-[14px] leading-6 text-on-surface-variant">
+              {isSignedIn
+                ? 'Your preview is ready. Enter the app to keep exploring.'
+                : 'Sign in to save your reading and enter the app.'}
             </Text>
           </MotiView>
 
@@ -209,7 +214,23 @@ export default function ReportPreviewScreen() {
           className="absolute bottom-0 left-0 right-0 z-20 rounded-none border-t border-white/14 bg-cosmic-void/92 px-6 pt-4"
           style={{ elevation: 24 }}>
           <View style={{ paddingBottom: Math.max(insets.bottom, 16) }} className="gap-y-3">
-            {premium ? (
+            {isSignedIn ? (
+              <>
+                <CosmicButton gradient="nebulaMd3" label="Enter Agastya" onPress={() => enterMainApp()} />
+                {!premium ? (
+                  <CosmicButton
+                    variant="ghost"
+                    label="Unlock full report"
+                    onPress={() =>
+                      router.push({
+                        pathname: '/onboarding/paywall',
+                        params: { seed: mergedSeed },
+                      })
+                    }
+                  />
+                ) : null}
+              </>
+            ) : premium ? (
               <CosmicButton
                 gradient="nebulaMd3"
                 label="Save & sign in to continue"
@@ -232,18 +253,22 @@ export default function ReportPreviewScreen() {
                 }
               />
             )}
-            <CosmicButton
-              variant="ghost"
-              label="Save & sync my reading"
-              onPress={() =>
-                router.push({
-                  pathname: '/onboarding/account',
-                  params: { seed: mergedSeed },
-                })
-              }
-            />
-            <Text className="mt-1 text-center font-inter text-[11px] leading-5 text-md-on-primary-container">
-              Sign in to access the app. Your reading preview is saved on this device.
+            {!isSignedIn ? (
+              <CosmicButton
+                variant="ghost"
+                label="Save & sign in"
+                onPress={() =>
+                  router.push({
+                    pathname: '/onboarding/account',
+                    params: { seed: mergedSeed },
+                  })
+                }
+              />
+            ) : null}
+            <Text className="mt-1 text-center font-body text-[11px] leading-5 text-on-surface-variant">
+              {isSignedIn
+                ? 'Your reading is saved on this device.'
+                : 'Your preview stays on this device until you sign in.'}
             </Text>
           </View>
         </BlurContainer>

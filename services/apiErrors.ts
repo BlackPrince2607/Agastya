@@ -2,7 +2,9 @@
 
 export const ERRORS = {
   network: 'We couldn’t reach Agastya right now. Check your connection and try again.',
-  guideNeedsPalm: 'Complete your palm reading first—then the Guide can personalize answers for you.',
+  guideNeedsPalm: 'Complete your palm reading first. Then the Guide can answer questions about your report.',
+  guideLlmUnavailable:
+    'The Guide is temporarily unavailable. Check that GROQ_API_KEY is valid in backend/.env and restart the API.',
   missingSession: 'Something went wrong starting your session. Please restart the app.',
   mergeMismatch: 'This sign-in doesn’t match your current reading. Try signing in with the account you used before.',
   authRequired: 'Please sign in to continue.',
@@ -24,6 +26,9 @@ export function mapApiError(detail: string): string {
   }
   if (d.includes('invalid supabase') || d.includes('token missing subject')) {
     return ERRORS.authInvalid;
+  }
+  if (d.includes('guide_llm_unavailable')) {
+    return ERRORS.guideLlmUnavailable;
   }
   if (d.includes('palm analysis before') || d.includes('run palm analysis')) {
     return ERRORS.palmRequired;

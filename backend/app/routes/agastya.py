@@ -21,8 +21,8 @@ from app.schemas.session import (
     SessionRegisterResponse,
 )
 from app.schemas.tasks import DailyTasksBody, DailyTasksResponse
-from app.services.ai_interactions import generate_chat_reply, generate_daily_tasks
-from app.services.bucket_store import SessionBucket, bucket, has_bucket, link_supabase_user, set_bucket
+from app.services.ai_interactions import GuideLlmUnavailableError, generate_chat_reply, generate_daily_tasks
+from app.services.bucket_store import SessionBucket, bucket, has_bucket, link_supabase_user, merge_bucket_data, set_bucket
 from app.services.palm_pipeline import analyze_palm
 from app.services.palm_storage import upload_palm_capture_if_configured
 from app.services.predictions_engine import build_predictions_payload
@@ -46,6 +46,52 @@ async def _hydrate(session_id: str, settings: Settings) -> None:
 
 async def _persist(session_id: str, settings: Settings) -> None:
     await session_repository.save(session_id, bucket(session_id), settings)
+
+
+async def _hydrate_from_user_sessions(
+    session_id: str,
+    bkt: SessionBucket,
+    settings: Settings,
+) -> None:
+    """When the current bucket has no reading, copy the richest prior session for this Supabase user."""
+    if bkt.palm or bkt.preview or bkt.full:
+        return
+    user_id = bkt.meta.get("supabaseUserId")
+    if not user_id or not session_repository.is_enabled(settings):
+        return
+
+    prior_rows = await session_repository.list_sessions_for_user(str(user_id), settings)
+    best_row: dict[str, Any] | None = None
+    best_score = -1
+    for row in prior_rows:
+        if row.get("session_id") == session_id:
+            continue
+        score = 0
+        if row.get("palm_analysis"):
+            score += 4
+        if row.get("preview_report"):
+            score += 2
+        if row.get("full_report"):
+            score += 3
+        if row.get("is_premium"):
+            score += 1
+        if score > best_score:
+            best_score = score
+            best_row = row
+    if best_row is None:
+        return
+    source = session_repository.row_to_bucket(best_row)
+    merge_bucket_data(bkt, source)
+
+
+def _bind_device(bkt: SessionBucket, session_id: str, device_install_id: str) -> None:
+    assert_device_binding(
+        session_id=session_id,
+        device_install_id=device_install_id,
+        stored_device_id=bkt.meta.get("deviceInstallId"),
+    )
+    if device_install_id and not bkt.meta.get("deviceInstallId"):
+        bkt.meta["deviceInstallId"] = device_install_id
 
 
 async def _sync_premium(session_id: str, settings: Settings) -> SessionBucket:
@@ -91,6 +137,7 @@ def _bootstrap_from_bucket(session_id: str, bkt: SessionBucket) -> SessionBootst
         preview_report=bkt.preview.model_dump(by_alias=True) if bkt.preview else None,
         full_report=bkt.full.model_dump(by_alias=True) if bkt.full else None,
         is_premium=bkt.is_premium,
+        chat_tail=bkt.chat_tail[-40:] if bkt.chat_tail else [],
     )
 
 
@@ -102,10 +149,18 @@ def _bootstrap_from_bucket(session_id: str, bkt: SessionBucket) -> SessionBootst
 async def session_bootstrap(
     settings: Annotated[Settings, Depends(get_settings)],
     session_id: str = Query(..., alias="sessionId"),
+    device_install_id: str | None = Query(default=None, alias="deviceInstallId"),
 ) -> SessionBootstrapResponse:
     validate_session_id(session_id)
     await _hydrate(session_id, settings)
     bkt = await _sync_premium(session_id, settings)
+    await _hydrate_from_user_sessions(session_id, bkt, settings)
+    if device_install_id:
+        assert_device_binding(
+            session_id=session_id,
+            device_install_id=device_install_id,
+            stored_device_id=bkt.meta.get("deviceInstallId"),
+        )
     return _bootstrap_from_bucket(session_id, bkt)
 
 
@@ -174,13 +229,8 @@ async def merge_session(
     settings: Annotated[Settings, Depends(get_settings)],
     authorization: Annotated[str | None, Header()] = None,
 ) -> SessionMergeResponse:
-    if settings.supabase_enabled and not settings.supabase_jwt_secret:
-        raise HTTPException(
-            status_code=503,
-            detail="SUPABASE_JWT_SECRET is required for session merge",
-        )
-    token = _bearer_token(authorization)
-    if settings.supabase_jwt_secret:
+    if settings.supabase_enabled:
+        token = _bearer_token(authorization)
         if not token:
             raise HTTPException(status_code=401, detail="Authorization bearer token required")
         claims = verify_supabase_access_token(token, settings)
@@ -189,6 +239,21 @@ async def merge_session(
             raise HTTPException(status_code=403, detail="Token subject does not match supabaseUserId")
 
     await _hydrate(body.anonymous_session_id, settings)
+    bkt = bucket(body.anonymous_session_id)
+    existing_user = bkt.meta.get("supabaseUserId")
+    if existing_user and str(existing_user) != body.supabase_user_id:
+        raise HTTPException(status_code=403, detail="Session already linked to another account")
+    if body.device_install_id:
+        assert_device_binding(
+            session_id=body.anonymous_session_id,
+            device_install_id=body.device_install_id,
+            stored_device_id=bkt.meta.get("deviceInstallId"),
+        )
+        bkt.meta["deviceInstallId"] = body.device_install_id
+
+    bkt.meta["supabaseUserId"] = body.supabase_user_id
+    await _hydrate_from_user_sessions(body.anonymous_session_id, bkt, settings)
+
     linked = link_supabase_user(body.anonymous_session_id, body.supabase_user_id)
     if session_repository.is_enabled(settings):
         await session_repository.link_user(
@@ -232,6 +297,9 @@ async def reports_generate(
     body: GenerateReportBody,
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> dict[str, Any]:
+    await _hydrate(body.session_id, settings)
+    bkt = bucket(body.session_id)
+    _bind_device(bkt, body.session_id, body.device_install_id)
     bkt = await _sync_premium(body.session_id, settings)
     if body.mode == "full" and not bkt.is_premium:
         raise HTTPException(status_code=403, detail="Premium required for full report")
@@ -259,10 +327,19 @@ async def reports_generate(
 
 @router.post("/chat", response_model=ChatResponse)
 async def cosmic_chat(body: ChatRequest, settings: Annotated[Settings, Depends(get_settings)]) -> ChatResponse:
+    await _hydrate(body.session_id, settings)
+    bkt = bucket(body.session_id)
+    _bind_device(bkt, body.session_id, body.device_install_id)
     bkt = await _sync_premium(body.session_id, settings)
-    reply, suggestions = await generate_chat_reply(
-        settings, body, server_is_premium=bkt.is_premium
-    )
+    try:
+        reply, suggestions = await generate_chat_reply(
+            settings, body, server_is_premium=bkt.is_premium, prior_chat_tail=bkt.chat_tail
+        )
+    except GuideLlmUnavailableError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="guide_llm_unavailable",
+        ) from exc
     tail = [{"role": m.role, "content": m.content} for m in body.messages]
     tail.append({"role": "guide", "content": reply})
     bkt.chat_tail = tail[-40:]
@@ -272,6 +349,9 @@ async def cosmic_chat(body: ChatRequest, settings: Annotated[Settings, Depends(g
 
 @router.post("/tasks/daily", response_model=DailyTasksResponse, response_model_by_alias=True)
 async def daily_tasks(body: DailyTasksBody, settings: Annotated[Settings, Depends(get_settings)]) -> DailyTasksResponse:
+    await _hydrate(body.session_id, settings)
+    bkt = bucket(body.session_id)
+    _bind_device(bkt, body.session_id, body.device_install_id)
     bkt = await _sync_premium(body.session_id, settings)
     body = body.model_copy(update={"is_premium": bkt.is_premium})
     tasks, variant = await generate_daily_tasks(settings, body)
@@ -287,6 +367,9 @@ async def predictions_generate(
     body: PredictionsGenerateBody,
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> PredictionsResponse:
+    await _hydrate(body.session_id, settings)
+    bkt = bucket(body.session_id)
+    _bind_device(bkt, body.session_id, body.device_install_id)
     bkt = await _sync_premium(body.session_id, settings)
     if body.period in {"3month", "year"} and not bkt.is_premium:
         raise HTTPException(status_code=403, detail="Premium required for this prediction period")

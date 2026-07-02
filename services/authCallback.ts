@@ -1,21 +1,68 @@
 import * as Linking from 'expo-linking';
 import * as QueryParams from 'expo-auth-session/build/QueryParams';
-import { Platform, Alert } from 'react-native';
+import { Platform } from 'react-native';
 import { router } from 'expo-router';
 
-import { alertForAuthFailure, parseAuthFailure } from '@/services/authErrorUtils';
-import { finishSignIn } from '@/services/authSignIn';
+import { isAccountOAuthActive } from '@/services/authFlow';
 import { isAuthCallbackUrl } from '@/services/authRedirect';
+import { readAuthSession, syncAuthUserToStore } from '@/services/authSession';
 import { getSupabase } from '@/services/supabase';
 
+/** OAuth return URL from WebBrowser or a deep link (consumed once after successful exchange). */
+let pendingAuthReturnUrl: string | null = null;
+
+export function setPendingAuthReturnUrl(url: string) {
+  pendingAuthReturnUrl = url;
+}
+
+export function peekPendingAuthReturnUrl(): string | null {
+  return pendingAuthReturnUrl;
+}
+
+export function consumePendingAuthReturnUrl(): string | null {
+  const url = pendingAuthReturnUrl;
+  pendingAuthReturnUrl = null;
+  return url;
+}
+
+/** Wait for an auth callback URL (magic link / cold start). Not used during account WebBrowser OAuth. */
+export function waitForAuthReturnUrl(): Promise<string | null> {
+  const pending = peekPendingAuthReturnUrl();
+  if (pending) return Promise.resolve(pending);
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (url: string | null) => {
+      if (settled) return;
+      settled = true;
+      sub.remove();
+      resolve(url);
+    };
+
+    void Linking.getInitialURL().then((initial) => {
+      if (initial && isAuthCallbackUrl(initial)) {
+        finish(initial);
+      }
+    });
+
+    const sub = Linking.addEventListener('url', ({ url }) => {
+      if (isAuthCallbackUrl(url)) {
+        setPendingAuthReturnUrl(url);
+        finish(url);
+      }
+    });
+  });
+}
+
 export type AuthUrlResult =
-  | { ok: true; recovery?: boolean; skipped?: boolean }
+  | { ok: true; recovery?: boolean; skipped?: boolean; userId?: string | null }
   | { ok: false; reason: 'no_client' | 'parse_error' | 'exchange_failed'; message?: string };
 
 const processedAuthUrls = new Set<string>();
 
 function parseAuthQueryParams(url: string): { params: Record<string, string>; errorCode?: string } {
-  const { params, errorCode } = QueryParams.getQueryParams(url);
+  const { params, errorCode: rawCode } = QueryParams.getQueryParams(url);
+  const errorCode = rawCode ?? undefined;
   if (params.code || params.access_token || params.error || params.error_description) {
     return { params, errorCode };
   }
@@ -25,7 +72,7 @@ function parseAuthQueryParams(url: string): { params: Record<string, string>; er
     const hashQuery = url.slice(hashIndex + 1);
     const fromHash = QueryParams.getQueryParams(`?${hashQuery}`);
     if (fromHash.params.code || fromHash.params.access_token || fromHash.params.error) {
-      return { params: fromHash.params, errorCode: fromHash.errorCode };
+      return { params: fromHash.params, errorCode: fromHash.errorCode ?? undefined };
     }
   }
 
@@ -35,6 +82,12 @@ function parseAuthQueryParams(url: string): { params: Record<string, string>; er
 function isRecoveryUrl(url: string): boolean {
   const { params } = parseAuthQueryParams(url);
   return params.type === 'recovery';
+}
+
+function applySessionUser(userId: string | undefined | null): string | null {
+  const id = userId ?? null;
+  syncAuthUserToStore(id);
+  return id;
 }
 
 /** Parse magic-link / OAuth redirect URLs and establish a Supabase session. */
@@ -58,12 +111,13 @@ export async function createSessionFromUrlDetailed(url: string): Promise<AuthUrl
 
   const code = params.code;
   if (code) {
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
     if (error) {
       if (__DEV__) console.warn('[Agastya auth] exchangeCodeForSession failed', error.message);
       return { ok: false, reason: 'exchange_failed', message: error.message };
     }
-    return { ok: true, recovery: params.type === 'recovery' };
+    const userId = applySessionUser(data.session?.user?.id);
+    return { ok: true, recovery: params.type === 'recovery', userId };
   }
 
   const access_token = params.access_token;
@@ -72,7 +126,7 @@ export async function createSessionFromUrlDetailed(url: string): Promise<AuthUrl
     return { ok: false, reason: 'parse_error', message: 'No sign-in token in the link.' };
   }
 
-  const { error } = await supabase.auth.setSession({
+  const { data, error } = await supabase.auth.setSession({
     access_token,
     refresh_token: refresh_token ?? '',
   });
@@ -80,14 +134,20 @@ export async function createSessionFromUrlDetailed(url: string): Promise<AuthUrl
     if (__DEV__) console.warn('[Agastya auth] setSession failed', error.message);
     return { ok: false, reason: 'exchange_failed', message: error.message };
   }
-  return { ok: true, recovery: params.type === 'recovery' };
+  const userId = applySessionUser(data.session?.user?.id);
+  return { ok: true, recovery: params.type === 'recovery', userId };
 }
 
-/** Complete sign-in after a deep link: session → merge → route (or reset-password for recovery). */
+/** Establish session from redirect URL. Caller handles navigation. */
 export async function completeAuthFromUrl(url: string): Promise<AuthUrlResult> {
   if (processedAuthUrls.has(url)) {
-    return { ok: true, skipped: true };
+    const auth = await readAuthSession();
+    if (auth.isSignedIn) {
+      return { ok: true, skipped: true, userId: auth.userId };
+    }
+    processedAuthUrls.delete(url);
   }
+
   processedAuthUrls.add(url);
 
   const recovery = isRecoveryUrl(url);
@@ -97,23 +157,16 @@ export async function completeAuthFromUrl(url: string): Promise<AuthUrlResult> {
     return result;
   }
 
+  consumePendingAuthReturnUrl();
+
   if (recovery || result.recovery) {
-    router.replace('/auth/reset-password');
-    return { ok: true, recovery: true };
+    return { ok: true, recovery: true, userId: result.userId };
   }
 
-  try {
-    await finishSignIn();
-  } catch (err) {
-    processedAuthUrls.delete(url);
-    const message = err instanceof Error ? err.message : 'Could not finish signing in.';
-    return { ok: false, reason: 'exchange_failed', message };
-  }
-
-  return { ok: true };
+  return { ok: true, userId: result.userId };
 }
 
-/** Wire deep links (OTP + OAuth) — native only; web uses /auth/callback route. */
+/** Wire deep links (OTP + magic link). Native OAuth on account screen is handled inline. */
 export function subscribeAuthDeepLinks(): () => void {
   if (Platform.OS === 'web') {
     return () => {};
@@ -122,18 +175,19 @@ export function subscribeAuthDeepLinks(): () => void {
   const supabase = getSupabase();
   if (!supabase) return () => {};
 
-  const handle = async (url: string | null) => {
+  const handle = (url: string | null) => {
     if (!url || !isAuthCallbackUrl(url)) return;
-    const result = await completeAuthFromUrl(url);
-    if (!result.ok && !result.skipped) {
-      const alert = alertForAuthFailure(
-        parseAuthFailure(result.message ?? 'We could not finish signing you in from that link.'),
-      );
-      Alert.alert(alert.title, alert.body);
+    setPendingAuthReturnUrl(url);
+    if (isAccountOAuthActive()) {
+      if (__DEV__) {
+        console.log('[Agastya auth] deep link held for account OAuth handler');
+      }
+      return;
     }
+    router.replace('/auth/callback');
   };
 
-  void Linking.getInitialURL().then((u) => void handle(u));
-  const sub = Linking.addEventListener('url', ({ url }) => void handle(url));
+  void Linking.getInitialURL().then((u) => handle(u));
+  const sub = Linking.addEventListener('url', ({ url }) => handle(url));
   return () => sub.remove();
 }

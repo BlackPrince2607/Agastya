@@ -5,11 +5,22 @@ import type { PalmAnalysisDto } from '@/types/palmAnalysis';
 import type { PredictionPeriod, PredictionsResponse } from '@/types/predictions';
 
 import { ERRORS, mapApiError } from '@/services/apiErrors';
-import { apiUrl, isApiConfigured } from '@/services/env';
+import { AGASTYA_API_ROOT, apiUrl, isApiConfigured } from '@/services/env';
 import { getSupabaseAccessToken } from '@/services/supabase';
 import { GUIDE_FINISH_PALM_FIRST } from '@/constants/userCopy';
 
 const DEFAULT_FETCH_TIMEOUT_MS = 8000;
+
+function apiRequestHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    ...extra,
+  };
+  if (AGASTYA_API_ROOT.includes('ngrok')) {
+    headers['ngrok-skip-browser-warning'] = 'true';
+  }
+  return headers;
+}
 
 async function fetchWithTimeout(
   url: string,
@@ -41,7 +52,7 @@ export type ApiHealthDto = {
 export async function fetchApiHealth(signal?: AbortSignal): Promise<ApiHealthDto> {
   const res = await fetchWithTimeout(apiUrl('/v1/health'), {
     method: 'GET',
-    headers: { Accept: 'application/json' },
+    headers: apiRequestHeaders(),
     signal,
     timeoutMs: 6000,
   });
@@ -54,7 +65,7 @@ export async function fetchApiHealth(signal?: AbortSignal): Promise<ApiHealthDto
 async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   const res = await fetchWithTimeout(apiUrl(path), {
     method: 'GET',
-    headers: { Accept: 'application/json' },
+    headers: apiRequestHeaders(),
     signal,
   });
   if (!res.ok) {
@@ -76,11 +87,15 @@ export type SessionBootstrapDto = {
   previewReport?: Record<string, unknown> | null;
   fullReport?: Record<string, unknown> | null;
   isPremium?: boolean;
+  chatTail?: Array<{ role: string; content: string }>;
 };
 
-export async function fetchSessionBootstrap(sessionId: string) {
+export async function fetchSessionBootstrap(sessionId: string, deviceInstallId?: string | null) {
+  const deviceQuery = deviceInstallId
+    ? `&deviceInstallId=${encodeURIComponent(deviceInstallId)}`
+    : '';
   return getJson<SessionBootstrapDto>(
-    `/v1/sessions/bootstrap?sessionId=${encodeURIComponent(sessionId)}`,
+    `/v1/sessions/bootstrap?sessionId=${encodeURIComponent(sessionId)}${deviceQuery}`,
   );
 }
 
@@ -88,12 +103,11 @@ async function postJson<T>(
   path: string,
   body: unknown,
   auth = false,
-  signal?: AbortSignal,
+  opts?: { signal?: AbortSignal; timeoutMs?: number },
 ): Promise<T> {
-  const headers: Record<string, string> = {
+  const headers = apiRequestHeaders({
     'Content-Type': 'application/json',
-    Accept: 'application/json',
-  };
+  });
   if (auth) {
     const token = await getSupabaseAccessToken();
     if (token) headers.Authorization = `Bearer ${token}`;
@@ -102,7 +116,8 @@ async function postJson<T>(
     method: 'POST',
     headers,
     body: JSON.stringify(body),
-    signal,
+    signal: opts?.signal,
+    timeoutMs: opts?.timeoutMs,
   });
   if (!res.ok) {
     const detail = await res.text();
@@ -114,10 +129,9 @@ async function postJson<T>(
 async function patchJson<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
   const res = await fetchWithTimeout(apiUrl(path), {
     method: 'PATCH',
-    headers: {
+    headers: apiRequestHeaders({
       'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
+    }),
     body: JSON.stringify(body),
     signal,
   });
@@ -148,7 +162,7 @@ export async function registerSession(
       focusTopics: body.focusTopics,
     },
     false,
-    opts?.signal,
+    { signal: opts?.signal },
   );
 }
 
@@ -167,12 +181,17 @@ export async function patchSessionProfile(body: {
   }>('/v1/sessions/profile', body);
 }
 
-export async function mergeSessions(body: { anonymousSessionId: string; supabaseUserId: string }) {
+export async function mergeSessions(body: {
+  anonymousSessionId: string;
+  supabaseUserId: string;
+  deviceInstallId?: string;
+}) {
   return postJson<{ ok: boolean; linked: boolean }>(
     '/v1/sessions/merge',
     {
       anonymousSessionId: body.anonymousSessionId,
       supabaseUserId: body.supabaseUserId,
+      deviceInstallId: body.deviceInstallId,
     },
     true,
   );
@@ -212,8 +231,13 @@ export async function analyzePalm(body: {
   });
 }
 
+export async function deleteAccountFromServer() {
+  return postJson<{ ok: boolean; deletedSessions: number }>('/v1/auth/delete-account', {}, true);
+}
+
 export async function generateReport(body: {
   sessionId: string;
+  deviceInstallId?: string;
   seed: string;
   palmAnalysis?: PalmAnalysisDto | null;
   focusTopics: FocusTopic[];
@@ -221,33 +245,69 @@ export async function generateReport(body: {
   displayName?: string;
   gender?: string;
 }) {
-  return postJson<Record<string, unknown>>('/v1/reports/generate', body);
+  const deviceInstallId = body.deviceInstallId ?? useSessionStore.getState().deviceInstallId;
+  if (!deviceInstallId) {
+    throw new Error('Device identity is not ready yet. Please try again.');
+  }
+  return postJson<Record<string, unknown>>('/v1/reports/generate', {
+    ...body,
+    deviceInstallId,
+  });
 }
 
 export async function chatWithGuide(body: {
   sessionId: string;
+  deviceInstallId?: string;
   messages: Array<{ role: string; content: string }>;
   palmAnalysis: PalmAnalysisDto;
   profileSummary: string;
 }) {
-  return postJson<{ reply: string; suggestions?: string[] }>('/v1/chat', body);
+  const deviceInstallId = body.deviceInstallId ?? useSessionStore.getState().deviceInstallId;
+  if (!deviceInstallId) {
+    throw new Error('Device identity is not ready yet. Please try again.');
+  }
+  return postJson<{ reply: string; suggestions?: string[] }>(
+    '/v1/chat',
+    {
+      ...body,
+      deviceInstallId,
+    },
+    false,
+    { timeoutMs: 30_000 },
+  );
 }
 
 export async function fetchDailyTasks(body: {
   sessionId: string;
+  deviceInstallId?: string;
   palmAnalysis: PalmAnalysisDto;
 }) {
-  return postJson<{ tasks: unknown[]; variant: string }>('/v1/tasks/daily', body);
+  const deviceInstallId = body.deviceInstallId ?? useSessionStore.getState().deviceInstallId;
+  if (!deviceInstallId) {
+    throw new Error('Device identity is not ready yet. Please try again.');
+  }
+  return postJson<{ tasks: unknown[]; variant: string }>('/v1/tasks/daily', {
+    ...body,
+    deviceInstallId,
+  });
 }
 
 export async function fetchPredictions(body: {
   sessionId: string;
+  deviceInstallId?: string;
   period: PredictionPeriod;
   seed?: string;
   palmAnalysis?: PalmAnalysisDto | null;
   focusTopics?: FocusTopic[];
 }) {
-  return postJson<PredictionsResponse>('/v1/predictions/generate', body);
+  const deviceInstallId = body.deviceInstallId ?? useSessionStore.getState().deviceInstallId;
+  if (!deviceInstallId) {
+    throw new Error('Device identity is not ready yet. Please try again.');
+  }
+  return postJson<PredictionsResponse>('/v1/predictions/generate', {
+    ...body,
+    deviceInstallId,
+  });
 }
 
 export type GuideReplyResult =
@@ -270,6 +330,16 @@ export async function requestGuideReply(
     return { ok: false, error: GUIDE_FINISH_PALM_FIRST, needsPalm: true };
   }
 
+  if (!isApiConfigured()) {
+    return { ok: false, error: ERRORS.network, offline: true };
+  }
+
+  if (!deviceInstallId) {
+    return { ok: false, error: ERRORS.network, offline: true };
+  }
+
+  await import('@/services/identity').then(({ syncProfileRemote }) => syncProfileRemote());
+
   const profileSummary = [
     userDisplayName ? `Name: ${userDisplayName}` : '',
     userGender ? `Gender: ${userGender}` : '',
@@ -283,17 +353,29 @@ export async function requestGuideReply(
   try {
     const { reply, suggestions } = await chatWithGuide({
       sessionId,
+      deviceInstallId,
       messages,
       palmAnalysis,
       profileSummary,
     });
+    if (__DEV__) {
+      const frontendPlaceholder = reply.includes('You often think things through before you speak');
+      console.log(
+        `[Agastya Guide] API reply (${frontendPlaceholder ? 'unexpected placeholder' : 'backend'})`,
+        reply.slice(0, 80),
+      );
+    }
     return { ok: true, text: reply, suggestions: suggestions ?? [] };
   } catch (e) {
     const msg = e instanceof Error ? e.message : ERRORS.network;
+    const friendly = mapApiError(msg);
+    if (__DEV__) {
+      console.warn('[Agastya Guide] API error:', friendly, e);
+    }
     return {
       ok: false,
-      error: mapApiError(msg),
-      offline: !isApiConfigured(),
+      error: friendly,
+      offline: friendly === ERRORS.network,
     };
   }
 }

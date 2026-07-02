@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Linking, Pressable, Text, View } from 'react-native';
 
 import { SectionHeader } from '@/components/feedback';
@@ -14,7 +14,8 @@ import { MAIN_SECTION_GAP } from '@/constants/layout';
 import { colors } from '@/constants/theme';
 import { displayNameOrDefault, SIGN_IN_UNAVAILABLE } from '@/constants/userCopy';
 import { useAuthSession } from '@/hooks/useAuthSession';
-import { signInFromProfile, signOutAndReturnToWelcome, resetLocalAndSignOut } from '@/services/authSession';
+import { warmUpOAuthBrowser, coolDownOAuthBrowser } from '@/services/oauthBrowser';
+import { signInFromProfile, signOutAndReturnToWelcome, resetLocalAndSignOut, deleteAccountAndReset } from '@/services/authSession';
 import { unlockPremiumFromStore } from '@/services/premiumUnlock';
 import { isSupabaseEnabled } from '@/services/supabase';
 import { useSessionStore } from '@/store/sessionStore';
@@ -59,6 +60,14 @@ export default function ProfileScreen() {
   const [restoreBusy, setRestoreBusy] = useState(false);
   const [signOutBusy, setSignOutBusy] = useState(false);
   const [startFreshBusy, setStartFreshBusy] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+
+  useEffect(() => {
+    warmUpOAuthBrowser();
+    return () => {
+      coolDownOAuthBrowser();
+    };
+  }, []);
 
   const displayName = displayNameOrDefault(name);
   const initial = initialsFor(displayName);
@@ -86,7 +95,7 @@ export default function ProfileScreen() {
   const confirmStartOver = () => {
     Alert.alert(
       'Start over?',
-      'Choose how you want to reset your journey.',
+      'Choose how you want to reset your progress.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -99,6 +108,29 @@ export default function ProfileScreen() {
           onPress: () => {
             setStartFreshBusy(true);
             void resetLocalAndSignOut().finally(() => setStartFreshBusy(false));
+          },
+        },
+      ],
+    );
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete account?',
+      'This permanently deletes your account, cloud backup, palm images, and reading history. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete account',
+          style: 'destructive',
+          onPress: () => {
+            setDeleteBusy(true);
+            void deleteAccountAndReset()
+              .catch((err) => {
+                const message = err instanceof Error ? err.message : 'Could not delete your account. Please try again.';
+                Alert.alert('Delete failed', message);
+              })
+              .finally(() => setDeleteBusy(false));
           },
         },
       ],
@@ -128,7 +160,7 @@ export default function ProfileScreen() {
       <MainTabScroll sectionGap={MAIN_SECTION_GAP}>
         <MainCosmicHeader displayName={name} />
 
-        <GlassCard className="w-full gap-4 p-5">
+        <GlassCard className="w-full p-5" innerClassName="gap-4">
           <View className="flex-row items-start gap-4">
             <View className="h-16 w-16 shrink-0 items-center justify-center rounded-full border border-purple/35 bg-primary/20">
               <Text className="font-headline text-[24px] text-on-surface">{initial}</Text>
@@ -192,41 +224,54 @@ export default function ProfileScreen() {
 
         <View className="gap-3" style={{ marginTop: 8 }}>
           <SectionHeader title="Account" />
-          <GlowCard className="w-full gap-4 p-5">
-            <Text className="font-body text-[14px] leading-6 text-on-surface-variant">
-              {authLoading
-                ? 'Loading…'
-                : isSignedIn
-                  ? 'Your reading is backed up and synced across devices.'
-                  : isSupabaseEnabled
-                    ? 'Sign in to back up your reading, sync across devices, and access the app.'
-                    : SIGN_IN_UNAVAILABLE}
-            </Text>
-            <View className="gap-3">
-              {isSignedIn ? (
-                <CosmicButton
-                  variant="ghost"
-                  label={signOutBusy ? 'Signing out…' : 'Sign out'}
-                  disabled={signOutBusy}
-                  onPress={handleSignOut}
-                />
+          <GlowCard className="w-full p-5">
+            <View className="gap-4">
+              {authLoading ? (
+                <Text className="font-body text-[14px] leading-6 text-on-surface-variant">Checking account…</Text>
+              ) : isSignedIn ? (
+                <>
+                  <Text className="font-body text-[14px] leading-6 text-on-surface-variant">
+                    Your reading is backed up and synced across devices.
+                  </Text>
+                  <View className="gap-3">
+                    <CosmicButton
+                      variant="ghost"
+                      label={signOutBusy ? 'Signing out…' : 'Sign out'}
+                      disabled={signOutBusy || deleteBusy}
+                      onPress={handleSignOut}
+                    />
+                    <CosmicButton
+                      variant="ghost"
+                      label={deleteBusy ? 'Deleting account…' : 'Delete account'}
+                      disabled={deleteBusy || signOutBusy}
+                      onPress={handleDeleteAccount}
+                    />
+                    {hasEnteredMain ? (
+                      <CosmicButton
+                        variant="ghost"
+                        label={startFreshBusy ? 'Resetting…' : 'Start over'}
+                        disabled={startFreshBusy || signOutBusy}
+                        onPress={confirmStartOver}
+                      />
+                    ) : null}
+                  </View>
+                </>
               ) : isSupabaseEnabled ? (
-                <CosmicButton gradient="nebulaMd3" label="Sign in" onPress={() => void signInFromProfile()} />
-              ) : null}
-              {hasEnteredMain ? (
-                <CosmicButton
-                  variant="ghost"
-                  label={startFreshBusy ? 'Resetting…' : 'Start over'}
-                  disabled={startFreshBusy || signOutBusy}
-                  onPress={confirmStartOver}
-                />
-              ) : null}
+                <>
+                  <Text className="font-body text-[14px] leading-6 text-on-surface-variant">
+                    Sign in to back up your reading, sync across devices, and access the app.
+                  </Text>
+                  <CosmicButton gradient="nebulaMd3" label="Sign in" onPress={() => void signInFromProfile()} />
+                </>
+              ) : (
+                <Text className="font-body text-[14px] leading-6 text-on-surface-variant">{SIGN_IN_UNAVAILABLE}</Text>
+              )}
             </View>
           </GlowCard>
         </View>
 
         <Text className="pb-2 text-center font-body text-[12px] leading-5 text-on-surface-variant">
-          For entertainment and reflection only—not medical, legal, or financial advice.
+          For self-reflection and fun. Not medical, legal, or financial advice.
         </Text>
       </MainTabScroll>
     </CosmicScreen>

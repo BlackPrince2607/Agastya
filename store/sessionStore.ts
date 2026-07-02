@@ -37,6 +37,7 @@ type SessionStore = {
   partnerPalmCaptureBase64: string | null;
   partnerPalmAnalysis: PalmAnalysisDto | null;
   partnerPalmScanHand: PalmScanHand | null;
+  partnerDisplayName?: string;
 
   previewReading: SimulatedReading | null;
   fullReading: SimulatedReading | null;
@@ -47,6 +48,9 @@ type SessionStore = {
   /** One-time notice when cloud sync fails (shown on home, dismissible). */
   syncNotice: string | null;
   dismissedUpgradeCard: boolean;
+
+  /** After “Start fresh”, block auto cloud restore until a new palm scan completes. */
+  skipCloudRestore: boolean;
 
   setPremium: (v: boolean) => void;
   setEnteredMain: (v: boolean) => void;
@@ -61,12 +65,15 @@ type SessionStore = {
   setPartnerPalmCaptureBase64: (payload: string | null) => void;
   setPartnerPalmAnalysis: (payload: PalmAnalysisDto | null) => void;
   setPartnerPalmScanHand: (hand: PalmScanHand | null) => void;
+  setPartnerDisplayName: (name: string | undefined) => void;
   setPreviewReading: (reading: SimulatedReading | null) => void;
   setFullReading: (reading: SimulatedReading | null) => void;
   setPredictions: (period: PredictionPeriod, payload: PredictionsResponse) => void;
   setSyncNotice: (message: string | null) => void;
   setDismissedUpgradeCard: (v: boolean) => void;
+  setSkipCloudRestore: (v: boolean) => void;
 
+  clearRitualProgress: () => void;
   resetDemo: () => void;
 };
 
@@ -76,6 +83,7 @@ const emptyReadingState = {
   partnerPalmCaptureBase64: null as string | null,
   partnerPalmAnalysis: null as PalmAnalysisDto | null,
   partnerPalmScanHand: null as PalmScanHand | null,
+  partnerDisplayName: undefined as string | undefined,
   previewReading: null as SimulatedReading | null,
   fullReading: null as SimulatedReading | null,
   predictions: null as Partial<PredictionsByPeriod> | null,
@@ -104,6 +112,7 @@ export const useSessionStore = create<SessionStore>()(
 
       syncNotice: null,
       dismissedUpgradeCard: false,
+      skipCloudRestore: false,
 
       setPremium: (hasUnlockedPremium) => set({ hasUnlockedPremium }),
       setEnteredMain: (hasEnteredMain) => set({ hasEnteredMain }),
@@ -122,12 +131,21 @@ export const useSessionStore = create<SessionStore>()(
       setPartnerPalmCaptureBase64: (payload) => set({ partnerPalmCaptureBase64: payload }),
       setPartnerPalmAnalysis: (payload) => set({ partnerPalmAnalysis: payload }),
       setPartnerPalmScanHand: (partnerPalmScanHand) => set({ partnerPalmScanHand }),
+      setPartnerDisplayName: (partnerDisplayName) => set({ partnerDisplayName }),
       setPreviewReading: (reading) => set({ previewReading: reading }),
       setFullReading: (reading) => set({ fullReading: reading }),
       setPredictions: (period, payload) =>
         set({ predictions: { ..._get().predictions, [period]: payload } }),
       setSyncNotice: (syncNotice) => set({ syncNotice }),
       setDismissedUpgradeCard: (dismissedUpgradeCard) => set({ dismissedUpgradeCard }),
+      setSkipCloudRestore: (skipCloudRestore) => set({ skipCloudRestore }),
+
+      clearRitualProgress: () =>
+        set({
+          readingSeed: 'stillness',
+          palmScanHand: null,
+          ...emptyReadingState,
+        }),
 
       resetDemo: () =>
         set({
@@ -145,6 +163,7 @@ export const useSessionStore = create<SessionStore>()(
           identityReady: false,
           syncNotice: null,
           dismissedUpgradeCard: false,
+          skipCloudRestore: true,
           ...emptyReadingState,
         }),
     }),
@@ -176,10 +195,12 @@ export const useSessionStore = create<SessionStore>()(
         palmAnalysis: state.palmAnalysis,
         partnerPalmAnalysis: state.partnerPalmAnalysis,
         partnerPalmScanHand: state.partnerPalmScanHand,
+        partnerDisplayName: state.partnerDisplayName,
         previewReading: state.previewReading,
         fullReading: state.fullReading,
         predictions: state.predictions,
         dismissedUpgradeCard: state.dismissedUpgradeCard,
+        skipCloudRestore: state.skipCloudRestore,
       }),
     },
   ),

@@ -3,7 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView } from 'moti';
 import { useEffect, useRef, useState } from 'react';
 import {
-  KeyboardAvoidingView,
+  Keyboard,
   Platform,
   Pressable,
   ScrollView,
@@ -16,15 +16,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChatBubble } from '@/components/chat/ChatBubble';
 import { SuggestionChips } from '@/components/chat/SuggestionChips';
 import { TypingIndicator } from '@/components/chat/TypingIndicator';
-import { InlineError, StatusPill } from '@/components/feedback';
+import { InlineError } from '@/components/feedback';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { ScreenBody } from '@/components/layout/ScreenBody';
 import { GlassCard, Icon } from '@/components/ui';
+import { TAB_BAR_CLEARANCE } from '@/constants/layout';
 import { colors, gradients } from '@/constants/theme';
 import { useLayoutMetrics } from '@/hooks/useLayoutMetrics';
-import { AI_VOICE_HINTS, OFFLINE_LIMITED_LABEL } from '@/constants/userCopy';
 import { requestGuideReply } from '@/services/agastyaApi';
-import { getApiHealth } from '@/services/connectivity';
 import { useChatStore } from '@/store/chatStore';
 import { useSessionStore } from '@/store/sessionStore';
 import { paywallRouteParams } from '@/utils/paywallNavigation';
@@ -32,7 +31,7 @@ import { paywallRouteParams } from '@/utils/paywallNavigation';
 const FREE_MESSAGE_CAP = 5;
 
 const GUIDE_INTRO =
-  'The stars speak clearly tonight. I can help you understand your palm, your future, and yourself better. What would you like to know?';
+  'Ask me about your palm reading, your focus areas, or what today might hold. What is on your mind?';
 
 export default function ChatScreen() {
   const insets = useSafeAreaInsets();
@@ -51,10 +50,26 @@ export default function ChatScreen() {
 
   const [input, setInput] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
-  const apiLimited = getApiHealth()?.ok === false;
+  const inputRef = useRef<TextInput>(null);
   const reachedCap = !premium && messageCount >= FREE_MESSAGE_CAP;
   const messagesLeft = !premium ? Math.max(0, FREE_MESSAGE_CAP - messageCount) : null;
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, (e) => {
+      setKeyboardHeight(e.endCoordinates.height);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   useEffect(() => {
     const prompt = typeof icebreaker === 'string' ? icebreaker.trim() : '';
@@ -68,11 +83,14 @@ export default function ChatScreen() {
 
   const dispatch = async () => {
     const trimmed = input.trim();
-    if (!trimmed || isTyping) return;
+    if (!trimmed || isTyping || reachedCap) return;
 
     setError(null);
     addMessage('you', trimmed);
     setInput('');
+    inputRef.current?.blur();
+    Keyboard.dismiss();
+    setKeyboardHeight(0);
     setTyping(true);
 
     const transcript = useChatStore
@@ -86,36 +104,43 @@ export default function ChatScreen() {
       addMessage('guide', result.text);
       setSuggestions(result.suggestions);
     } else {
-      setError(result.error);
-      if (!result.needsPalm && result.offline) {
-        const fallback = trimmed.length < 12 ? (AI_VOICE_HINTS[1] ?? AI_VOICE_HINTS[0]) : AI_VOICE_HINTS[0];
-        addMessage('guide', fallback);
-      }
+      const devHint =
+        __DEV__ && result.offline
+          ? ' Start the API on your computer (npm run api) and ensure your phone can reach it.'
+          : '';
+      setError(`${result.error}${devHint}`);
     }
   };
 
-  const padBottom = Math.max(insets.bottom, 12) + 220;
+  const tabBarInset = Math.max(insets.bottom, Platform.OS === 'web' ? 14 : 10);
+  const dockBottom = TAB_BAR_CLEARANCE + tabBarInset;
+  const inputRowHeight = 52;
   const empty = messages.length === 0;
+  const keyboardOpen = keyboardHeight > 0;
+  // Lift composer only while keyboard is visible. Android resize handles layout; iOS needs explicit inset.
+  const composerBottom = keyboardOpen
+    ? Platform.OS === 'ios'
+      ? keyboardHeight + 8
+      : 8
+    : dockBottom;
 
   return (
     <CosmicScreen variant="stitch">
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+      <View style={{ flex: 1 }}>
         <View style={{ flex: 1, paddingHorizontal: horizontalPad, paddingTop: 8 }}>
-          <ScreenBody>
-            {/* Header */}
-            <View className="flex-row items-center gap-3 border-b border-white/10 pb-3">
-              <View className="h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-white/[0.05]">
+          <ScreenBody style={{ flex: 1 }}>
+            <View className="w-full flex-row items-center gap-3 px-2 pb-2 pt-1">
+              <View className="h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/[0.05]">
                 <Icon name="auto_fix_high" size={20} color={colors.primary} />
               </View>
-              <View className="flex-1">
+              <View className="min-w-0 flex-1">
                 <Text className="font-headline text-[18px] text-on-surface">Guide</Text>
                 <Text className="font-body text-[12px] text-on-surface-variant">Your personal palm reading guide</Text>
               </View>
             </View>
 
-            {apiLimited ? <View className="mt-3"><StatusPill label={OFFLINE_LIMITED_LABEL} variant="offline" /></View> : null}
             {!premium && messagesLeft !== null && messagesLeft > 0 ? (
-              <Text className="mt-2 font-body text-[12px] text-on-surface-variant">
+              <Text className="px-2 font-body text-[12px] text-on-surface-variant">
                 {messagesLeft} preview {messagesLeft === 1 ? 'message' : 'messages'} left
               </Text>
             ) : null}
@@ -123,12 +148,16 @@ export default function ChatScreen() {
             <ScrollView
               ref={scrollRef}
               style={{ flex: 1 }}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ gap: 14, paddingVertical: 16, paddingBottom: padBottom }}>
+              contentContainerStyle={{ gap: 14, paddingHorizontal: 8, paddingTop: 12, paddingBottom: 16 }}>
               {empty ? (
-                <View className="items-center gap-6 pt-6">
+                <View className="w-full gap-6">
                   <ChatBubble role="guide" text={`Hi ${displayName?.trim() || 'there'}! ${GUIDE_INTRO}`} />
-                  <AuraOrb />
+                  <View className="items-center">
+                    <AuraOrb />
+                  </View>
                 </View>
               ) : (
                 messages.map((m) => <ChatBubble key={m.id} role={m.role} text={m.text} />)
@@ -138,12 +167,11 @@ export default function ChatScreen() {
           </ScreenBody>
         </View>
 
-        {/* Floating input dock */}
         <View
-          style={{ paddingHorizontal: horizontalPad, paddingBottom: Math.max(insets.bottom, 12) + 84, paddingTop: 8 }}
-          className="absolute bottom-0 left-0 right-0">
+          style={{ paddingHorizontal: horizontalPad, paddingBottom: composerBottom, paddingTop: 8 }}
+          className="border-t border-white/[0.06] bg-background/95">
           <ScreenBody>
-            <View className="gap-3">
+            <View className="w-full gap-2">
               {error ? <InlineError message={error} onDismiss={() => setError(null)} /> : null}
 
               {reachedCap ? (
@@ -152,34 +180,54 @@ export default function ChatScreen() {
                   className="rounded-glass border border-primary/30 bg-primary/10 px-4 py-3 active:opacity-90"
                   accessibilityRole="button">
                   <Text className="font-body-medium text-[14px] text-on-surface">
-                    You’ve reached today’s free questions — go premium for unlimited guidance.
+                    You’ve reached today’s free questions. Go premium for unlimited guidance.
                   </Text>
                 </Pressable>
-              ) : (
+              ) : suggestions.length > 0 ? (
                 <SuggestionChips suggestions={suggestions} onSelect={setInput} />
-              )}
+              ) : null}
 
-              <GlassCard className="flex-row items-center gap-2 rounded-pill p-1.5">
+              <GlassCard className="rounded-pill px-1.5 py-1.5" innerClassName="flex-row items-center gap-2">
                 <TextInput
+                  ref={inputRef}
                   value={input}
                   onChangeText={setInput}
-                  placeholder={empty ? 'Ask me anything…' : 'Ask follow up…'}
+                  placeholder={empty ? 'Ask me anything' : 'Ask a follow up'}
                   placeholderTextColor={colors.placeholder}
-                  className="flex-1 px-4 py-2.5 font-body text-[15px] text-on-surface"
-                  editable={!isTyping}
+                  className="min-w-0 flex-1 font-body text-[15px] text-on-surface"
+                  style={{
+                    height: inputRowHeight,
+                    lineHeight: 20,
+                    paddingHorizontal: 14,
+                    paddingVertical: Platform.OS === 'ios' ? 15 : 14,
+                    margin: 0,
+                    textAlignVertical: 'center',
+                    ...(Platform.OS === 'android' ? { includeFontPadding: false } : null),
+                    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as Record<string, string>) : null),
+                  }}
+                  multiline={false}
+                  editable={!isTyping && !reachedCap}
                   onSubmitEditing={() => void dispatch()}
                   returnKeyType="send"
+                  blurOnSubmit
                   accessibilityLabel="Message to Guide"
                 />
                 <Pressable
                   onPress={() => void dispatch()}
-                  disabled={isTyping || !input.trim()}
+                  disabled={isTyping || !input.trim() || reachedCap}
                   accessibilityRole="button"
                   accessibilityLabel="Send"
-                  style={{ opacity: isTyping || !input.trim() ? 0.5 : 1 }}>
+                  className="shrink-0"
+                  style={{ opacity: isTyping || !input.trim() ? 0.45 : 1 }}>
                   <LinearGradient
                     colors={[...gradients.nebula]}
-                    style={{ width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' }}>
+                    style={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: 22,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}>
                     <Icon name="send" size={20} color={colors.onPrimary} />
                   </LinearGradient>
                 </Pressable>
@@ -187,7 +235,7 @@ export default function ChatScreen() {
             </View>
           </ScreenBody>
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </CosmicScreen>
   );
 }

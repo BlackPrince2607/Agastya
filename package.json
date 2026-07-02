@@ -4,13 +4,22 @@
   "version": "1.0.0",
   "scripts": {
     "start": "expo start",
+    "start:tunnel": "expo start --tunnel",
+    "start:lan": "expo start --lan",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
     "build": "expo export --platform web",
     "build:web": "expo export --platform web",
     "deploy:vercel": "vercel deploy --prod",
-    "api": "cd backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000"
+    "api": "cd backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000",
+    "api:check-groq": "cd backend && python scripts/check_groq_key.py",
+    "api:firewall": "powershell -ExecutionPolicy Bypass -File scripts/allow-api-firewall.ps1",
+    "doctor": "expo-doctor",
+    "export:android": "expo export --platform android",
+    "build:apk": "eas build --platform android --profile prototype --non-interactive",
+    "build:apk:local": "eas build --platform android --profile prototype --local",
+    "deploy:railway": "railway up"
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",
@@ -20,7 +29,7 @@
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-masked-view/masked-view": "^0.3.2",
     "@react-navigation/native": "^7.1.8",
-    "@sentry/react-native": "^6.5.0",
+    "@sentry/react-native": "~7.2.0",
     "@supabase/supabase-js": "^2.105.4",
     "expo": "~54.0.35",
     "expo-application": "~7.0.8",

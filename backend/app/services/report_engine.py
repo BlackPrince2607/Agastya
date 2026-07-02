@@ -7,7 +7,7 @@ import json
 from typing import Literal
 
 from app.config import Settings
-from app.services.llm_client import groq_client
+from app.services.llm_client import groq_chat_completion
 from app.prompts.templates import REPORT_SYSTEM
 from app.schemas.palm import PalmAnalysis
 from app.schemas.report import AuraProfile, FullReport, InsightSection, LifeMetrics
@@ -140,8 +140,7 @@ async def build_report_payload(
     fallback = deterministic_report(
         seed=seed, palm=palm, topics=topics, mode=mode, display_name=display_name, gender=gender
     )
-    client = groq_client(settings)
-    if client is None:
+    if not settings.groq_enabled:
         return fallback
     payload = {
         "seed": seed,
@@ -152,18 +151,18 @@ async def build_report_payload(
         "palm": palm.model_dump(),
     }
     try:
-        completion = await client.chat.completions.create(
+        completion = await groq_chat_completion(
+            settings,
             model=settings.groq_chat_model,
             response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": REPORT_SYSTEM},
-                {
-                    "role": "user",
-                    "content": json.dumps(payload),
-                },
+                {"role": "user", "content": json.dumps(payload)},
             ],
             temperature=0.85,
         )
+        if completion is None:
+            return fallback
         raw = completion.choices[0].message.content or ""
         data = json.loads(raw)
         report = FullReport.model_validate(data)

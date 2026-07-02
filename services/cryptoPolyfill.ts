@@ -73,7 +73,7 @@ export function ensureWebCrypto(): void {
     try {
       Object.defineProperty(existing, 'subtle', { value: subtle, configurable: true });
     } catch {
-      (existing as Crypto).subtle = subtle as SubtleCrypto;
+      // Some runtimes expose read-only subtle; digest already handled above when present.
     }
   } else {
     globalThis.crypto = Object.assign(base, { subtle });

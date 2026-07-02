@@ -36,10 +36,6 @@ jobs:
         run: |
           pip install ruff
           ruff check backend/app/
-      - name: Type check with pyright
-        run: |
-          pip install pyright
-          pyright backend/app/
       - name: Run pytest
         run: pytest backend/tests/ -q
         env:

@@ -47,3 +47,25 @@ def link_supabase_user(anonymous_session_id: str, supabase_user_id: str) -> bool
     _BUCKETS[f"user:{supabase_user_id}"] = b
     b.meta["supabaseUserId"] = supabase_user_id
     return True
+
+
+def merge_bucket_data(target: SessionBucket, source: SessionBucket) -> None:
+    """Copy missing reading data from ``source`` into ``target`` (e.g. after login on a new device)."""
+    if source.palm and not target.palm:
+        target.palm = source.palm
+    if source.preview and not target.preview:
+        target.preview = source.preview
+    if source.full and not target.full:
+        target.full = source.full
+    if source.is_premium:
+        target.is_premium = True
+    if len(source.chat_tail) > len(target.chat_tail):
+        target.chat_tail = list(source.chat_tail)
+    for period, pred in source.predictions.items():
+        if period not in target.predictions:
+            target.predictions[period] = pred
+    for key, value in source.meta.items():
+        if key == "deviceInstallId":
+            continue
+        if key not in target.meta or target.meta[key] in (None, "", []):
+            target.meta[key] = value

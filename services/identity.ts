@@ -3,7 +3,7 @@ import * as Crypto from 'expo-crypto';
 import { Platform } from 'react-native';
 
 import { fetchApiHealth, registerSession } from '@/services/agastyaApi';
-import { isApiConfigured } from '@/services/env';
+import { AGASTYA_API_ROOT, isApiConfigured } from '@/services/env';
 import { track } from '@/services/analytics';
 import { setApiHealth, setApiHealthFailed } from '@/services/connectivity';
 import { linkRevenueCatUser } from '@/services/revenuecat';
@@ -82,14 +82,18 @@ export async function bootstrapIdentity() {
         groq: health.groq,
         palm_groq: health.palm_groq,
       });
-      await restoreSessionFromServer();
-    } catch {
+      if (!useSessionStore.getState().skipCloudRestore) {
+        await restoreSessionFromServer();
+      }
+    } catch (err) {
       setApiHealthFailed();
       track('api_health_fail');
       if (__DEV__) {
-        console.warn(
-          '[Agastya] API unreachable — run `npm run api` from the repo root (binds 0.0.0.0:8000). On a physical device set EXPO_PUBLIC_AGASTYA_API_URL to http://YOUR_LAN_IP:8000',
-        );
+        const hint =
+          Platform.OS !== 'web'
+            ? `Phone must reach ${AGASTYA_API_ROOT} (same Wi-Fi + run npm run api:firewall as Admin). Tunnel only proxies Metro, not port 8000.`
+            : 'Run `npm run api` from the repo root.';
+        console.warn('[Agastya] API unreachable —', hint, err);
       }
     }
   })();

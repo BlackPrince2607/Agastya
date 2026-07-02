@@ -88,3 +88,29 @@ export function palmCompatibilityDimensions(
 export function hasPalmPair(self: PalmAnalysisDto | null | undefined, partner: PalmAnalysisDto | null | undefined): boolean {
   return Boolean(self?.life_line && partner?.life_line);
 }
+
+export function buildPalmCompatibilitySummary(
+  self: PalmAnalysisDto,
+  partner: PalmAnalysisDto,
+  affinity: number,
+  partnerName?: string,
+): string {
+  const dims = palmCompatibilityDimensions(self, partner);
+  const strongest = [...dims].sort((a, b) => b.pct - a.pct)[0];
+  const heartMatch = normalize(self.heart_line) === normalize(partner.heart_line);
+  const headMatch = normalize(self.head_line) === normalize(partner.head_line);
+  const partnerLabel = partnerName?.trim() || 'Your partner';
+
+  const lines = [
+    `You and ${partnerLabel} score ${affinity}% together.`,
+    strongest ? `Strongest overlap: ${strongest.label} (${strongest.pct}%).` : '',
+    heartMatch
+      ? 'Heart lines align closely — similar emotional rhythm.'
+      : 'Heart lines differ — emotional styles may balance each other.',
+    headMatch
+      ? 'Head lines match — you think about problems in similar ways.'
+      : 'Head lines differ — you bring different perspectives.',
+  ];
+
+  return lines.filter(Boolean).join(' ');
+}

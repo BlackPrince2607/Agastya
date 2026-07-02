@@ -21,7 +21,7 @@ export default function NotFoundScreen() {
       <Stack.Screen options={{ title: '', headerShown: false }} />
       <CosmicScreen variant="stitch">
         <EmptyState
-          icon="question-circle"
+          icon="error_outline"
           title="Page not found"
           body="That link is out of date or doesn’t exist. Head back to your home screen."
           actionLabel="Go home"

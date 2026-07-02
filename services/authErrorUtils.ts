@@ -104,7 +104,7 @@ export function userMessageForAuthFailure(failure: ParsedAuthFailure): string {
     return 'An account already exists for this email. Sign in instead, or use Forgot password.';
   }
   if (failure.reason === 'pkce') {
-    return 'This sign-in link must be opened on the same phone where you requested it. Force-close the app, reopen it, and try again — or sign in with your password after confirming your email.';
+    return 'This sign-in link must be opened on the same phone where you requested it. Force-close the app, reopen it, and try again. You can also sign in with your password after confirming your email.';
   }
   const mapped = mapSupabaseAuthError(failure.message);
   if (

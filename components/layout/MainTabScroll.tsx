@@ -1,5 +1,6 @@
 import type { PropsWithChildren } from 'react';
 import { ScrollView, type ScrollViewProps } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ScreenBody } from '@/components/layout/ScreenBody';
 import { SECTION_GAP, TAB_BAR_CLEARANCE } from '@/constants/layout';
@@ -20,6 +21,7 @@ export function MainTabScroll({
   contentContainerStyle,
   showsVerticalScrollIndicator = false,
 }: MainTabScrollProps) {
+  const insets = useSafeAreaInsets();
   const { horizontalPad } = useLayoutMetrics();
   const pad = horizontalPadding ?? horizontalPad;
   const gap = sectionGap ?? SECTION_GAP;
@@ -32,7 +34,7 @@ export function MainTabScroll({
         {
           gap,
           paddingTop: 8,
-          paddingBottom: TAB_BAR_CLEARANCE,
+          paddingBottom: TAB_BAR_CLEARANCE + insets.bottom + 8,
           paddingHorizontal: pad,
           alignItems: 'stretch',
           width: '100%',

@@ -38,7 +38,8 @@ export function buildSimulatedReading(seedHint: string, focusTopics?: FocusTopic
     blueprintTitle: 'Your Life Blueprint',
     visionaryTitle: 'The Visionary',
     visionarySubtitle: 'Architect of Quiet Intensity',
-    archetypeLine: `Your patterns suggest someone who takes things in quietly—and speaks up only when it truly matters.`,
+    archetypeLine:
+      'Your patterns suggest someone who takes things in quietly and speaks up only when it truly matters.',
     headline: `The pattern “${condensed}” runs quietly through the way you move.`,
     sections: [
       {
@@ -54,7 +55,7 @@ export function buildSimulatedReading(seedHint: string, focusTopics?: FocusTopic
       {
         id: 'career',
         title: 'Drive & ambition',
-        body: 'You move fastest when the stakes feel meaningful—not when a task simply feels responsible. Give yourself work that matters and momentum follows.',
+        body: 'You move fastest when the stakes feel meaningful, not when a task simply feels responsible. Give yourself work that matters and momentum follows.',
       },
       {
         id: 'money',
@@ -63,7 +64,7 @@ export function buildSimulatedReading(seedHint: string, focusTopics?: FocusTopic
       },
     ],
     boldPrediction:
-      'In the coming weeks, something you brushed off as coincidence will get harder to ignore—until you set one boundary you’ve been putting off.',
+      'In the coming weeks, something you brushed off as coincidence will get harder to ignore. It may be time to set one boundary you have been putting off.',
     metrics: base,
     aura: { label: auraLabel, gradient: aura },
   };

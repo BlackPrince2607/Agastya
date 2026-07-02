@@ -2,14 +2,14 @@ import { router, usePathname } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
 
-import { EmptyState, InlineError, PageTitle } from '@/components/feedback';
+import { EmptyState, PageTitle } from '@/components/feedback';
 import { MainTabScroll } from '@/components/layout/MainTabScroll';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { MainCosmicHeader } from '@/components/layout/MainCosmicHeader';
 import { ProgressRing } from '@/components/tasks/ProgressRing';
 import { TaskCard } from '@/components/tasks/TaskCard';
 import { GlassCard, Icon } from '@/components/ui';
-import { TASKS_EMPTY_NO_PALM, TASKS_FALLBACK_NOTICE } from '@/constants/userCopy';
+import { TASKS_EMPTY_NO_PALM } from '@/constants/userCopy';
 import { fetchDailyTasks } from '@/services/agastyaApi';
 import { scheduleDailyTaskReminder, cancelDailyTaskReminder } from '@/services/notifications';
 import { useSessionStore } from '@/store/sessionStore';
@@ -31,12 +31,10 @@ export default function TasksScreen() {
   const tasks = useTaskStore((s) => s.tasks);
   const completedIds = useTaskStore((s) => s.completedIds);
   const taskDate = useTaskStore((s) => s.taskDate);
-  const variant = useTaskStore((s) => s.variant);
   const setTasks = useTaskStore((s) => s.setTasks);
   const toggleComplete = useTaskStore((s) => s.toggleComplete);
 
   const [loading, setLoading] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
 
   const isoToday = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const list = tasks.length ? tasks : LOCAL_TASKS;
@@ -48,10 +46,17 @@ export default function TasksScreen() {
     let active = true;
 
     const load = async () => {
-      if (!sessionId || !palmAnalysis) return;
+      if (!palmAnalysis) return;
+
+      if (!sessionId) {
+        if (tasks.length === 0 || taskDate !== isoToday) {
+          setTasks(LOCAL_TASKS, 'fallback', isoToday);
+        }
+        return;
+      }
+
       if (tasks.length && taskDate === isoToday) return;
       setLoading(true);
-      setLoadError(null);
       try {
         const payload = await fetchDailyTasks({ sessionId, palmAnalysis });
         if (active) {
@@ -61,7 +66,6 @@ export default function TasksScreen() {
       } catch {
         if (active) {
           setTasks(LOCAL_TASKS, 'fallback', isoToday);
-          setLoadError(TASKS_FALLBACK_NOTICE);
         }
       } finally {
         if (active) setLoading(false);
@@ -107,20 +111,18 @@ export default function TasksScreen() {
 
         <PageTitle title="Today’s Tasks" subtitle={formatToday()} />
 
-        {loadError ? <InlineError message={loadError} onDismiss={() => setLoadError(null)} /> : null}
-
-        <View className="items-center py-3">
+        <View className="items-center overflow-visible py-4" style={{ minHeight: 168 }}>
           <ProgressRing done={doneCount} total={list.length} />
-          <Text className="mt-3 font-body text-[14px] text-on-surface-variant">
-            {loading ? 'Loading your rituals…' : allDone ? 'All rituals complete ✦' : 'Tap a task when you complete it.'}
+          <Text className="mt-4 font-body text-[14px] text-on-surface-variant">
+            {loading ? 'Loading your tasks…' : allDone ? 'All tasks complete' : 'Use the checkbox on each task to mark it done.'}
           </Text>
         </View>
 
         {allDone ? (
-          <GlassCard glow className="w-full flex-row items-center gap-3 p-4">
+          <GlassCard glow className="w-full p-4" innerClassName="flex-row items-center gap-3">
             <Icon name="auto_awesome" size={24} color="#d3beeb" />
             <Text className="flex-1 font-body-medium text-[15px] text-on-surface">
-              Beautiful work today. Great things are unfolding—come back tomorrow.
+              Nice work today. Come back tomorrow for your next tasks.
             </Text>
           </GlassCard>
         ) : null}
@@ -136,10 +138,6 @@ export default function TasksScreen() {
             />
           ))}
         </View>
-
-        {variant === 'fallback' && !loadError ? (
-          <Text className="text-center font-body text-[12px] text-on-surface-variant">{TASKS_FALLBACK_NOTICE}</Text>
-        ) : null}
       </MainTabScroll>
     </CosmicScreen>
   );

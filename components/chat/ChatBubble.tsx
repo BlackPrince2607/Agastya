@@ -35,7 +35,7 @@ export function ChatBubble({ role, text }: ChatBubbleProps) {
           style={{ shadowColor: '#d3beeb', shadowOpacity: 0.3, shadowRadius: 10 }}>
           <Icon name="auto_fix_high" size={15} color="#d3beeb" />
         </View>
-        <Text className="font-label text-[10px] uppercase tracking-[0.2em] text-on-primary-container">Cosmos AI</Text>
+        <Text className="font-label text-[10px] uppercase tracking-[0.12em] text-on-primary-container">Guide</Text>
       </View>
       <View className="rounded-glass rounded-tl-md border border-white/10 bg-white/[0.06] px-4 py-3.5">
         <Text className="font-body text-[15px] leading-6 text-on-surface">{text}</Text>
