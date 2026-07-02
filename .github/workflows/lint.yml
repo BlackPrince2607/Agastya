@@ -40,3 +40,4 @@ jobs:
         run: pytest backend/tests/ -q
         env:
           DEBUG: "true"
+          PYTHONPATH: backend
