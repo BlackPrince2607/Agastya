@@ -94,11 +94,11 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "REPLACE_WITH_EAS_PROJECT_ID"
+        "projectId": "1b218304-7f86-4ff5-acac-b889a9ef8454"
       }
     },
     "updates": {
-      "url": "https://u.expo.dev/REPLACE_WITH_EAS_PROJECT_ID"
+      "url": "https://u.expo.dev/1b218304-7f86-4ff5-acac-b889a9ef8454"
     },
     "experiments": {
       "typedRoutes": true
