@@ -17,8 +17,8 @@
     "api:firewall": "powershell -ExecutionPolicy Bypass -File scripts/allow-api-firewall.ps1",
     "doctor": "expo-doctor",
     "export:android": "expo export --platform android",
-    "build:apk": "eas build --platform android --profile prototype --non-interactive",
-    "build:apk:local": "eas build --platform android --profile prototype --local",
+    "build:apk": "npx eas-cli build --platform android --profile prototype --non-interactive",
+    "build:apk:local": "npx eas-cli build --platform android --profile prototype --local",
     "deploy:railway": "railway up"
   },
   "dependencies": {

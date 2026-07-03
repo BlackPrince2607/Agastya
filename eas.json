@@ -15,6 +15,9 @@
       },
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       }
     },
     "prototype": {
@@ -23,7 +26,8 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_REVENUECAT_ENTITLEMENT": "premium"
+        "EXPO_PUBLIC_REVENUECAT_ENTITLEMENT": "premium",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       }
     },
     "production": {
