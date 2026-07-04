@@ -17,6 +17,7 @@
         "buildType": "apk"
       },
       "env": {
+        "EXPO_PUBLIC_AGASTYA_API_URL": "https://agastya-production-397b.up.railway.app",
         "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       }
     },
@@ -26,6 +27,7 @@
         "buildType": "apk"
       },
       "env": {
+        "EXPO_PUBLIC_AGASTYA_API_URL": "https://agastya-production-397b.up.railway.app",
         "EXPO_PUBLIC_REVENUECAT_ENTITLEMENT": "premium",
         "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       }

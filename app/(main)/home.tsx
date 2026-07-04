@@ -111,7 +111,7 @@ export default function HomeDashboardScreen() {
     palmAnalysis && taskTotal > 0
       ? allDoneToday
         ? 'All tasks complete. Come back tomorrow.'
-        : 'Finish today’s tasks to grow your streak.'
+        : "Finish today's tasks to grow your streak."
       : JOURNEY_DAY_FOOTNOTE;
   const { tileMinHeight, gridGap } = useLayoutMetrics();
   const tileGap = gridGap;
@@ -132,7 +132,7 @@ export default function HomeDashboardScreen() {
               {hasCustomName ? `${greeting}, ${name}` : greeting}
             </Text>
             <Text className="font-body text-[15px] leading-6 text-on-surface-variant">
-              {palmAnalysis ? 'Your reading is ready. See today’s insight below.' : 'Scan your palm to unlock your reading.'}
+              {palmAnalysis ? "Your reading is ready. Today's insight is below." : 'Scan your palm to unlock your reading.'}
             </Text>
           </View>
         </HomeSection>
@@ -147,7 +147,7 @@ export default function HomeDashboardScreen() {
                 <View className="min-w-0 flex-1 gap-1">
                   <Text className="font-headline-md text-[18px] text-on-surface">Start your palm reading</Text>
                   <Text className="font-body text-[14px] leading-5 text-on-surface-variant">
-                    Scan or upload your palm to unlock your report, daily guidance, and the Guide.
+                    Scan or upload your palm to unlock your report, daily guidance, and AI Guide.
                   </Text>
                 </View>
               </View>
@@ -193,7 +193,7 @@ export default function HomeDashboardScreen() {
                   accessibilityLabel="Upgrade to Pro">
                   <Text className="font-headline-md text-[16px] text-on-surface">Unlock your full reading</Text>
                   <Text className="mt-1 font-body text-[13px] leading-5 text-on-surface-variant">
-                    Full report, predictions, compatibility, and unlimited chat
+                    Full report, predictions, compatibility, and unlimited chat.
                   </Text>
                 </Pressable>
                 <Pressable onPress={() => setDismissedUpgrade(true)} hitSlop={12} accessibilityLabel="Dismiss upgrade">

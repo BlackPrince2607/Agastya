@@ -172,6 +172,17 @@ export const useSessionStore = create<SessionStore>()(
       // Manual rehydrate via usePersistHydration — avoids web SSR/client persist races.
       skipHydration: true,
       storage: createJSONStorage(() => persistentStorage),
+      merge: (persisted, current) => {
+        const saved = persisted as Partial<SessionStore>;
+        return {
+          ...current,
+          ...saved,
+          // Late rehydrate must not wipe IDs set during bootstrap / sign-in.
+          sessionId: saved.sessionId ?? current.sessionId,
+          deviceInstallId: saved.deviceInstallId ?? current.deviceInstallId,
+          supabaseUserId: saved.supabaseUserId ?? current.supabaseUserId,
+        };
+      },
       onRehydrateStorage: () => (state, err) => {
         if (err && __DEV__) {
           console.warn('[Agastya] session restore failed — starting fresh', err);

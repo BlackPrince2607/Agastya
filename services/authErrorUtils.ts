@@ -111,7 +111,7 @@ export function userMessageForAuthFailure(failure: ParsedAuthFailure): string {
     mapped === 'Something went wrong. Please try again.' &&
     (failure.code || failure.status)
   ) {
-    const detail = [failure.code, failure.status ? `HTTP ${failure.status}` : ''].filter(Boolean).join(' · ');
+    const detail = [failure.code, failure.status ? `HTTP ${failure.status}` : ''].filter(Boolean).join(' - ');
     return `${mapped} (${detail})`;
   }
   return mapped;
@@ -121,7 +121,7 @@ export function alertForAuthFailure(failure: ParsedAuthFailure): { title: string
   const friendly = userMessageForAuthFailure(failure);
   const technical = [failure.code, failure.status ? `HTTP ${failure.status}` : '', failure.message]
     .filter(Boolean)
-    .join(' · ');
+    .join(' - ');
   return {
     title: 'Sign-in failed',
     body: technical && friendly !== failure.message ? `${friendly}\n\n${technical}` : friendly,

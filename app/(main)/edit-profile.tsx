@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, View } from 'react-native';
+import { Alert, Platform, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PageTitle } from '@/components/feedback';
@@ -9,6 +9,7 @@ import { OnboardingScroll } from '@/components/layout/OnboardingScroll';
 import { alertProfileValidationError, ProfileBasicsForm } from '@/components/profile/ProfileBasicsForm';
 import { FocusTopicsPicker, validateFocusTopics } from '@/components/profile/FocusTopicsPicker';
 import { NebulaButton } from '@/components/ui';
+import { TAB_BAR_CLEARANCE } from '@/constants/layout';
 import { patchSessionProfile } from '@/services/agastyaApi';
 import { isApiConfigured } from '@/services/env';
 import { syncProfileRemote } from '@/services/identity';
@@ -16,8 +17,12 @@ import type { FocusTopic, Gender } from '@/store/sessionStore';
 import { useSessionStore } from '@/store/sessionStore';
 import { goBack } from '@/utils/navigationBack';
 
+const EDIT_PROFILE_FOOTER_HEIGHT = 84;
+
 export default function EditProfileScreen() {
   const insets = useSafeAreaInsets();
+  const tabBarInset = Math.max(insets.bottom, Platform.OS === 'web' ? 14 : 10);
+  const dockBottom = TAB_BAR_CLEARANCE + tabBarInset;
   const storedName = useSessionStore((s) => s.userDisplayName);
   const storedGender = useSessionStore((s) => s.userGender);
   const storedTopics = useSessionStore((s) => s.focusTopics);
@@ -63,7 +68,7 @@ export default function EditProfileScreen() {
   return (
     <CosmicScreen variant="stitch">
       <View className="flex-1">
-        <OnboardingScroll bottomInset={120}>
+        <OnboardingScroll bottomInset={dockBottom + EDIT_PROFILE_FOOTER_HEIGHT + 16}>
           <BackButton />
 
           <PageTitle title="Edit profile" subtitle="Update how Agastya addresses you and shapes your reading." />
@@ -81,8 +86,8 @@ export default function EditProfileScreen() {
         </OnboardingScroll>
 
         <View
-          className="absolute bottom-0 left-0 right-0 border-t border-white/10 bg-[#0f0e10]/95 px-6 pt-4"
-          style={{ paddingBottom: Math.max(insets.bottom, 16), zIndex: 20 }}>
+          className="absolute left-0 right-0 border-t border-white/10 bg-[#0f0e10]/95 px-6 pt-4"
+          style={{ bottom: dockBottom, paddingBottom: 16, zIndex: 20 }}>
           <NebulaButton label={saving ? 'Saving…' : 'Save changes'} disabled={saving} onPress={() => void handleSave()} />
         </View>
       </View>

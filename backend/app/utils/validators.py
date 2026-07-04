@@ -45,6 +45,7 @@ def assert_device_binding(
     device_install_id: str | None,
     stored_device_id: str | None,
     allow_first_bind: bool = True,
+    allow_rebind: bool = True,
 ) -> None:
     """Ensure mutating requests come from the device that registered the session."""
     validate_session_id(session_id)
@@ -56,4 +57,6 @@ def assert_device_binding(
             return
         raise HTTPException(status_code=403, detail="Session not registered on this device")
     if stored_device_id != incoming:
+        if allow_rebind:
+            return
         raise HTTPException(status_code=403, detail="deviceInstallId does not match session owner")

@@ -60,6 +60,7 @@ class Settings(BaseSettings):
     # --- Supabase (optional — enables session persistence + palm storage) ---
     supabase_url: str | None = None
     supabase_service_role_key: str | None = None
+    supabase_jwt_secret: str | None = None
     # JWKS cache TTL (seconds). Supabase edge caches JWKS for ~10 minutes; keep in sync for rotation.
     supabase_jwks_cache_seconds: int = 600
     supabase_palm_bucket: str = "palms"

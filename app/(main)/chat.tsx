@@ -23,6 +23,8 @@ import { GlassCard, Icon } from '@/components/ui';
 import { TAB_BAR_CLEARANCE } from '@/constants/layout';
 import { colors, gradients } from '@/constants/theme';
 import { useLayoutMetrics } from '@/hooks/useLayoutMetrics';
+import { track } from '@/services/analytics';
+import { isApiConfigured, isMisconfiguredProductionApi } from '@/services/env';
 import { requestGuideReply } from '@/services/agastyaApi';
 import { useChatStore } from '@/store/chatStore';
 import { useSessionStore } from '@/store/sessionStore';
@@ -104,6 +106,12 @@ export default function ChatScreen() {
       addMessage('guide', result.text);
       setSuggestions(result.suggestions);
     } else {
+      track('chat_reply_fail', {
+        offline: Boolean(result.offline),
+        needsPalm: Boolean(result.needsPalm),
+        configured: isApiConfigured(),
+        misconfigured: isMisconfiguredProductionApi(),
+      });
       const devHint =
         __DEV__ && result.offline
           ? ' Start the API on your computer (npm run api) and ensure your phone can reach it.'

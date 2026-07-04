@@ -22,6 +22,7 @@ _LIMITS: dict[str, tuple[int, int]] = {
     "/tasks/daily": (20, 3600),
     "/sessions/register": (10, 60),
     "/sessions/bootstrap": (20, 60),
+    "/sessions/bootstrap/authenticated": (20, 60),
     "/sessions/profile": (20, 60),
     "/sessions/merge": (10, 60),
     "/auth/check-email": (10, 60),

@@ -79,7 +79,7 @@ export default function ResetPasswordScreen() {
     return (
       <CosmicScreen variant="stitch">
         <View className="flex-1 items-center justify-center px-8">
-          <LoadingBlock message="Verifying your link…" />
+          <LoadingBlock message="Verifying your link..." />
         </View>
       </CosmicScreen>
     );
@@ -132,7 +132,7 @@ export default function ResetPasswordScreen() {
             />
 
             <NebulaButton
-              label={busy ? 'Saving…' : 'Update password'}
+              label={busy ? 'Saving...' : 'Update password'}
               onPress={() => void submit()}
               disabled={busy}
             />

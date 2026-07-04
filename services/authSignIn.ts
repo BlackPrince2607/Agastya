@@ -1,4 +1,5 @@
 import { syncAuthUserToStore } from '@/services/authSession';
+import { useSessionStore } from '@/store/sessionStore';
 import { routeAfterSignInIntent } from '@/utils/navigationFlow';
 
 let finishSignInInFlight: Promise<void> | null = null;
@@ -17,6 +18,13 @@ export async function finishSignIn(options: FinishSignInOptions = {}): Promise<v
   finishSignInInFlight = (async () => {
     if (options.userId) {
       syncAuthUserToStore(options.userId);
+    }
+
+    // A fresh sign-in is an explicit signal that the user wants their cloud data restored.
+    // Clear any stale "skip cloud restore" flag left over from a prior "Start fresh" /
+    // "Replay setup" so returning users get their previous palm reading and report back.
+    if (useSessionStore.getState().skipCloudRestore) {
+      useSessionStore.getState().setSkipCloudRestore(false);
     }
 
     if (options.recovery) {

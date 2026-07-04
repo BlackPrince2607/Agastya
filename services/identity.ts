@@ -27,22 +27,24 @@ async function resolveInstallId(): Promise<string> {
 
   try {
     if (Platform.OS === 'android') {
-      return Application.getAndroidId();
+      const androidId = Application.getAndroidId();
+      if (androidId) return androidId;
     }
     if (Platform.OS === 'ios') {
-      return (await Application.getIosIdForVendorAsync()) ?? 'ios-unknown';
+      const iosId = await Application.getIosIdForVendorAsync();
+      if (iosId) return iosId;
     }
   } catch {
     /* ignore */
   }
-  return `${Platform.OS}-guest`;
+  return Crypto.randomUUID();
 }
 
-/**
- * Ensures anonymous IDs exist locally — remote sync happens via `syncProfileRemote`.
- * If Supabase auth is enabled, reconcile this flow with Supabase session persistence (see services/supabase.ts).
- */
-export async function bootstrapIdentity() {
+/** Guarantees session + device IDs exist before any API mutation. */
+export async function ensureDeviceIdentity(): Promise<{
+  sessionId: string;
+  deviceInstallId: string;
+}> {
   const snap = useSessionStore.getState();
   let sessionId = snap.sessionId;
   let deviceInstallId = snap.deviceInstallId;
@@ -59,6 +61,16 @@ export async function bootstrapIdentity() {
     deviceInstallId,
     identityReady: true,
   });
+
+  return { sessionId, deviceInstallId };
+}
+
+/**
+ * Ensures anonymous IDs exist locally — remote sync happens via `syncProfileRemote`.
+ * If Supabase auth is enabled, reconcile this flow with Supabase session persistence (see services/supabase.ts).
+ */
+export async function bootstrapIdentity() {
+  const { sessionId, deviceInstallId } = await ensureDeviceIdentity();
 
   void linkRevenueCatUser(sessionId);
 

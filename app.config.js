@@ -46,13 +46,18 @@ const hasSentryNativePlugin = basePlugins.some(
 );
 const plugins = hasSentryNativePlugin ? basePlugins : [...basePlugins, '@sentry/react-native'];
 
+const DEFAULT_PRODUCTION_API = 'https://agastya-production-397b.up.railway.app';
+const isEasBuild = process.env.EAS_BUILD === 'true' || process.env.CI === 'true';
+
 module.exports = {
   expo: {
     ...appJson.expo,
     plugins,
     extra: {
       ...(appJson.expo.extra ?? {}),
-      agastyaApiUrl: process.env.EXPO_PUBLIC_AGASTYA_API_URL || undefined,
+      agastyaApiUrl:
+        process.env.EXPO_PUBLIC_AGASTYA_API_URL?.trim() ||
+        (isEasBuild ? DEFAULT_PRODUCTION_API : undefined),
       agastyaApiLanUrl: getDevLanApiUrl(),
     },
     // Disable OTA updates until EAS project ID is configured — avoids dev/build errors.

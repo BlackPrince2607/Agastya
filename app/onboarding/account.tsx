@@ -2,15 +2,15 @@ import * as Linking from 'expo-linking';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
+  StyleSheet,
   Text,
   View,
 } from 'react-native';
@@ -19,12 +19,13 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { GoogleLogo } from '@/components/auth/GoogleLogo';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
+import { StickyActionBar, STICKY_ACTION_BAR_COMFORTABLE } from '@/components/layout/StickyActionBar';
+import { DecorativePalmArt } from '@/components/onboarding/DecorativePalmArt';
 import { OnboardingHeader } from '@/components/onboarding/OnboardingHeader';
 import { GlassCard, CosmicTextField, Icon, NebulaButton, type IconName } from '@/components/ui';
 import { LEGAL_URLS } from '@/constants/legal';
 import { ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS } from '@/constants/onboarding';
 import { SIGN_IN_UNAVAILABLE } from '@/constants/userCopy';
-import { STITCH_PALM_ART_URI } from '@/constants/stitchWelcome';
 import { track } from '@/services/analytics';
 import { completeAuthFromUrl, setPendingAuthReturnUrl } from '@/services/authCallback';
 import { beginAccountOAuth, endAccountOAuth } from '@/services/authFlow';
@@ -37,12 +38,8 @@ import { warmUpOAuthBrowser } from '@/services/oauthBrowser';
 import { getSupabase, isSupabaseEnabled } from '@/services/supabase';
 import { useSessionStore } from '@/store/sessionStore';
 import { useAuthSession } from '@/hooks/useAuthSession';
-import {
-  hasRitualReading,
-  resolveOnboardingHref,
-  tryEnterMainApp,
-} from '@/utils/navigationFlow';
-import { deferRouterReplace, resetAppNavigation } from '@/utils/routerDefer';
+import { hasRitualReading } from '@/utils/navigationFlow';
+import { resetAppNavigation } from '@/utils/routerDefer';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -54,10 +51,11 @@ const TRUST_BADGES: { icon: IconName; label: string }[] = [
 
 export default function SaveJourneyScreen() {
   const insets = useSafeAreaInsets();
-  const { seed, fromPaywall, fromProfile } = useLocalSearchParams<{
+  const { seed, fromPaywall, fromProfile, fromWelcome } = useLocalSearchParams<{
     seed?: string;
     fromPaywall?: string;
     fromProfile?: string;
+    fromWelcome?: string;
   }>();
   const storeSeed = useSessionStore((s) => s.readingSeed);
   const mergedSeed = seed ?? storeSeed ?? 'stillness';
@@ -66,10 +64,12 @@ export default function SaveJourneyScreen() {
   const { isSignedIn, email: authEmail } = useAuthSession();
   const afterPaywall = fromPaywall === '1';
   const fromProfileFlow = fromProfile === '1';
+  const fromWelcomeFlow = fromWelcome === '1';
 
   const [email, setEmail] = useState('');
   const [oauthBusy, setOauthBusy] = useState<'apple' | 'google' | null>(null);
   const [enterBusy, setEnterBusy] = useState(false);
+  const autoGoogleStarted = useRef(false);
 
   const redirectUri = getAuthRedirectUri();
   const showOAuth = isOAuthSignInEnabled && !isSignedIn;
@@ -115,6 +115,12 @@ export default function SaveJourneyScreen() {
       return;
     }
     if (oauthBusy) return;
+
+    // Clear any stale "skip cloud restore" flag from a previous "Start fresh" so a
+    // returning user's palm reading / report can be pulled back down after sign-in.
+    if (useSessionStore.getState().skipCloudRestore) {
+      useSessionStore.getState().setSkipCloudRestore(false);
+    }
 
     setOauthBusy(provider);
     beginAccountOAuth();
@@ -165,7 +171,16 @@ export default function SaveJourneyScreen() {
             return;
           }
           track('auth_oauth_attempt', { provider });
-          await finishSignIn({ userId: authResult.userId, recovery: authResult.recovery });
+          try {
+            await finishSignIn({ userId: authResult.userId, recovery: authResult.recovery });
+          } catch {
+            if (authResult.recovery) {
+              router.replace('/auth/reset-password');
+              return;
+            }
+            useSessionStore.getState().setEnteredMain(true);
+            resetAppNavigation('/(main)/home');
+          }
         } finally {
           setEnterBusy(false);
         }
@@ -187,25 +202,17 @@ export default function SaveJourneyScreen() {
     }
   };
 
+  useEffect(() => {
+    if (!fromWelcomeFlow || !showOAuth || autoGoogleStarted.current || oauthBusy || enterBusy) return;
+    autoGoogleStarted.current = true;
+    const provider = Platform.OS === 'ios' ? 'apple' : 'google';
+    void oauth(provider);
+  }, [fromWelcomeFlow, showOAuth, oauthBusy, enterBusy]);
+
   const continueOnboarding = () => {
     if (enterBusy) return;
     setEnterBusy(true);
-    resetAppNavigation(resolveOnboardingHref());
-    setEnterBusy(false);
-  };
-
-  const enterApp = () => {
-    if (enterBusy) return;
-    setEnterBusy(true);
-    void tryEnterMainApp()
-      .then((result) => {
-        if (result === 'need_ritual') {
-          deferRouterReplace(resolveOnboardingHref());
-        } else if (result === 'need_sign_in') {
-          Alert.alert('Sign-in required', 'Please sign in again to enter the app.');
-        }
-      })
-      .finally(() => setEnterBusy(false));
+    void finishSignIn().finally(() => setEnterBusy(false));
   };
 
   const headline = fromProfileFlow
@@ -225,7 +232,7 @@ export default function SaveJourneyScreen() {
             contentContainerStyle={{
               paddingHorizontal: 24,
               paddingTop: 8,
-              paddingBottom: 230 + insets.bottom,
+              paddingBottom: STICKY_ACTION_BAR_COMFORTABLE + insets.bottom,
               gap: 24,
             }}>
             <OnboardingHeader
@@ -236,12 +243,7 @@ export default function SaveJourneyScreen() {
             />
 
             <View className="overflow-hidden rounded-glass border border-white/10 shadow-aura" style={{ aspectRatio: 4 / 3 }}>
-              <Image
-                accessibilityIgnoresInvertColors
-                source={{ uri: STITCH_PALM_ART_URI }}
-                className="h-full w-full"
-                resizeMode="cover"
-              />
+              <DecorativePalmArt opacity={0.82} resizeMode="cover" style={{ width: '100%', height: '100%' }} />
               <LinearGradient
                 colors={['transparent', 'rgba(20,19,21,0.2)', '#141315']}
                 style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '55%' }}
@@ -256,12 +258,12 @@ export default function SaveJourneyScreen() {
             {isSignedIn ? (
               <GlassCard className="w-full px-4 py-3" style={{ borderColor: 'rgba(34,211,238,0.35)' }}>
                 <Text className="font-body text-[14px] leading-6" style={{ color: '#22d3ee' }}>
-                  {authEmail ? `Signed in as ${authEmail}.` : 'You’re signed in.'}{' '}
+                  {authEmail ? `Signed in as ${authEmail}.` : "You're signed in."}{' '}
                   {fromProfileFlow
                     ? 'Return to your profile below.'
                     : hasRitualReading() || hasEnteredMain
                       ? 'Tap Enter Agastya below.'
-                      : 'Tap Continue onboarding below to pick up where you left off.'}
+                      : 'Tap Enter Agastya to restore your journey or start from Home.'}
                 </Text>
               </GlassCard>
             ) : null}
@@ -293,14 +295,19 @@ export default function SaveJourneyScreen() {
                     disabled={oauthBusy !== null}
                     accessibilityRole="button"
                     accessibilityLabel="Continue with Apple"
-                    className="flex-row items-center justify-center gap-3 rounded-pill bg-white py-4 active:opacity-90">
+                    className="flex-row items-center justify-center gap-3"
+                    style={({ pressed }) => [
+                      styles.oauthButton,
+                      styles.appleOauthButton,
+                      (pressed || oauthBusy !== null) && styles.pressedButton,
+                    ]}>
                     {oauthBusy === 'apple' ? (
                       <ActivityIndicator color="#000" />
                     ) : (
                       <Ionicons name="logo-apple" size={20} color="#000" />
                     )}
                     <Text className="font-body-medium text-[16px] font-semibold text-black">
-                      {oauthBusy === 'apple' ? 'Signing in…' : 'Continue with Apple'}
+                      {oauthBusy === 'apple' ? 'Signing in...' : 'Continue with Apple'}
                     </Text>
                   </Pressable>
                 ) : null}
@@ -310,14 +317,19 @@ export default function SaveJourneyScreen() {
                   disabled={oauthBusy !== null}
                   accessibilityRole="button"
                   accessibilityLabel="Continue with Google"
-                  className="flex-row items-center justify-center gap-3 rounded-pill border border-white/10 bg-white/[0.05] py-4 active:opacity-90">
+                  className="flex-row items-center justify-center gap-3"
+                  style={({ pressed }) => [
+                    styles.oauthButton,
+                    styles.googleOauthButton,
+                    (pressed || oauthBusy !== null) && styles.pressedButton,
+                  ]}>
                   {oauthBusy === 'google' ? (
                     <ActivityIndicator color="#d3beeb" />
                   ) : (
                     <GoogleLogo size={20} />
                   )}
                   <Text className="font-body-medium text-[16px] font-semibold text-on-surface">
-                    {oauthBusy === 'google' ? 'Signing in…' : 'Continue with Google'}
+                    {oauthBusy === 'google' ? 'Signing in...' : 'Continue with Google'}
                   </Text>
                 </Pressable>
               </View>
@@ -362,26 +374,18 @@ export default function SaveJourneyScreen() {
                 </Pressable>
               </View>
               <Text className="font-label text-[10px] uppercase tracking-[0.08em] text-on-surface-variant/70">
-                © {new Date().getFullYear()} Agastya
+                (c) {new Date().getFullYear()} Agastya
               </Text>
             </View>
           </ScrollView>
 
-          <View
-            className="absolute bottom-0 left-0 right-0 z-20 border-t border-white/10 bg-[#0f0e10]/95 px-6 pt-5"
-            style={{ paddingBottom: Math.max(insets.bottom, 16) }}>
+          <StickyActionBar contentStyle={{ gap: 10 }}>
             <View className="gap-y-3">
               {isSignedIn && fromProfileFlow ? (
                 <NebulaButton label="Back to profile" onPress={() => router.replace('/(main)/profile')} />
-              ) : isSignedIn && (hasRitualReading() || hasEnteredMain) ? (
-                <NebulaButton
-                  label={enterBusy ? 'Opening Agastya…' : 'Enter Agastya'}
-                  disabled={enterBusy || oauthBusy !== null}
-                  onPress={enterApp}
-                />
               ) : isSignedIn ? (
                 <NebulaButton
-                  label={enterBusy ? 'Loading…' : 'Continue onboarding'}
+                  label={enterBusy ? 'Opening Agastya...' : 'Enter Agastya'}
                   disabled={enterBusy || oauthBusy !== null}
                   onPress={continueOnboarding}
                 />
@@ -396,14 +400,42 @@ export default function SaveJourneyScreen() {
                   onPress={() => router.push({ pathname: '/onboarding/paywall', params: { seed: mergedSeed } })}
                   className="items-center pb-1">
                   <Text className="font-body text-[13px]" style={{ color: '#22d3ee' }}>
-                    Haven&apos;t unlocked yet? View plans
+                    Haven't unlocked yet? View plans
                   </Text>
                 </Pressable>
               ) : null}
             </View>
-          </View>
+          </StickyActionBar>
         </View>
       </KeyboardAvoidingView>
     </CosmicScreen>
   );
 }
+
+const styles = StyleSheet.create({
+  oauthButton: {
+    minHeight: 58,
+    borderRadius: 999,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    shadowColor: '#a855f7',
+    shadowOpacity: 0.22,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 10,
+  },
+  appleOauthButton: {
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.32)',
+    backgroundColor: '#ffffff',
+  },
+  googleOauthButton: {
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  pressedButton: {
+    opacity: 0.82,
+    transform: [{ scale: 0.98 }],
+  },
+});

@@ -1,4 +1,4 @@
-"""Verify Supabase access tokens on protected routes (JWKS / ES256)."""
+"""Verify Supabase access tokens on protected routes (JWKS / ES256, optional legacy HS256)."""
 
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ def _decode_options() -> dict:
 
 
 def verify_supabase_access_token(token: str, settings: Settings) -> dict:
-    """Verify a Supabase user access token using the project's JWKS (ES256)."""
+    """Verify a Supabase user access token using JWKS, or HS256 when explicitly configured."""
     if not settings.supabase_url:
         raise HTTPException(
             status_code=503,
@@ -55,6 +55,24 @@ def verify_supabase_access_token(token: str, settings: Settings) -> dict:
         raise HTTPException(status_code=401, detail="Invalid Supabase token") from exc
 
     alg = header.get("alg")
+    if alg == "HS256" and settings.supabase_jwt_secret:
+        try:
+            claims = jwt.decode(
+                token,
+                settings.supabase_jwt_secret,
+                algorithms=["HS256"],
+                audience="authenticated",
+                issuer=issuer,
+                options=_decode_options(),
+            )
+        except jwt.PyJWTError as exc:
+            raise HTTPException(status_code=401, detail="Invalid Supabase token") from exc
+
+        sub = claims.get("sub")
+        if not sub:
+            raise HTTPException(status_code=401, detail="Token missing subject")
+        return claims
+
     if alg not in SUPABASE_JWT_ALGORITHMS:
         logger.debug("Rejected JWT with disallowed algorithm: %s", alg)
         raise HTTPException(status_code=401, detail="Invalid Supabase token")

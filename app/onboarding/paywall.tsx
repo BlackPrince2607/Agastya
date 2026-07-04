@@ -111,7 +111,7 @@ export default function PaywallScreen() {
         if (result.reason === 'unavailable') {
           Alert.alert(
             'Subscriptions unavailable',
-            'Purchases aren’t available right now. Sign in to save your preview, or tap Restore if you already subscribed.',
+            "Purchases aren't available right now. Sign in to save your preview, or tap Restore if you already subscribed.",
           );
         } else if (result.reason === 'not_entitled') {
           Alert.alert('Purchase incomplete', 'We could not verify your subscription. Try Restore purchases or contact support.');
@@ -195,7 +195,7 @@ export default function PaywallScreen() {
             ) : null}
             {Platform.OS !== 'web' && !isRevenueCatConfigured() ? (
               <Text className="mt-3 font-inter text-[13px] leading-5 text-md-on-surface-variant">
-                Subscriptions aren’t available in this version yet. You can continue with the free preview from the previous
+                Subscriptions aren't available in this version yet. You can continue with the free preview from the previous
                 screen.
               </Text>
             ) : null}
@@ -248,7 +248,7 @@ export default function PaywallScreen() {
 
           <View className="items-center gap-2 py-2">
             <Text className="font-space-grotesk text-[20px] font-bold tracking-wide text-mist">7-Day FREE Trial</Text>
-            <Text className="font-inter text-[13px] text-md-on-surface-variant">Risk-free · Cancel anytime</Text>
+            <Text className="font-inter text-[13px] text-md-on-surface-variant">Risk-free. Cancel anytime.</Text>
           </View>
 
           <Pressable onPress={() => void handleRestore()} disabled={busy} className="items-center py-2 active:opacity-80">
@@ -272,7 +272,7 @@ export default function PaywallScreen() {
                   gradient="nebulaMd3"
                   label={
                     busy
-                      ? 'Processing…'
+                      ? 'Processing...'
                       : isStripeCheckoutEnabled()
                         ? 'Subscribe with Stripe'
                         : 'Start 7-Day Free Trial'
@@ -285,7 +285,7 @@ export default function PaywallScreen() {
             <CosmicButton variant="ghost" label="Save & sign in" onPress={goToAccountSync} />
             <View className="mt-1 flex-row items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2.5">
               <Ionicons name="shield-checkmark" size={16} color="#4ade80" />
-              <Text className="font-inter text-[12px] text-mist/85">Cancel anytime · Restore from Profile</Text>
+              <Text className="font-inter text-[12px] text-mist/85">Cancel anytime. Restore from Profile.</Text>
             </View>
           </View>
         </BlurContainer>

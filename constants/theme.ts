@@ -26,7 +26,7 @@ export const colors = {
 
   // Accents
   primary: '#d3beeb',
-  onPrimary: '#38294d',
+  onPrimary: '#ffffff',
   primaryContainer: '#1a0b2e',
   onPrimaryContainer: '#88769f',
   secondary: '#cfc1dd',
@@ -91,7 +91,7 @@ export const gradients = {
   /** App background — near-flat cosmic void. */
   cosmic: ['#0f0e10', '#141315', '#0f0e10'] as const,
   /** Primary nebula CTA (Stitch `.nebula-gradient`). */
-  nebula: ['#d3beeb', '#68577e'] as const,
+  nebula: ['#7c3aed', '#e879f9', '#22d3ee'] as const,
   /** Brand wordmark / hero accent — purple to magenta. */
   brand: ['#a855f7', '#e879f9'] as const,
   /** High-impact paywall CTA. */

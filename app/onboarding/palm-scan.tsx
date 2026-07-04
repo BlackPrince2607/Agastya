@@ -61,7 +61,7 @@ export default function PalmScanScreen() {
   if (!permission) {
     return (
       <View className="flex-1 items-center justify-center bg-black px-8">
-        <Text className="font-body text-on-surface">Loading camera…</Text>
+        <Text className="font-body text-on-surface">Loading camera...</Text>
       </View>
     );
   }
@@ -83,7 +83,7 @@ export default function PalmScanScreen() {
         beforePrimary={
           <CosmicButton
             variant="ghost"
-            label={uploadBusy ? 'Opening gallery…' : 'Upload from gallery'}
+            label={uploadBusy ? 'Opening gallery...' : 'Upload from gallery'}
             disabled={uploadBusy}
             onPress={() => void uploadFromGallery(selectedHand)}
           />
@@ -129,12 +129,12 @@ export default function PalmScanScreen() {
         quality: 0.55,
       });
       if (!photo?.base64) {
-        Alert.alert('Couldn’t capture palm', PALM_CAPTURE_FAILED);
+        Alert.alert("Couldn't capture palm", PALM_CAPTURE_FAILED);
         return;
       }
       await continueWithCapture(photo.base64, selectedHand, setPalmScanHand, setPalmCaptureBase64);
     } catch {
-      Alert.alert('Couldn’t capture palm', PALM_CAPTURE_FAILED);
+      Alert.alert("Couldn't capture palm", PALM_CAPTURE_FAILED);
     }
   };
 
@@ -182,7 +182,7 @@ export default function PalmScanScreen() {
               onPress={() => void uploadFromGallery(selectedHand)}
               className="items-center py-2 active:opacity-75">
               <Text className="font-label text-[13px] uppercase tracking-[0.08em] text-on-surface-variant">
-                {uploadBusy ? 'Opening gallery…' : 'Upload from gallery'}
+                {uploadBusy ? 'Opening gallery...' : 'Upload from gallery'}
               </Text>
             </Pressable>
           </View>

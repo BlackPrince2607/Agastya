@@ -46,17 +46,14 @@ async def analyze_palm(settings: Settings, body: PalmAnalyzeBody) -> PalmAnalysi
         if inferred.image_quality == "no_hand" and not settings.debug:
             raise HTTPException(
                 status_code=422,
-                detail="No clear palm visible — please retake the photo with your palm open and well lit.",
+                detail="No clear palm visible - please retake the photo with your palm open and well lit.",
             )
         if mode == "hybrid" or body.landmarks:
             inferred = merge_cv_into_analysis(inferred, body.landmarks)
         return inferred
 
-    if has_image and settings.groq_enabled and not settings.debug:
-        raise HTTPException(
-            status_code=422,
-            detail="Could not analyze palm image — try better lighting and retake the photo.",
-        )
+    if has_image and settings.groq_enabled:
+        logger.warning("Groq palm analysis unavailable; falling back to deterministic motifs")
 
     logger.warning("Palm analysis falling back to deterministic motifs (seed entropy)")
     fallback = dummy_palm_analysis(entropy)

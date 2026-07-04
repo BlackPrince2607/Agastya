@@ -29,7 +29,9 @@ function snapshotFromSession(session: { user?: { id?: string; email?: string | n
   };
 }
 
-/** Read session via INITIAL_SESSION (avoids hanging getSession during AsyncStorage hydration). */
+const AUTH_PROBE_TIMEOUT_MS = 4000;
+
+/** Read session via INITIAL_SESSION, with getSession fallback if the listener is late. */
 export function readAuthSession(): Promise<AuthSessionSnapshot> {
   const supabase = getSupabase();
   if (!supabase || !isSupabaseEnabled) {
@@ -38,14 +40,23 @@ export function readAuthSession(): Promise<AuthSessionSnapshot> {
 
   return new Promise((resolve) => {
     let settled = false;
+    let sub: { subscription: { unsubscribe: () => void } } | undefined;
+
     const finish = (snap: AuthSessionSnapshot) => {
       if (settled) return;
       settled = true;
-      sub.subscription.unsubscribe();
+      clearTimeout(timeout);
+      sub?.subscription.unsubscribe();
       resolve(snap);
     };
 
-    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+    const timeout = setTimeout(() => {
+      void supabase.auth.getSession().then(({ data }) => {
+        finish(snapshotFromSession(data.session));
+      });
+    }, AUTH_PROBE_TIMEOUT_MS);
+
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
       if (
         event === 'INITIAL_SESSION' ||
         event === 'SIGNED_IN' ||
@@ -55,6 +66,7 @@ export function readAuthSession(): Promise<AuthSessionSnapshot> {
         finish(snapshotFromSession(session));
       }
     });
+    sub = data;
   });
 }
 

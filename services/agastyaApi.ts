@@ -5,7 +5,7 @@ import type { PalmAnalysisDto } from '@/types/palmAnalysis';
 import type { PredictionPeriod, PredictionsResponse } from '@/types/predictions';
 
 import { ERRORS, mapApiError } from '@/services/apiErrors';
-import { AGASTYA_API_ROOT, apiUrl, isApiConfigured } from '@/services/env';
+import { AGASTYA_API_ROOT, apiUrl, isApiConfigured, isMisconfiguredProductionApi } from '@/services/env';
 import { getSupabaseAccessToken } from '@/services/supabase';
 import { GUIDE_FINISH_PALM_FIRST } from '@/constants/userCopy';
 
@@ -62,10 +62,16 @@ export async function fetchApiHealth(signal?: AbortSignal): Promise<ApiHealthDto
   return res.json() as Promise<ApiHealthDto>;
 }
 
-async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
+async function getJson<T>(path: string, signal?: AbortSignal, auth = false): Promise<T> {
+  const headers = apiRequestHeaders();
+  if (auth) {
+    const token = await getSupabaseAccessToken();
+    if (!token) throw new Error(ERRORS.authRequired);
+    headers.Authorization = `Bearer ${token}`;
+  }
   const res = await fetchWithTimeout(apiUrl(path), {
     method: 'GET',
-    headers: apiRequestHeaders(),
+    headers,
     signal,
   });
   if (!res.ok) {
@@ -99,12 +105,19 @@ export async function fetchSessionBootstrap(sessionId: string, deviceInstallId?:
   );
 }
 
+export async function fetchAuthenticatedSessionBootstrap(signal?: AbortSignal) {
+  return getJson<SessionBootstrapDto>('/v1/sessions/bootstrap/authenticated', signal, true);
+}
+
 async function postJson<T>(
   path: string,
   body: unknown,
   auth = false,
   opts?: { signal?: AbortSignal; timeoutMs?: number },
 ): Promise<T> {
+  const { ensureDeviceIdentity } = await import('@/services/identity');
+  await ensureDeviceIdentity();
+
   const headers = apiRequestHeaders({
     'Content-Type': 'application/json',
   });
@@ -317,28 +330,25 @@ export type GuideReplyResult =
 export async function requestGuideReply(
   messages: Array<{ role: string; content: string }>,
 ): Promise<GuideReplyResult> {
-  const {
-    sessionId,
-    deviceInstallId,
-    palmAnalysis,
-    userDisplayName,
-    userGender,
-    focusTopics,
-  } = useSessionStore.getState();
+  const { ensureDeviceIdentity, syncProfileRemote } = await import('@/services/identity');
+  const { sessionId, deviceInstallId } = await ensureDeviceIdentity();
 
-  if (!sessionId || !palmAnalysis) {
+  const { palmAnalysis, userDisplayName, userGender, focusTopics } = useSessionStore.getState();
+
+  if (!palmAnalysis) {
     return { ok: false, error: GUIDE_FINISH_PALM_FIRST, needsPalm: true };
   }
 
-  if (!isApiConfigured()) {
-    return { ok: false, error: ERRORS.network, offline: true };
+  if (!isApiConfigured() || isMisconfiguredProductionApi()) {
+    return {
+      ok: false,
+      error:
+        'This app build is missing the server URL. Ask your team for a fresh APK built with the production API.',
+      offline: true,
+    };
   }
 
-  if (!deviceInstallId) {
-    return { ok: false, error: ERRORS.network, offline: true };
-  }
-
-  await import('@/services/identity').then(({ syncProfileRemote }) => syncProfileRemote());
+  await syncProfileRemote();
 
   const profileSummary = [
     userDisplayName ? `Name: ${userDisplayName}` : '',

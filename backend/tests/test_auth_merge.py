@@ -76,6 +76,64 @@ def test_merge_rejects_hs256_token(client, monkeypatch):
     assert res.status_code == 401
 
 
+def test_authenticated_bootstrap_returns_richest_saved_session(client, monkeypatch):
+    user_id = str(uuid.uuid4())
+    plain_session_id = str(uuid.uuid4())
+    premium_session_id = str(uuid.uuid4())
+
+    async def _sessions_for_user(*_args, **_kwargs):
+        return [
+            {
+                "session_id": plain_session_id,
+                "device_install_id": "dev-old",
+                "supabase_user_id": user_id,
+                "display_name": "Plain",
+                "gender": None,
+                "focus_topics": [],
+                "palm_storage_path": None,
+                "palm_analysis": None,
+                "preview_report": None,
+                "full_report": None,
+                "predictions": None,
+                "chat_tail": [],
+                "is_premium": False,
+            },
+            {
+                "session_id": premium_session_id,
+                "device_install_id": "dev-old",
+                "supabase_user_id": user_id,
+                "display_name": "Restored",
+                "gender": "prefer_not",
+                "focus_topics": ["growth"],
+                "palm_storage_path": None,
+                "palm_analysis": None,
+                "preview_report": None,
+                "full_report": None,
+                "predictions": None,
+                "chat_tail": [{"role": "guide", "content": "Welcome back"}],
+                "is_premium": True,
+            },
+        ]
+
+    monkeypatch.setattr(
+        "app.routes.agastya.session_repository.list_sessions_for_user",
+        _sessions_for_user,
+    )
+
+    token = client.test_keys.token(user_id)  # type: ignore[attr-defined]
+    res = client.get(
+        "/v1/sessions/bootstrap/authenticated",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert res.status_code == 200
+    body = res.json()
+    assert body["sessionId"] == premium_session_id
+    assert body["displayName"] == "Restored"
+    assert body["isPremium"] is True
+    assert body["chatTail"] == [{"role": "guide", "content": "Welcome back"}]
+
+
 def test_register_rejects_invalid_session_id(client):
     res = client.post(
         "/v1/sessions/register",

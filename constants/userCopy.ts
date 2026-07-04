@@ -7,7 +7,7 @@ import type { InsightSection } from '@/types/report';
 export const APP_BRAND = 'Agastya';
 
 export const SIGN_IN_UNAVAILABLE =
-  'Sign-in isn’t available right now. You can still enjoy your reading on this device.';
+  "Sign-in isn't available right now. You can still enjoy your reading on this device.";
 
 export const EMAIL_MAGIC_LINK_SENT =
   'We sent a sign-in link. Open it on this device to finish signing in.';
@@ -33,10 +33,10 @@ export const AUTH_MAGIC_LINK_HELP =
   'Check spam or promotions. Open the link on this same device.';
 
 export const SYNC_NOTICE_FAILED =
-  'We couldn’t sync your latest reading. You’re viewing what’s saved on this device.';
+  "We couldn't sync your latest reading. You're viewing what's saved on this device.";
 
 export const SYNC_NOTICE_MERGE_FAILED =
-  'Sign-in succeeded but we couldn’t link your reading to your account. Try again from Profile.';
+  "Sign-in succeeded but we couldn't link your reading to your account. Try again from Profile.";
 
 export const SAMPLE_READING_BADGE = 'Sample reading';
 
@@ -84,7 +84,7 @@ export const ANALYSIS_LOADING_CHIPS: readonly [string, string] = [
 ];
 
 export const PALM_CAPTURE_FAILED =
-  'We couldn’t capture your palm. Try again in better light with your hand steady.';
+  "We couldn't capture your palm. Try again in better light with your hand steady.";
 
 export const AI_VOICE_HINTS = [
   'You often think things through before you speak. That patience is a strength.',
@@ -113,7 +113,7 @@ const HEART_LABELS: Record<string, string> = {
 const HEAD_LABELS: Record<string, string> = {
   short: 'Focused mind line',
   medium: 'Balanced mind line',
-  long: 'Deep thinker’s line',
+  long: "Deep thinker's line",
 };
 
 function capitalize(s: string): string {
@@ -123,7 +123,7 @@ function capitalize(s: string): string {
 
 export function palmReadingChips(p: PalmAnalysisDto): [string, string] {
   const life =
-    LIFE_LABELS[String(p.life_line).toLowerCase()] ?? `Life line · ${capitalize(String(p.life_line))}`;
+    LIFE_LABELS[String(p.life_line).toLowerCase()] ?? `Life line - ${capitalize(String(p.life_line))}`;
   const heart = HEART_LABELS[String(p.heart_line).toLowerCase()];
   const head = HEAD_LABELS[String(p.head_line).toLowerCase()];
   const personality =
@@ -138,7 +138,7 @@ export function buildDailyInsight(palm: PalmAnalysisDto | null): InsightSection 
   if (!palm) {
     return {
       id: 'daily',
-      title: 'Today’s insight',
+      title: "Today's insight",
       body: 'Take one small step toward what already matters to you. You do not need a perfect moment to start.',
     };
   }

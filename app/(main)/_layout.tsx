@@ -21,19 +21,25 @@ import { LOCAL_TASKS } from '@/utils/localTasks';
 export default function MainTabsLayout() {
   const hydrated = usePersistHydration();
   const entered = useSessionStore((s) => s.hasEnteredMain);
-  const { isSignedIn, loading: authLoading } = useAuthSession();
+  const { isSignedIn, loading: authLoading, userId } = useAuthSession();
   const insets = useSafeAreaInsets();
   const tabBarBottom = Math.max(insets.bottom, Platform.OS === 'web' ? 14 : 10);
   const tabBarHeight = TAB_BAR_BODY_HEIGHT + tabBarBottom + 6;
   const palmAnalysis = useSessionStore((s) => s.palmAnalysis);
   const tasks = useTaskStore((s) => s.tasks);
   const completedIds = useTaskStore((s) => s.completedIds);
+  const gate = canEnterMainAppSync();
+  const canShowTabs = entered || gate === 'ok';
 
   useEffect(() => {
-    if (!entered && canEnterMainAppSync() === 'ok') {
+    if (entered) return;
+    if (userId) {
+      syncAuthUserToStore(userId);
+    }
+    if (canEnterMainAppSync() === 'ok') {
       useSessionStore.getState().setEnteredMain(true);
     }
-  }, [entered]);
+  }, [entered, isSignedIn, userId, authLoading]);
 
   const tasksTabBadge = useMemo(() => {
     if (!palmAnalysis) return undefined;
@@ -65,8 +71,7 @@ export default function MainTabsLayout() {
       </CosmicScreen>
     );
   }
-  if (!entered) {
-    const gate = canEnterMainAppSync();
+  if (!canShowTabs) {
     if (gate === 'ok') {
       return (
         <CosmicScreen variant="stitch">
@@ -86,7 +91,7 @@ export default function MainTabsLayout() {
       );
     }
     const target = resolveBlockedAppHref(isSignedIn);
-    return <Redirect href={target === '/(main)/home' ? '/welcome' : target} />;
+    return <Redirect href={target} />;
   }
 
   if (requiresSupabaseSignIn() && authLoading) {

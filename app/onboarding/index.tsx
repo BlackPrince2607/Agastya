@@ -1,42 +1,52 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Image, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CosmicDotGrid } from '@/components/layout/CosmicDotGrid';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
+import { StickyActionBar, STICKY_ACTION_BAR_SINGLE } from '@/components/layout/StickyActionBar';
+import { DecorativePalmArt } from '@/components/onboarding/DecorativePalmArt';
 import { OnboardingHeader } from '@/components/onboarding/OnboardingHeader';
 import { CosmicButton } from '@/components/primitives';
 import { deferRouterPush } from '@/utils/routerDefer';
 import { ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS } from '@/constants/onboarding';
 import { PAGE_PADDING } from '@/constants/layout';
-import { stitchMd3, STITCH_PALM_ART_URI } from '@/constants/stitchWelcome';
+import { stitchMd3 } from '@/constants/stitchWelcome';
 
-/** Stitch “Trust” beat — intro before profile capture (not the live palm scan step). */
+/** Stitch "Trust" beat - intro before profile capture (not the live palm scan step). */
 export default function TrustOnboardingScreen() {
+  const insets = useSafeAreaInsets();
+
   return (
     <CosmicScreen>
       <View className="flex-1">
         <CosmicDotGrid />
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ flexGrow: 1, paddingHorizontal: PAGE_PADDING, paddingBottom: 112, paddingTop: 8 }}
+          contentContainerStyle={{
+            flexGrow: 1,
+            paddingHorizontal: PAGE_PADDING,
+            paddingBottom: insets.bottom + STICKY_ACTION_BAR_SINGLE,
+            paddingTop: 8,
+          }}
           keyboardShouldPersistTaps="handled">
           <OnboardingHeader step={ONBOARDING_STEPS.trust} total={ONBOARDING_TOTAL_STEPS} />
 
           <View
-            className="mb-8 mt-2 w-full max-w-sm items-center justify-center self-center overflow-hidden rounded-2xl border border-white/10 bg-black/25"
-            style={{ aspectRatio: 1 }}>
-            <Image
-              accessibilityIgnoresInvertColors
-              source={{ uri: STITCH_PALM_ART_URI }}
-              className="h-full w-full"
+            className="mb-8 mt-2 w-full max-w-sm self-center overflow-hidden rounded-3xl border border-white/12 bg-black/35"
+            style={{ aspectRatio: 4 / 3 }}>
+            <DecorativePalmArt
+              opacity={1}
               resizeMode="cover"
-              style={{ opacity: 0.55 }}
+              imageStyle={{ transform: [{ scale: 1.04 }] }}
+              style={{ width: '100%', height: '100%' }}
             />
-            <View className="absolute inset-0 items-center justify-center">
+            <View className="absolute inset-0" style={{ backgroundColor: 'rgba(5,4,12,0.08)' }} />
+            <View className="absolute bottom-4 right-4">
               <View
-                className="h-16 w-16 items-center justify-center rounded-full border border-white/15"
-                style={{ backgroundColor: 'rgba(211,190,235,0.12)' }}>
-                <Ionicons name="sparkles" size={28} color={stitchMd3.primary} />
+                className="h-12 w-12 items-center justify-center rounded-full border border-white/15"
+                style={{ backgroundColor: 'rgba(10,10,20,0.54)' }}>
+                <Ionicons name="sparkles" size={22} color={stitchMd3.primary} />
               </View>
             </View>
           </View>
@@ -83,14 +93,11 @@ export default function TrustOnboardingScreen() {
             </View>
           </View>
 
-          <View className="gap-4">
-            <CosmicButton
-              gradient="nebulaMd3"
-              label="Continue"
-              onPress={() => deferRouterPush('/onboarding/profile')}
-            />
-          </View>
         </ScrollView>
+
+        <StickyActionBar>
+          <CosmicButton gradient="nebulaMd3" label="Continue" onPress={() => deferRouterPush('/onboarding/profile')} />
+        </StickyActionBar>
       </View>
     </CosmicScreen>
   );

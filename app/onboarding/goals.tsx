@@ -1,10 +1,11 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import type { ComponentProps } from 'react';
-import { Alert, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CosmicDotGrid } from '@/components/layout/CosmicDotGrid';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
+import { StickyActionBar, STICKY_ACTION_BAR_COMFORTABLE } from '@/components/layout/StickyActionBar';
 import { OnboardingHeader } from '@/components/onboarding/OnboardingHeader';
 import { CosmicButton } from '@/components/primitives';
 import { ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS } from '@/constants/onboarding';
@@ -89,7 +90,11 @@ export default function GoalsScreen() {
           style={{ flex: 1 }}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ paddingBottom: 200, paddingTop: 12, paddingHorizontal: PAGE_PADDING }}>
+          contentContainerStyle={{
+            paddingBottom: insets.bottom + STICKY_ACTION_BAR_COMFORTABLE,
+            paddingTop: 12,
+            paddingHorizontal: PAGE_PADDING,
+          }}>
           <View className="gap-8">
             <OnboardingHeader step={ONBOARDING_STEPS.goals} total={ONBOARDING_TOTAL_STEPS} />
 
@@ -156,23 +161,17 @@ export default function GoalsScreen() {
           </View>
         </ScrollView>
 
-        <View
-          className={`${Platform.OS === 'web' ? 'fixed' : 'absolute'} bottom-0 left-0 right-0 gap-4 border-t border-white/10 bg-[#0f0e10]/96 px-6 pt-6`}
-          style={{
-            paddingBottom: Math.max(insets.bottom, 20),
-            zIndex: 20,
-            elevation: 24,
-          }}>
-          <CosmicButton gradient="nebulaMd3" label="Continue" onPress={() => void continueFlow()} />
+        <StickyActionBar contentStyle={{ gap: 10 }}>
           <Text className="text-center font-body text-[13px] leading-5 text-on-surface-variant">
             You can change these focus areas later in your profile.
           </Text>
-          <Pressable accessibilityRole="button" onPress={() => void skipFlow()} className="items-center py-2">
+          <Pressable accessibilityRole="button" onPress={() => void skipFlow()} className="items-center py-1.5">
             <Text className="font-label text-[12px] uppercase tracking-[0.12em] text-on-surface-variant">
               Skip for now
             </Text>
           </Pressable>
-        </View>
+          <CosmicButton gradient="nebulaMd3" label="Continue" onPress={() => void continueFlow()} />
+        </StickyActionBar>
       </View>
     </CosmicScreen>
   );

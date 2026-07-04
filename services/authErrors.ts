@@ -34,7 +34,7 @@ export function mapSupabaseAuthError(message: string): string {
     m.includes('oauth provider not enabled') ||
     (m.includes('provider') && m.includes('not enabled'))
   ) {
-    return 'That sign-in option isn’t available right now. Try email instead.';
+    return "That sign-in option isn't available right now. Try email instead.";
   }
 
   if (

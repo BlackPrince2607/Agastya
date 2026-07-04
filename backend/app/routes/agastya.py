@@ -60,37 +60,57 @@ async def _hydrate_from_user_sessions(
     if not user_id or not session_repository.is_enabled(settings):
         return
 
-    prior_rows = await session_repository.list_sessions_for_user(str(user_id), settings)
-    best_row: dict[str, Any] | None = None
-    best_score = -1
-    for row in prior_rows:
-        if row.get("session_id") == session_id:
-            continue
-        score = 0
-        if row.get("palm_analysis"):
-            score += 4
-        if row.get("preview_report"):
-            score += 2
-        if row.get("full_report"):
-            score += 3
-        if row.get("is_premium"):
-            score += 1
-        if score > best_score:
-            best_score = score
-            best_row = row
+    best_row = await _richest_session_for_user(str(user_id), settings, exclude_session_id=session_id)
     if best_row is None:
         return
     source = session_repository.row_to_bucket(best_row)
     merge_bucket_data(bkt, source)
 
 
+def _restore_score(row: dict[str, Any]) -> int:
+    score = 0
+    if row.get("palm_analysis"):
+        score += 4
+    if row.get("preview_report"):
+        score += 2
+    if row.get("full_report"):
+        score += 3
+    if row.get("is_premium"):
+        score += 1
+    if row.get("chat_tail"):
+        score += 1
+    return score
+
+
+async def _richest_session_for_user(
+    user_id: str,
+    settings: Settings,
+    *,
+    exclude_session_id: str | None = None,
+) -> dict[str, Any] | None:
+    if not session_repository.is_enabled(settings):
+        return None
+    prior_rows = await session_repository.list_sessions_for_user(str(user_id), settings)
+    best_row: dict[str, Any] | None = None
+    best_score = -1
+    for row in prior_rows:
+        if exclude_session_id and row.get("session_id") == exclude_session_id:
+            continue
+        score = _restore_score(row)
+        if score > best_score:
+            best_score = score
+            best_row = row
+    return best_row
+
+
 def _bind_device(bkt: SessionBucket, session_id: str, device_install_id: str) -> None:
+    stored = bkt.meta.get("deviceInstallId")
     assert_device_binding(
         session_id=session_id,
         device_install_id=device_install_id,
-        stored_device_id=bkt.meta.get("deviceInstallId"),
+        stored_device_id=stored,
     )
-    if device_install_id and not bkt.meta.get("deviceInstallId"):
+    if device_install_id:
         bkt.meta["deviceInstallId"] = device_install_id
 
 
@@ -108,9 +128,6 @@ async def register_session(
 ) -> SessionRegisterResponse:
     await _hydrate(body.session_id, settings)
     bkt = bucket(body.session_id)
-    stored = bkt.meta.get("deviceInstallId")
-    if stored and stored != body.device_install_id:
-        raise HTTPException(status_code=403, detail="deviceInstallId does not match session owner")
     bkt.meta["deviceInstallId"] = body.device_install_id
     if body.display_name:
         bkt.meta["displayName"] = body.display_name
@@ -156,12 +173,36 @@ async def session_bootstrap(
     bkt = await _sync_premium(session_id, settings)
     await _hydrate_from_user_sessions(session_id, bkt, settings)
     if device_install_id:
-        assert_device_binding(
-            session_id=session_id,
-            device_install_id=device_install_id,
-            stored_device_id=bkt.meta.get("deviceInstallId"),
-        )
+        _bind_device(bkt, session_id, device_install_id)
     return _bootstrap_from_bucket(session_id, bkt)
+
+
+@router.get(
+    "/sessions/bootstrap/authenticated",
+    response_model=SessionBootstrapResponse,
+    response_model_by_alias=True,
+)
+async def authenticated_session_bootstrap(
+    settings: Annotated[Settings, Depends(get_settings)],
+    authorization: Annotated[str | None, Header()] = None,
+) -> SessionBootstrapResponse:
+    if not settings.supabase_enabled:
+        raise HTTPException(status_code=503, detail="Supabase session persistence is not configured")
+
+    token = _bearer_token(authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="Authorization bearer token required")
+    claims = verify_supabase_access_token(token, settings)
+    user_id = str(claims.get("sub", ""))
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Token missing subject")
+
+    best_row = await _richest_session_for_user(user_id, settings)
+    if best_row is None:
+        raise HTTPException(status_code=404, detail="No saved session found")
+
+    session_id = str(best_row["session_id"])
+    return _bootstrap_from_bucket(session_id, session_repository.row_to_bucket(best_row))
 
 
 @router.get(
@@ -196,13 +237,7 @@ async def patch_session_profile(
 ) -> SessionProfileResponse:
     await _hydrate(body.session_id, settings)
     bkt = bucket(body.session_id)
-    assert_device_binding(
-        session_id=body.session_id,
-        device_install_id=body.device_install_id,
-        stored_device_id=bkt.meta.get("deviceInstallId"),
-    )
-    if not bkt.meta.get("deviceInstallId"):
-        bkt.meta["deviceInstallId"] = body.device_install_id
+    _bind_device(bkt, body.session_id, body.device_install_id)
     if body.display_name is not None:
         bkt.meta["displayName"] = body.display_name
     if body.gender is not None:
@@ -244,12 +279,7 @@ async def merge_session(
     if existing_user and str(existing_user) != body.supabase_user_id:
         raise HTTPException(status_code=403, detail="Session already linked to another account")
     if body.device_install_id:
-        assert_device_binding(
-            session_id=body.anonymous_session_id,
-            device_install_id=body.device_install_id,
-            stored_device_id=bkt.meta.get("deviceInstallId"),
-        )
-        bkt.meta["deviceInstallId"] = body.device_install_id
+        _bind_device(bkt, body.anonymous_session_id, body.device_install_id)
 
     bkt.meta["supabaseUserId"] = body.supabase_user_id
     await _hydrate_from_user_sessions(body.anonymous_session_id, bkt, settings)
@@ -272,13 +302,8 @@ async def palm_analyze(
 ) -> dict[str, Any]:
     await _hydrate(body.session_id, settings)
     bkt = bucket(body.session_id)
-    assert_device_binding(
-        session_id=body.session_id,
-        device_install_id=body.device_install_id,
-        stored_device_id=bkt.meta.get("deviceInstallId"),
-    )
-    if body.device_install_id and not bkt.meta.get("deviceInstallId"):
-        bkt.meta["deviceInstallId"] = body.device_install_id
+    if body.device_install_id:
+        _bind_device(bkt, body.session_id, body.device_install_id)
     palm = await analyze_palm(settings, body)
     bkt.palm = palm
     storage_path = await upload_palm_capture_if_configured(

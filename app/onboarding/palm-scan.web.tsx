@@ -29,7 +29,7 @@ export default function PalmScanWebScreen() {
         params: { seed },
       });
     } catch {
-      Alert.alert('Upload failed', 'We couldn’t read that image. Try a JPG or PNG of your open palm.');
+      Alert.alert('Upload failed', "We couldn't read that image. Try a JPG or PNG of your open palm.");
     } finally {
       setUploadBusy(false);
     }
@@ -39,7 +39,7 @@ export default function PalmScanWebScreen() {
     <PalmScanBriefing
       hand={palmScanHand ?? selectedHand}
       onHandChange={setSelectedHand}
-      primaryLabel={uploadBusy ? 'Opening…' : 'Upload palm photo'}
+      primaryLabel={uploadBusy ? 'Opening...' : 'Upload palm photo'}
       primaryIcon="image"
       onPrimaryPress={(hand) => void uploadAndContinue(hand)}
     />

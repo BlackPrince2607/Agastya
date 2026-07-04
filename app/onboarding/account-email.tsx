@@ -3,7 +3,6 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
   Alert,
-  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -13,6 +12,7 @@ import {
 
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { OnboardingScroll } from '@/components/layout/OnboardingScroll';
+import { DecorativePalmArt } from '@/components/onboarding/DecorativePalmArt';
 import { OnboardingHeader } from '@/components/onboarding/OnboardingHeader';
 import { CosmicTextField, GlassCard, NebulaButton } from '@/components/ui';
 import { colors } from '@/constants/theme';
@@ -25,7 +25,6 @@ import {
   EMAIL_RESET_SENT,
   PASSWORD_MISMATCH,
 } from '@/constants/userCopy';
-import { STITCH_PALM_ART_URI } from '@/constants/stitchWelcome';
 import { track } from '@/services/analytics';
 import { isMagicLinkEnabled } from '@/services/authConfig';
 import {
@@ -37,6 +36,8 @@ import {
 import { getAuthRedirectUri } from '@/services/authRedirect';
 import { setPostSignInReturn } from '@/services/authSession';
 import { finishSignIn } from '@/services/authSignIn';
+import { useSessionStore } from '@/store/sessionStore';
+import { resetAppNavigation } from '@/utils/routerDefer';
 
 type EmailStepMode = 'signin' | 'signup';
 
@@ -129,8 +130,8 @@ export default function AccountEmailScreen() {
         if (fromProfileFlow) {
           router.replace('/(main)/profile');
         } else {
-          Alert.alert('Signed in', 'You’re signed in. Continue below.');
-          router.replace('/onboarding/account');
+          useSessionStore.getState().setEnteredMain(true);
+          resetAppNavigation('/(main)/home');
         }
       }
     } finally {
@@ -207,12 +208,7 @@ export default function AccountEmailScreen() {
           <OnboardingHeader showBack useClose />
 
           <View className="overflow-hidden rounded-glass border border-white/10 shadow-aura" style={{ aspectRatio: 4 / 3 }}>
-            <Image
-              accessibilityIgnoresInvertColors
-              source={{ uri: STITCH_PALM_ART_URI }}
-              className="h-full w-full"
-              resizeMode="cover"
-            />
+            <DecorativePalmArt opacity={0.82} resizeMode="cover" style={{ width: '100%', height: '100%' }} />
             <LinearGradient
               colors={['transparent', 'rgba(20,19,21,0.2)', '#141315']}
               style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '55%' }}
@@ -266,7 +262,7 @@ export default function AccountEmailScreen() {
             ) : null}
 
             <NebulaButton
-              label={busy ? 'Please wait…' : mode === 'signin' ? 'Sign in' : 'Create account'}
+              label={busy ? 'Please wait...' : mode === 'signin' ? 'Sign in' : 'Create account'}
               onPress={() => void passwordSubmit()}
               disabled={busy}
             />
@@ -289,7 +285,7 @@ export default function AccountEmailScreen() {
 
                 <NebulaButton
                   variant="ghost"
-                  label={busy ? 'Sending…' : 'Email me a sign-in link'}
+                  label={busy ? 'Sending...' : 'Email me a sign-in link'}
                   onPress={() => void magicLink()}
                   disabled={busy}
                 />

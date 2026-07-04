@@ -108,7 +108,7 @@ async def generate_chat_reply(
     )
     if completion is None:
         if settings.groq_enabled:
-            raise GuideLlmUnavailableError()
+            logger.warning("Groq chat unavailable; using heuristic guide reply")
         return _heuristic_chat(body), list(_FALLBACK_SUGGESTIONS)
 
     try:
@@ -116,16 +116,12 @@ async def generate_chat_reply(
         reply, suggestions = _split_suggestions(text)
         if not reply:
             if settings.groq_enabled:
-                raise GuideLlmUnavailableError()
+                logger.warning("Groq chat returned an empty reply; using heuristic guide reply")
             return _heuristic_chat(body), list(_FALLBACK_SUGGESTIONS)
         return reply, suggestions or list(_FALLBACK_SUGGESTIONS)
-    except GuideLlmUnavailableError:
-        raise
     except Exception as exc:
         logger.exception("Chat reply parse failed: %s", exc)
         sentry_sdk.capture_exception(exc)
-        if settings.groq_enabled:
-            raise GuideLlmUnavailableError() from exc
         return _heuristic_chat(body), list(_FALLBACK_SUGGESTIONS)
 
 

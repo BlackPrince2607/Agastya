@@ -9,7 +9,7 @@ import {
   peekPendingAuthReturnUrl,
   waitForAuthReturnUrl,
 } from '@/services/authCallback';
-import { mapSupabaseAuthError } from '@/services/authErrors';
+import { alertForAuthFailure, parseAuthFailure } from '@/services/authErrorUtils';
 import { isAuthCallbackUrl } from '@/services/authRedirect';
 import { readAuthSession } from '@/services/authSession';
 import { finishSignIn } from '@/services/authSignIn';
@@ -38,6 +38,13 @@ export default function AuthCallbackScreen() {
 
     void (async () => {
       try {
+        const recoverExistingSession = async () => {
+          const auth = await readAuthSession();
+          if (!auth.isSignedIn) return false;
+          await finishSignIn({ userId: auth.userId });
+          return true;
+        };
+
         if (Platform.OS === 'web' && typeof window !== 'undefined') {
           const url = window.location.href;
           if (!isAuthCallbackUrl(url)) {
@@ -48,10 +55,9 @@ export default function AuthCallbackScreen() {
 
           const result = await completeAuthFromUrl(url);
           if (!result.ok) {
-            Alert.alert(
-              'Sign-in incomplete',
-              mapSupabaseAuthError(result.message ?? 'We could not finish signing you in.'),
-            );
+            if (await recoverExistingSession()) return;
+            const alert = alertForAuthFailure(parseAuthFailure(result.message ?? 'We could not finish signing you in.'));
+            Alert.alert('Sign-in incomplete', alert.body);
             setRedirectHref('/onboarding/account');
             return;
           }
@@ -73,10 +79,9 @@ export default function AuthCallbackScreen() {
         if (url && isAuthCallbackUrl(url)) {
           const result = await completeAuthFromUrl(url);
           if (!result.ok) {
-            Alert.alert(
-              'Sign-in incomplete',
-              mapSupabaseAuthError(result.message ?? 'We could not finish signing you in.'),
-            );
+            if (await recoverExistingSession()) return;
+            const alert = alertForAuthFailure(parseAuthFailure(result.message ?? 'We could not finish signing you in.'));
+            Alert.alert('Sign-in incomplete', alert.body);
             setRedirectHref('/onboarding/account');
             return;
           }
@@ -111,7 +116,7 @@ export default function AuthCallbackScreen() {
   return (
     <CosmicScreen variant="stitch">
       <View className="flex-1 items-center justify-center px-8">
-        <LoadingBlock message="Signing you in…" />
+        <LoadingBlock message="Signing you in..." />
       </View>
     </CosmicScreen>
   );

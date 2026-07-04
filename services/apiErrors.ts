@@ -1,12 +1,12 @@
 /** Map backend / client errors to user-friendly copy. */
 
 export const ERRORS = {
-  network: 'We couldn’t reach Agastya right now. Check your connection and try again.',
+  network: "We couldn't reach Agastya right now. Check your connection and try again.",
   guideNeedsPalm: 'Complete your palm reading first. Then the Guide can answer questions about your report.',
   guideLlmUnavailable:
     'The Guide is temporarily unavailable. Check that GROQ_API_KEY is valid in backend/.env and restart the API.',
   missingSession: 'Something went wrong starting your session. Please restart the app.',
-  mergeMismatch: 'This sign-in doesn’t match your current reading. Try signing in with the account you used before.',
+  mergeMismatch: "This sign-in doesn't match your current reading. Try signing in with the account you used before.",
   authRequired: 'Please sign in to continue.',
   authInvalid: 'Sign-in failed. Please try again.',
   palmRequired: 'We need your palm reading before we can build your report.',
@@ -32,6 +32,12 @@ export function mapApiError(detail: string): string {
   }
   if (d.includes('palm analysis before') || d.includes('run palm analysis')) {
     return ERRORS.palmRequired;
+  }
+  if (d.includes('deviceinstallid does not match')) {
+    return 'This device no longer matches your saved session. Clear app data or tap Start fresh in Profile, then scan your palm again.';
+  }
+  if (d.includes('device identity is not ready')) {
+    return ERRORS.missingSession;
   }
   if (d.includes('missing_session')) {
     return ERRORS.missingSession;

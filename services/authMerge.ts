@@ -4,7 +4,7 @@ import { syncAuthUserToStore } from '@/services/authSession';
 import { syncProfileRemote } from '@/services/identity';
 import { linkRevenueCatUser } from '@/services/revenuecat';
 import { restoreSessionFromServer } from '@/services/sessionRestore';
-import { getSupabase, getSupabaseAccessToken } from '@/services/supabase';
+import { getSupabase, waitForSupabaseAccessToken } from '@/services/supabase';
 import { useSessionStore } from '@/store/sessionStore';
 import { isApiConfigured } from '@/services/env';
 
@@ -21,7 +21,9 @@ async function tryMergeSession(supabaseUserId: string) {
   mergeInFlight = (async () => {
     if (!isApiConfigured()) return;
 
-    const token = await getSupabaseAccessToken();
+    // Wait for Supabase session storage to settle after OAuth / magic-link exchange
+    // so `/v1/sessions/merge` receives a valid Authorization bearer token.
+    const token = await waitForSupabaseAccessToken();
     if (!token) {
       if (__DEV__) {
         console.warn('[Agastya] session merge skipped — no access token on Supabase session');
@@ -39,12 +41,15 @@ async function tryMergeSession(supabaseUserId: string) {
       syncAuthUserToStore(supabaseUserId);
       track('session_merge', { linked: res.linked });
       await linkRevenueCatUser(supabaseUserId);
-      if (!useSessionStore.getState().skipCloudRestore) {
-        await restoreSessionFromServer({ force: true });
-      }
+      // Always force restore after a successful merge — the user's explicit sign-in intent
+      // overrides any prior local `skipCloudRestore` flag from "Start fresh" / "Replay setup".
+      await restoreSessionFromServer({ force: true });
       useSessionStore.getState().setSyncNotice(null);
     } catch (err) {
       track('session_merge_failed');
+      useSessionStore
+        .getState()
+        .setSyncNotice('Sign-in succeeded but cloud sync failed. Pull to refresh or try again shortly.');
       if (__DEV__) {
         console.warn(
           '[Agastya] session merge failed — ensure backend SUPABASE_URL is set and JWT verification can reach JWKS.',

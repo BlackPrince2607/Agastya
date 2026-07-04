@@ -6,18 +6,19 @@ import { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Dimensions,
   Image,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
+  type ImageSourcePropType,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { StickyActionBar } from '@/components/layout/StickyActionBar';
 import { WelcomeBlurShell } from '@/components/welcome/WelcomeBlurShell';
-import { stitchMd3, STITCH_PALM_ART_URI } from '@/constants/stitchWelcome';
+import { stitchMd3 } from '@/constants/stitchWelcome';
 import { triggerLightTap } from '@/hooks/useHapticTap';
 import { readAuthSession } from '@/services/authSession';
 import { isSupabaseEnabled } from '@/services/supabase';
@@ -25,12 +26,10 @@ import { SIGN_IN_UNAVAILABLE } from '@/constants/userCopy';
 import { resolveOnboardingHref, routeAfterSignInIntent } from '@/utils/navigationFlow';
 import { deferRouterReplace } from '@/utils/routerDefer';
 
-/** Pixel translation of Stitch HTML export ΓÇö MD3 tokens, Inter / Noto Serif / Space Grotesk */
-const WIN = Dimensions.get('window');
+const WELCOME_PALM_BACKGROUND = require('../assets/images/agastya-palm-welcome-portrait.png') as ImageSourcePropType;
 
 export default function WelcomeScreen() {
   const insets = useSafeAreaInsets();
-  const palmW = WIN.width * 1.45;
   const [signInBusy, setSignInBusy] = useState(false);
 
   const handleSignIn = async () => {
@@ -46,10 +45,15 @@ export default function WelcomeScreen() {
       if (auth.isSignedIn) {
         await routeAfterSignInIntent();
       } else {
-        router.push('/onboarding/account');
+        router.push({ pathname: '/onboarding/account', params: { fromWelcome: '1' } });
       }
-    } catch {
-      Alert.alert('Sign-in', 'Something went wrong. Please try again.');
+    } catch (err) {
+      if (__DEV__) {
+        console.warn('[Agastya auth] welcome sign-in failed', err);
+      }
+      // Fall back to the account screen so the user can retry OAuth explicitly
+      // rather than being stuck on welcome with only a generic popup.
+      router.push({ pathname: '/onboarding/account', params: { fromWelcome: '1' } });
     } finally {
       setSignInBusy(false);
     }
@@ -64,19 +68,17 @@ export default function WelcomeScreen() {
   );
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top }]}>
+    <View style={styles.root}>
       <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-        <LinearGradient colors={[stitchMd3.background, stitchMd3.background]} style={StyleSheet.absoluteFill} />
-        <View style={styles.radialWash} />
         <Image
           accessibilityIgnoresInvertColors
-          source={{ uri: STITCH_PALM_ART_URI }}
-          style={[styles.palmArt, { width: palmW, height: palmW * 0.95, left: (WIN.width - palmW) / 2 }]}
-          resizeMode="contain"
+          source={WELCOME_PALM_BACKGROUND}
+          resizeMode="cover"
+          style={StyleSheet.absoluteFill}
         />
         <LinearGradient
-          colors={['rgba(211,190,235,0.12)', 'transparent', stitchMd3.background]}
-          locations={[0, 0.42, 1]}
+          colors={['rgba(5,6,14,0)', 'rgba(5,6,14,0.10)', 'rgba(5,5,9,0.96)']}
+          locations={[0, 0.58, 1]}
           style={StyleSheet.absoluteFill}
         />
       </View>
@@ -84,64 +86,71 @@ export default function WelcomeScreen() {
       <ScrollView
         bounces={false}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.scrollInner, { paddingBottom: insets.bottom + 96 }]}>
+        contentContainerStyle={[
+          styles.scrollInner,
+          {
+            paddingTop: insets.top + 28,
+            paddingBottom: insets.bottom + 238,
+          },
+        ]}>
         <View style={styles.stack}>
           <View style={styles.iconWrap}>{glassIcon}</View>
 
           <View style={styles.headBlock}>
             <Text style={styles.kicker}>Agastya</Text>
             <Text style={styles.headline}>{`Your palm.\nYour guide.`}</Text>
-            <Text style={styles.subhead}>Personalized readings for love, career, and daily clarity.</Text>
+            <Text style={styles.subhead}></Text>
           </View>
 
           <Text style={styles.body}>
-            A personalized palm reading and Guide for reflection and funΓÇöentertainment only, not medical or financial advice.
+            A personalized palm reading and guide for reflection and fun.
           </Text>
-
-          <View style={styles.ctaStack}>
-            <MotiPressable
-              onPress={() => {
-                void triggerLightTap();
-                deferRouterReplace(resolveOnboardingHref());
-              }}
-              animate={({ pressed }) => ({ scale: pressed ? 0.97 : 1 })}
-              transition={{ type: 'timing', duration: 160 }}>
-              <LinearGradient
-                colors={['#d3beeb', '#88769f', '#4f4065']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.primaryGradient}>
-                <View style={styles.primaryInner}>
-                  <Text style={styles.primaryLabel}>Get started</Text>
-                  <MaterialCommunityIcons name="arrow-right" size={22} color={stitchMd3.onPrimary} />
-                </View>
-              </LinearGradient>
-            </MotiPressable>
-
-            <Pressable
-              onPress={() => void handleSignIn()}
-              disabled={signInBusy}
-              style={({ pressed }) => [styles.secondaryBtn, (pressed || signInBusy) && { opacity: 0.88 }]}>
-              <WelcomeBlurShell intensity={22} tint="dark" style={styles.secondaryBlur} fallbackStyle={styles.secondaryFallback}>
-                {signInBusy ? (
-                  <ActivityIndicator color={stitchMd3.onBackground} />
-                ) : (
-                  <Text style={styles.secondaryLabel}>Sign in</Text>
-                )}
-              </WelcomeBlurShell>
-            </Pressable>
-          </View>
-
-          <View style={styles.progressTrack}>
-            <View style={styles.progressFill} />
-          </View>
         </View>
       </ScrollView>
 
-      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 28) }]}>
+      <StickyActionBar bottomPadding={28} contentStyle={styles.welcomeDock}>
+        <View style={styles.ctaStack}>
+          <MotiPressable
+            onPress={() => {
+              void triggerLightTap();
+              deferRouterReplace(resolveOnboardingHref());
+            }}
+            animate={({ pressed }) => ({ scale: pressed ? 0.97 : 1 })}
+            transition={{ type: 'timing', duration: 160 }}>
+            <LinearGradient
+              colors={['#7c3aed', '#e879f9', '#22d3ee']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.primaryGradient}>
+              <View style={styles.primaryInner}>
+                <Text style={styles.primaryLabel}>Get started</Text>
+                <View style={styles.primaryIconBubble}>
+                  <MaterialCommunityIcons name="arrow-right" size={18} color="#ffffff" />
+                </View>
+              </View>
+            </LinearGradient>
+          </MotiPressable>
+
+          <Pressable
+            onPress={() => void handleSignIn()}
+            disabled={signInBusy}
+            style={({ pressed }) => [styles.secondaryBtn, (pressed || signInBusy) && { opacity: 0.88 }]}>
+            <WelcomeBlurShell intensity={22} tint="dark" style={styles.secondaryBlur} fallbackStyle={styles.secondaryFallback}>
+              {signInBusy ? (
+                <ActivityIndicator color={stitchMd3.onBackground} />
+              ) : (
+                <Text style={styles.secondaryLabel}>Sign in</Text>
+              )}
+            </WelcomeBlurShell>
+          </Pressable>
+        </View>
+
+        <View style={styles.progressTrack}>
+          <View style={styles.progressFill} />
+        </View>
         <View style={styles.footerRule} />
-        <Text style={styles.footerLine}>Entertainment only ┬╖ Not medical or financial advice</Text>
-      </View>
+        <Text style={styles.footerLine}>Entertainment only. Not medical or financial advice.</Text>
+      </StickyActionBar>
     </View>
   );
 }
@@ -151,19 +160,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: stitchMd3.background,
   },
-  radialWash: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(211, 190, 235, 0.06)',
-  },
-  palmArt: {
-    position: 'absolute',
-    opacity: 0.38,
-    top: WIN.height * 0.09,
-  },
   scrollInner: {
     flexGrow: 1,
     paddingHorizontal: 24,
-    paddingTop: 48,
+    paddingTop: 28,
     justifyContent: 'center',
   },
   stack: {
@@ -171,7 +171,7 @@ const styles = StyleSheet.create({
     width: '100%',
     alignSelf: 'center',
     alignItems: 'center',
-    gap: 28,
+    gap: 18,
   },
   iconWrap: {
     marginBottom: 6,
@@ -204,11 +204,11 @@ const styles = StyleSheet.create({
   },
   subhead: {
     fontFamily: 'Inter_400Regular',
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: 14,
+    lineHeight: 20,
     color: stitchMd3.onSurfaceVariant,
     textAlign: 'center',
-    maxWidth: 320,
+    maxWidth: 300,
   },
   kicker: {
     fontFamily: 'SpaceGrotesk_600SemiBold',
@@ -221,62 +221,78 @@ const styles = StyleSheet.create({
   },
   headline: {
     fontFamily: 'NotoSerif_700Bold',
-    fontSize: 38,
-    lineHeight: 43,
+    fontSize: 36,
+    lineHeight: 40,
     letterSpacing: -0.75,
     color: '#ffffff',
     textAlign: 'center',
   },
   body: {
     fontFamily: 'Inter_400Regular',
-    fontSize: 18,
-    lineHeight: 29,
+    fontSize: 15,
+    lineHeight: 22,
     color: stitchMd3.onSurfaceVariant,
     textAlign: 'center',
-    maxWidth: 340,
+    maxWidth: 300,
     alignSelf: 'center',
   },
   ctaStack: {
     width: '100%',
-    gap: 20,
-    marginTop: 12,
+    maxWidth: 520,
+    alignSelf: 'center',
+    gap: 14,
   },
   primaryGradient: {
     borderRadius: 999,
     overflow: 'hidden',
     shadowColor: stitchMd3.primary,
-    shadowOpacity: 0.35,
-    shadowRadius: 22,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.26)',
+    shadowOpacity: 0.5,
+    shadowRadius: 26,
+    shadowOffset: { width: 0, height: 14 },
+    elevation: 16,
   },
   primaryInner: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    paddingVertical: 19,
+    minHeight: 60,
+    paddingVertical: 17,
     paddingHorizontal: 28,
+  },
+  primaryIconBubble: {
+    width: 28,
+    height: 28,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.24)',
   },
   primaryLabel: {
     fontFamily: 'SpaceGrotesk_600SemiBold',
     fontSize: 15,
     letterSpacing: 2.4,
-    color: stitchMd3.onPrimary,
+    color: '#ffffff',
     textTransform: 'uppercase',
   },
   secondaryBtn: {
     borderRadius: 999,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: 'rgba(255,255,255,0.16)',
+    backgroundColor: 'rgba(255,255,255,0.03)',
   },
   secondaryBlur: {
     borderRadius: 999,
-    paddingVertical: 19,
+    minHeight: 58,
+    paddingVertical: 17,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.03)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
     overflow: 'hidden',
   },
   secondaryFallback: {
@@ -290,7 +306,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   progressTrack: {
-    marginTop: 10,
+    alignSelf: 'center',
     width: 96,
     height: 4,
     borderRadius: 999,
@@ -311,18 +327,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.45,
     shadowRadius: 12,
   },
-  footer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    paddingHorizontal: 24,
+  welcomeDock: {
     alignItems: 'center',
   },
   footerRule: {
     height: StyleSheet.hairlineWidth,
     width: '100%',
-    marginBottom: 16,
     backgroundColor: 'transparent',
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(255,255,255,0.14)',
@@ -330,9 +340,11 @@ const styles = StyleSheet.create({
   footerLine: {
     fontFamily: 'Inter_400Regular',
     fontStyle: 'italic',
-    fontSize: 14,
+    fontSize: 12,
+    lineHeight: 16,
     color: stitchMd3.onSurfaceVariant,
-    opacity: 0.62,
+    opacity: 0.78,
     textAlign: 'center',
+    maxWidth: 300,
   },
 });

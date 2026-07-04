@@ -100,13 +100,23 @@ function resolveApiRoot(): string {
     return '';
   }
 
-  return trimSlash(fallbackDev);
+  // Release native build without a configured URL — never use emulator loopback on real devices.
+  console.error(
+    '[Agastya API] EXPO_PUBLIC_AGASTYA_API_URL was not set at build time — API calls disabled.',
+  );
+  return '';
 }
 
 export const AGASTYA_API_ROOT = resolveApiRoot();
 
 export function isApiConfigured(): boolean {
   return AGASTYA_API_ROOT.length > 0;
+}
+
+/** True when a release build is pointing at dev-only hosts (emulator loopback, localhost). */
+export function isMisconfiguredProductionApi(): boolean {
+  if (__DEV__ || !AGASTYA_API_ROOT) return false;
+  return isLocalDevUrl(AGASTYA_API_ROOT);
 }
 
 export function apiUrl(path: string) {

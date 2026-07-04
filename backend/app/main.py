@@ -60,7 +60,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
         if not await groq_is_live(settings):
             log.error(
-                "GROQ_API_KEY is set but Groq rejected it — chat and reports will fail until you "
+                "GROQ_API_KEY is set but Groq rejected it; using local fallback text until you "
                 "update the key in backend/.env and restart the API",
             )
     elif not settings.debug:
@@ -103,11 +103,14 @@ def create_app() -> FastAPI:
         "allow_origins": settings.cors_origins_list,
         "allow_credentials": True,
         "allow_methods": ["GET", "POST", "PATCH", "OPTIONS"],
-        "allow_headers": ["Authorization", "Content-Type", "Accept"],
+        "allow_headers": ["Authorization", "Content-Type", "Accept", "ngrok-skip-browser-warning"],
     }
     regex_segments: list[str] = []
     if settings.debug:
         regex_segments.append(r"http://(localhost|127\.0\.0\.1):\d+")
+        regex_segments.append(
+            r"http://(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+):\d+"
+        )
         if settings.cors_origin_regex:
             regex_segments.append(f"({settings.cors_origin_regex})")
     if regex_segments:

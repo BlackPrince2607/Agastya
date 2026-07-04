@@ -1,4 +1,4 @@
-import { fetchSessionBootstrap } from '@/services/agastyaApi';
+import { fetchAuthenticatedSessionBootstrap, fetchSessionBootstrap } from '@/services/agastyaApi';
 import { isApiConfigured } from '@/services/env';
 import { track } from '@/services/analytics';
 import { normalizeFullReport } from '@/services/normalizeReport';
@@ -28,11 +28,15 @@ type RestoreOptions = {
 
 let restoreInFlight: Promise<boolean> | null = null;
 
+function hasReadingData(data: Awaited<ReturnType<typeof fetchSessionBootstrap>>): boolean {
+  return Boolean(data.palmAnalysis || data.previewReport || data.fullReport);
+}
+
 /** Pull palm + dossiers from API/Supabase when local ritual state is empty or `force`. */
 export async function restoreSessionFromServer(options?: RestoreOptions): Promise<boolean> {
   if (!isApiConfigured()) return false;
   const snap = useSessionStore.getState();
-  if (!snap.sessionId) return false;
+  if (!snap.sessionId && !snap.supabaseUserId) return false;
   const sessionId = snap.sessionId;
 
   if (snap.skipCloudRestore && options?.force !== true) {
@@ -50,9 +54,34 @@ export async function restoreSessionFromServer(options?: RestoreOptions): Promis
   }
 
   restoreInFlight = (async () => {
+    const loadBootstrap = async (deviceInstallId?: string | null) => {
+      if (!sessionId) {
+        return fetchAuthenticatedSessionBootstrap();
+      }
+
+      const current = await fetchSessionBootstrap(sessionId, deviceInstallId);
+      if (options?.force === true && snap.supabaseUserId && !hasReadingData(current)) {
+        try {
+          const restored = await fetchAuthenticatedSessionBootstrap();
+          if (hasReadingData(restored)) {
+            return restored;
+          }
+        } catch {
+          /* fall back to the current anonymous session */
+        }
+      }
+      return current;
+    };
+
     try {
-      const data = await fetchSessionBootstrap(sessionId, snap.deviceInstallId);
+      let data: Awaited<ReturnType<typeof fetchSessionBootstrap>>;
+      try {
+        data = await loadBootstrap(snap.deviceInstallId);
+      } catch {
+        data = await loadBootstrap(null);
+      }
     const updates: {
+      sessionId?: string;
       userDisplayName?: string;
       userGender?: Gender;
       focusTopics?: FocusTopic[];
@@ -63,6 +92,7 @@ export async function restoreSessionFromServer(options?: RestoreOptions): Promis
       hasUnlockedPremium?: boolean;
     } = {};
 
+    if (data.sessionId && data.sessionId !== snap.sessionId) updates.sessionId = data.sessionId;
     if (data.displayName) updates.userDisplayName = data.displayName;
     const gender = parseGender(data.gender);
     if (gender) updates.userGender = gender;
@@ -103,6 +133,11 @@ export async function restoreSessionFromServer(options?: RestoreOptions): Promis
     return false;
     } catch {
       track('session_restore_fail');
+      if (useSessionStore.getState().supabaseUserId) {
+        useSessionStore
+          .getState()
+          .setSyncNotice('We could not restore your saved reading. Check your connection and try again.');
+      }
       if (__DEV__) {
         console.warn('[Agastya] session restore failed');
       }

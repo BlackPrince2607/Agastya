@@ -24,16 +24,10 @@ export type EnterMainResult = 'ok' | 'need_sign_in' | 'need_ritual';
 
 /** Sync gate from persisted local state — safe on cold start (no Supabase storage read). */
 export function canEnterMainAppSync(): EnterMainResult {
-  if (!hasRitualReading()) {
-    return 'need_ritual';
+  if (requiresSupabaseSignIn()) {
+    return useSessionStore.getState().supabaseUserId ? 'ok' : 'need_sign_in';
   }
-  if (!requiresSupabaseSignIn()) {
-    return 'ok';
-  }
-  if (useSessionStore.getState().supabaseUserId) {
-    return 'ok';
-  }
-  return 'need_sign_in';
+  return hasRitualReading() ? 'ok' : 'need_ritual';
 }
 
 /** Whether the user has met requirements to access the main app. */
@@ -88,11 +82,16 @@ export function resolveSignedInHrefSync(): Href {
     return '/(main)/home';
   }
 
+  const s = useSessionStore.getState();
+  if (s.supabaseUserId) {
+    useSessionStore.getState().setEnteredMain(true);
+    void requestNotificationPermission();
+    return '/(main)/home';
+  }
+
   if (hasRitualReading()) {
     return '/onboarding/report-preview';
   }
-
-  const s = useSessionStore.getState();
   if (!s.userDisplayName) {
     return '/onboarding';
   }
@@ -172,11 +171,23 @@ export async function resolveAuthenticatedHref(): Promise<Href> {
     syncAuthUserToStore(auth.userId);
   }
 
-  if (auth.isSignedIn && !useSessionStore.getState().skipCloudRestore) {
+  if (auth.isSignedIn) {
+    // Signing in is an explicit intent to load this user's cloud data — force restore
+    // even if `skipCloudRestore` was left true by a prior "Start fresh" / "Replay setup".
+    if (useSessionStore.getState().skipCloudRestore) {
+      useSessionStore.getState().setSkipCloudRestore(false);
+    }
     await ensureCloudStateSynced(true);
+    if (auth.userId) {
+      syncAuthUserToStore(auth.userId);
+    }
   }
 
-  return resolveSignedInHrefSync();
+  const href = resolveSignedInHrefSync();
+  if (href === '/(main)/home') {
+    useSessionStore.getState().setEnteredMain(true);
+  }
+  return href;
 }
 
 /** Sync auth + return the correct destination after sign-in (no navigation). */
@@ -285,6 +296,7 @@ export async function routeAfterSignInIntent(): Promise<void> {
     console.log('[Agastya auth] post-sign-in route →', href);
   }
   if (href === '/(main)/home') {
+    useSessionStore.getState().setEnteredMain(true);
     resetAppNavigation(href);
     return;
   }

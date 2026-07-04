@@ -113,6 +113,10 @@ export async function createSessionFromUrlDetailed(url: string): Promise<AuthUrl
   if (code) {
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
     if (error) {
+      const auth = await readAuthSession();
+      if (auth.isSignedIn) {
+        return { ok: true, userId: auth.userId };
+      }
       if (__DEV__) console.warn('[Agastya auth] exchangeCodeForSession failed', error.message);
       return { ok: false, reason: 'exchange_failed', message: error.message };
     }
@@ -131,6 +135,10 @@ export async function createSessionFromUrlDetailed(url: string): Promise<AuthUrl
     refresh_token: refresh_token ?? '',
   });
   if (error) {
+    const auth = await readAuthSession();
+    if (auth.isSignedIn) {
+      return { ok: true, recovery: params.type === 'recovery', userId: auth.userId };
+    }
     if (__DEV__) console.warn('[Agastya auth] setSession failed', error.message);
     return { ok: false, reason: 'exchange_failed', message: error.message };
   }
