@@ -1,6 +1,6 @@
 # Fly.io deployment for the Agastya FastAPI backend.
 # Deploy with: fly deploy --dockerfile backend/Dockerfile --config fly.toml
-# First-time: fly launch --no-deploy, then fly secrets set GROQ_API_KEY=... etc.
+# First-time: fly launch --no-deploy, then fly secrets set OPENROUTER_API_KEY=... etc.
 
 app = "agastya-api"
 primary_region = "sin"  # Singapore — closest to Indian user base; change as needed
@@ -10,10 +10,10 @@ primary_region = "sin"  # Singapore — closest to Indian user base; change as n
 
 [env]
   DEBUG = "false"
-  PALM_ANALYSIS_MODE = "groq"
+  PALM_ANALYSIS_MODE = "vision"
   API_V1_PREFIX = "/v1"
-  # Set secrets via: fly secrets set GROQ_API_KEY=sk-... SUPABASE_URL=https://...
-  # Required secrets: GROQ_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
+  # Set secrets via: fly secrets set OPENROUTER_API_KEY=sk-or-... SUPABASE_URL=https://...
+  # Required secrets: OPENROUTER_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
   #                   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, REVENUECAT_WEBHOOK_SECRET, SENTRY_DSN
 
 [http_service]

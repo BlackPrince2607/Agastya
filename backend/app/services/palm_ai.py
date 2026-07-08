@@ -13,7 +13,7 @@ import sentry_sdk
 from app.config import Settings
 from app.prompts.templates import PALM_VISION_SYSTEM
 from app.schemas.palm import PalmAnalysis
-from app.services.llm_client import groq_chat_completion
+from app.services.llm_client import llm_chat_completion
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +88,7 @@ def _clamp_confidence(value: object) -> float:
     return max(0.0, min(1.0, n))
 
 
-async def palm_analysis_from_groq(
+async def palm_analysis_from_vision(
     settings: Settings,
     *,
     image_base64: str,
@@ -97,9 +97,9 @@ async def palm_analysis_from_groq(
 ) -> PalmAnalysis | None:
     mime, payload = _parse_data_url(image_base64)
     if _decode_len_hint(payload) > 3_800_000:
-        logger.warning("Palm image exceeds Groq size cap")
+        logger.warning("Palm image exceeds vision size cap")
         return None
-    if settings.groq_api_key is None:
+    if settings.openrouter_api_key is None:
         return None
     mime = mime or "jpeg"
     if mime in {"jpeg", "jpg"}:
@@ -135,14 +135,14 @@ async def palm_analysis_from_groq(
         },
     ]
     try:
-        completion = await groq_chat_completion(
+        completion = await llm_chat_completion(
             settings,
-            model=settings.groq_vision_model,
+            model=settings.openrouter_vision_model,
             messages=messages,
             response_format={"type": "json_object"},
             temperature=0.35,
             max_tokens=800,
-            timeout_seconds=settings.groq_vision_timeout_seconds,
+            timeout_seconds=settings.openrouter_vision_timeout_seconds,
         )
         if completion is None:
             return None
@@ -195,13 +195,13 @@ async def palm_analysis_from_groq(
             hand_shape=hand_shape,
             image_quality=image_quality,
             confidence=_clamp_confidence(data.get("confidence", 0.65)),
-            analysis_source="groq_vision",
+            analysis_source="openrouter_vision",
             quality_warnings=warnings,
             line_details=data.get("line_details") if isinstance(data.get("line_details"), dict) else None,
             mounts=data.get("mounts") if isinstance(data.get("mounts"), dict) else None,
             fate_line=str(data.get("fate_line", "")).strip() or None,
         )
     except Exception as exc:
-        logger.exception("Groq palm vision failed: %s", exc)
+        logger.exception("OpenRouter palm vision failed: %s", exc)
         sentry_sdk.capture_exception(exc)
         return None

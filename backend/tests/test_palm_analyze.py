@@ -1,19 +1,30 @@
 """Palm pipeline tests."""
 
 import uuid
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.config import get_settings
 from app.main import create_app
+from app.schemas.palm import PalmAnalysis
 from app.services.palm_cv import extract_line_geometry
 
 
 @pytest.fixture
 def client(monkeypatch):
     monkeypatch.setenv("PALM_ANALYSIS_MODE", "dummy")
-    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    get_settings.cache_clear()
+    return TestClient(create_app())
+
+
+@pytest.fixture
+def vision_client(monkeypatch):
+    monkeypatch.setenv("PALM_ANALYSIS_MODE", "vision")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test-key")
     get_settings.cache_clear()
     return TestClient(create_app())
 
@@ -62,3 +73,70 @@ def test_palm_analyze_rejects_device_mismatch(client):
         },
     )
     assert res.status_code == 403
+
+
+def test_palm_analyze_vision_mode_requires_image(vision_client):
+    session_id = str(uuid.uuid4())
+    vision_client.post(
+        "/v1/sessions/register",
+        json={"sessionId": session_id, "deviceInstallId": "device-test-1"},
+    )
+    res = vision_client.post(
+        "/v1/palm/analyze",
+        json={
+            "sessionId": session_id,
+            "deviceInstallId": "device-test-1",
+            "seed": "unit-test",
+        },
+    )
+    assert res.status_code == 400
+
+
+@patch("app.services.palm_pipeline.palm_analysis_from_vision", new_callable=AsyncMock)
+def test_palm_analyze_vision_success(mock_vision, vision_client):
+    mock_vision.return_value = PalmAnalysis(
+        life_line="strong",
+        heart_line="curved",
+        head_line="long",
+        personality="quiet visionary",
+        traits=["thoughtful", "resilient"],
+        analysis_source="openrouter_vision",
+        image_quality="good",
+    )
+    session_id = str(uuid.uuid4())
+    vision_client.post(
+        "/v1/sessions/register",
+        json={"sessionId": session_id, "deviceInstallId": "device-test-1"},
+    )
+    res = vision_client.post(
+        "/v1/palm/analyze",
+        json={
+            "sessionId": session_id,
+            "deviceInstallId": "device-test-1",
+            "seed": "unit-test",
+            "imageBase64": "aGVsbG8=",
+        },
+    )
+    assert res.status_code == 200
+    assert res.json()["analysis_source"] == "openrouter_vision"
+
+
+@patch("app.services.palm_pipeline.palm_analysis_from_vision", new_callable=AsyncMock)
+def test_palm_analyze_vision_fallback_when_llm_fails(mock_vision, vision_client):
+    mock_vision.return_value = None
+    session_id = str(uuid.uuid4())
+    vision_client.post(
+        "/v1/sessions/register",
+        json={"sessionId": session_id, "deviceInstallId": "device-test-1"},
+    )
+    res = vision_client.post(
+        "/v1/palm/analyze",
+        json={
+            "sessionId": session_id,
+            "deviceInstallId": "device-test-1",
+            "seed": "unit-test",
+            "imageBase64": "aGVsbG8=",
+        },
+    )
+    assert res.status_code == 200
+    assert res.json()["analysis_source"] == "fallback"

@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends
 from app.config import Settings, get_settings
 from app.schemas.health import HealthResponse
 from app.services import session_repository
-from app.services.groq_health import groq_is_live
+from app.services.llm_health import llm_is_live
 
 router = APIRouter()
 
@@ -22,12 +22,14 @@ router = APIRouter()
 async def health(settings: Annotated[Settings, Depends(get_settings)]) -> HealthResponse:
     """Liveness: process running and settings loaded."""
     if settings.debug:
-        groq_live = await groq_is_live(settings) if settings.groq_api_key else False
+        llm_live = await llm_is_live(settings) if settings.openrouter_api_key else False
         return HealthResponse(
             status="ok",
             service=settings.app_name,
             supabase=session_repository.is_enabled(settings),
-            groq=groq_live,
-            palm_groq=groq_live and settings.palm_analysis_mode in {"groq", "hybrid"},
+            groq=llm_live,
+            palm_groq=llm_live and settings.palm_analysis_mode in {"vision", "hybrid"},
+            llm=llm_live,
+            palm_vision=llm_live and settings.palm_analysis_mode in {"vision", "hybrid"},
         )
     return HealthResponse(status="ok", service=settings.app_name)

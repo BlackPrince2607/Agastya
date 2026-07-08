@@ -8,19 +8,23 @@ import { CosmicDotGrid } from '@/components/layout/CosmicDotGrid';
 import { BackButton } from '@/components/layout/BackButton';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { HandToggleRow } from '@/components/onboarding/HandToggle';
+import { PalmCaptureProcessingOverlay } from '@/components/onboarding/PalmCaptureProcessingOverlay';
 import { PalmScanFrame } from '@/components/onboarding/PalmScanFrame';
 import { CosmicButton, GradientText } from '@/components/primitives';
 import { PAGE_PADDING } from '@/constants/layout';
+import { PALM_SCAN_PROCESSING_MS } from '@/constants/onboarding';
 import { PALM_CAPTURE_FAILED } from '@/constants/userCopy';
 import type { PalmScanHand } from '@/store/sessionStore';
 import { useSessionStore } from '@/store/sessionStore';
 import { pickPalmImage } from '@/utils/pickPalmImage';
+import { delay } from '@/utils/analysisTiming';
 import { deferRouterPush } from '@/utils/routerDefer';
 
 /** Scan a partner's palm for compatibility matching. */
 export default function PartnerPalmScanScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [uploadBusy, setUploadBusy] = useState(false);
+  const [processing, setProcessing] = useState(false);
   const [selectedHand, setSelectedHand] = useState<PalmScanHand>(
     () => useSessionStore.getState().partnerPalmScanHand ?? 'right',
   );
@@ -30,10 +34,12 @@ export default function PartnerPalmScanScreen() {
 
   const hand = selectedHand;
 
-  const continueWithCapture = (base64: string) => {
+  const continueWithCapture = async (base64: string) => {
     const seed = `partner-${hand}-${Date.now()}`;
     setPartnerPalmScanHand(hand);
     setPartnerPalmCaptureBase64(base64);
+    setProcessing(true);
+    await delay(PALM_SCAN_PROCESSING_MS);
     deferRouterPush({
       pathname: '/report/partner-palm-analysis' as never,
       params: { seed },
@@ -41,12 +47,12 @@ export default function PartnerPalmScanScreen() {
   };
 
   const uploadFromGallery = async () => {
-    if (uploadBusy) return;
+    if (uploadBusy || processing) return;
     setUploadBusy(true);
     try {
       const base64 = await pickPalmImage();
       if (!base64) return;
-      continueWithCapture(base64);
+      await continueWithCapture(base64);
     } finally {
       setUploadBusy(false);
     }
@@ -101,11 +107,21 @@ export default function PartnerPalmScanScreen() {
         Alert.alert('Couldn’t capture palm', PALM_CAPTURE_FAILED);
         return;
       }
-      continueWithCapture(photo.base64);
+      await continueWithCapture(photo.base64);
     } catch {
       Alert.alert('Couldn’t capture palm', PALM_CAPTURE_FAILED);
     }
   };
+
+  if (processing) {
+    return (
+      <CosmicScreen insetTop={false}>
+        <View className="flex-1 bg-black">
+          <PalmCaptureProcessingOverlay frameSize={260} label="Analyzing partner palm" />
+        </View>
+      </CosmicScreen>
+    );
+  }
 
   return (
     <CosmicScreen insetTop={false}>

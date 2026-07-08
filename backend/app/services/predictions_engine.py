@@ -1,16 +1,19 @@
-"""Deterministic + optional Groq enrichment for period predictions."""
+"""Deterministic + optional OpenRouter enrichment for period predictions."""
 
 from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from datetime import datetime, timezone
 
 from app.config import Settings
 from app.prompts.templates import PREDICTIONS_SYSTEM
 from app.schemas.palm import PalmAnalysis
 from app.schemas.predictions import PredictionItem, PredictionsResponse
-from app.services.llm_client import groq_chat_completion
+from app.services.llm_client import llm_chat_completion
+
+logger = logging.getLogger(__name__)
 
 _PERIOD_WINDOW = {
     "month": "this month",
@@ -73,9 +76,9 @@ async def build_predictions_payload(
         "palm": palm.model_dump(),
     }
     try:
-        completion = await groq_chat_completion(
+        completion = await llm_chat_completion(
             settings,
-            model=settings.groq_chat_model,
+            model=settings.openrouter_chat_model,
             response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": PREDICTIONS_SYSTEM},
@@ -84,11 +87,13 @@ async def build_predictions_payload(
             temperature=0.85,
         )
         if completion is None:
+            logger.warning("llm_fallback_reason=predictions llm_enabled=%s", settings.llm_enabled)
             return fallback
         raw = completion.choices[0].message.content or "{}"
         data = json.loads(raw)
         items_raw = data.get("items") or []
         if len(items_raw) < 4:
+            logger.warning("llm_fallback_reason=predictions_insufficient_count")
             return fallback
         items = [PredictionItem.model_validate(it) for it in items_raw[:4]]
         return PredictionsResponse(
@@ -96,5 +101,6 @@ async def build_predictions_payload(
             items=items,
             generated_at=datetime.now(timezone.utc).isoformat(),
         )
-    except Exception:
+    except Exception as exc:
+        logger.warning("llm_fallback_reason=predictions_parse error=%s", exc)
         return fallback

@@ -48,26 +48,26 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if settings.supabase_enabled:
         log.info("Supabase session persistence enabled")
 
-    if settings.groq_enabled:
-        key = settings.groq_api_key or ""
-        log.info("Groq key loaded (%s…%s, len=%d)", key[:7], key[-4:], len(key))
+    if settings.llm_enabled:
+        key = settings.openrouter_api_key or ""
+        log.info("OpenRouter key loaded (%s…%s, len=%d)", key[:7], key[-4:], len(key))
         extras = []
-        if settings.palm_analysis_mode in {"groq", "hybrid"}:
-            extras.append(f"palm via {settings.palm_analysis_mode}/{settings.groq_vision_model}")
-        extras.append(f"chat/reports/tasks via {settings.groq_chat_model}")
-        log.info("Groq inference enabled — %s", "; ".join(extras))
-        from app.services.groq_health import groq_is_live
+        if settings.palm_analysis_mode in {"vision", "hybrid"}:
+            extras.append(f"palm via {settings.palm_analysis_mode}/{settings.openrouter_vision_model}")
+        extras.append(f"chat/reports/tasks via {settings.openrouter_chat_model}")
+        log.info("OpenRouter inference enabled — %s", "; ".join(extras))
+        from app.services.llm_health import llm_is_live
 
-        if not await groq_is_live(settings):
+        if not await llm_is_live(settings):
             log.error(
-                "GROQ_API_KEY is set but Groq rejected it; using local fallback text until you "
+                "OPENROUTER_API_KEY is set but OpenRouter rejected it; using local fallback text until you "
                 "update the key in backend/.env and restart the API",
             )
     elif not settings.debug:
-        log.warning("GROQ_API_KEY missing in production")
+        log.warning("OPENROUTER_API_KEY missing in production")
     else:
         log.warning(
-            "GROQ_API_KEY missing — palm analysis falls back to hash motifs; "
+            "OPENROUTER_API_KEY missing — palm analysis falls back to hash motifs; "
             "chat, dossiers, and daily rituals use heuristic text",
         )
 

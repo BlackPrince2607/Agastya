@@ -1,4 +1,4 @@
-"""Groq chat completions via OpenAI-compatible API."""
+"""OpenRouter chat completions via OpenAI-compatible API."""
 
 from __future__ import annotations
 
@@ -13,21 +13,32 @@ from app.config import Settings
 
 logger = logging.getLogger(__name__)
 
-GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 
-def groq_client(settings: Settings, *, timeout_seconds: float | None = None) -> AsyncOpenAI | None:
-    if not settings.groq_api_key:
+def _openrouter_extra_headers(settings: Settings) -> dict[str, str]:
+    """Headers recommended by https://openrouter.ai/docs/quickstart"""
+    headers: dict[str, str] = {}
+    if settings.openrouter_app_url:
+        headers["HTTP-Referer"] = settings.openrouter_app_url
+    if settings.openrouter_app_name:
+        headers["X-OpenRouter-Title"] = settings.openrouter_app_name
+        headers["X-Title"] = settings.openrouter_app_name
+    return headers
+
+
+def openrouter_client(settings: Settings, *, timeout_seconds: float | None = None) -> AsyncOpenAI | None:
+    if not settings.openrouter_api_key:
         return None
-    timeout = timeout_seconds if timeout_seconds is not None else settings.groq_chat_timeout_seconds
+    timeout = timeout_seconds if timeout_seconds is not None else settings.openrouter_chat_timeout_seconds
     return AsyncOpenAI(
-        api_key=settings.groq_api_key,
-        base_url=GROQ_BASE_URL,
+        api_key=settings.openrouter_api_key,
+        base_url=OPENROUTER_BASE_URL,
         timeout=timeout,
     )
 
 
-async def groq_chat_completion(
+async def llm_chat_completion(
     settings: Settings,
     *,
     model: str,
@@ -35,12 +46,14 @@ async def groq_chat_completion(
     timeout_seconds: float | None = None,
     **kwargs: Any,
 ):
-    """Create a chat completion with one retry on transient Groq errors."""
-    client = groq_client(settings, timeout_seconds=timeout_seconds)
+    """Create a chat completion with one retry on transient OpenRouter errors."""
+    client = openrouter_client(settings, timeout_seconds=timeout_seconds)
     if client is None:
+        logger.error("llm_fallback_reason=no_api_key model=%s", model)
         return None
 
-    limit = timeout_seconds if timeout_seconds is not None else settings.groq_chat_timeout_seconds
+    extra_headers = _openrouter_extra_headers(settings)
+    limit = timeout_seconds if timeout_seconds is not None else settings.openrouter_chat_timeout_seconds
     last_exc: Exception | None = None
     for attempt in range(2):
         try:
@@ -48,13 +61,14 @@ async def groq_chat_completion(
                 client.chat.completions.create(
                     model=model,
                     messages=messages,
+                    extra_headers=extra_headers or None,
                     **kwargs,
                 ),
                 timeout=limit + 5.0,
             )
         except TimeoutError as exc:
             last_exc = exc
-            logger.warning("Groq completion timed out (attempt %s, model=%s)", attempt + 1, model)
+            logger.warning("OpenRouter completion timed out (attempt %s, model=%s)", attempt + 1, model)
             if attempt == 0:
                 await asyncio.sleep(0.6)
                 continue
@@ -65,16 +79,21 @@ async def groq_chat_completion(
             status = getattr(exc, "status_code", None)
             retryable = status in {429, 500, 502, 503, 504} or status is None
             logger.warning(
-                "Groq completion failed (attempt %s, model=%s): %s",
+                "OpenRouter completion failed (attempt %s, model=%s, status=%s): %s",
                 attempt + 1,
                 model,
+                status,
                 exc,
             )
             if attempt == 0 and retryable:
-                await asyncio.sleep(0.6 * (attempt + 1))
+                await asyncio.sleep(1.2)
                 continue
             sentry_sdk.capture_exception(exc)
             break
     if last_exc:
-        logger.error("Groq completion exhausted retries: %s", last_exc)
+        logger.error(
+            "llm_fallback_reason=exhausted_retries model=%s error=%s",
+            model,
+            last_exc,
+        )
     return None

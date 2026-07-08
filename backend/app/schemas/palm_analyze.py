@@ -12,6 +12,7 @@ class PalmAnalyzeBody(BaseModel):
     device_install_id: str | None = Field(default=None, alias="deviceInstallId")
     dominant_hand: str | None = Field(default=None, alias="dominantHand")
     landmarks: list[list[float]] | None = Field(default=None, max_length=21)
+    landmarks_source: str | None = Field(default=None, alias="landmarksSource")
 
     model_config = {"populate_by_name": True}
 
@@ -34,6 +35,14 @@ class PalmAnalyzeBody(BaseModel):
         if s in {"left", "right", "unknown"}:
             return s
         return "unknown"
+
+    @field_validator("landmarks_source")
+    @classmethod
+    def _landmarks_source(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        s = v.strip().lower()
+        return s if s in {"mediapipe", "roi_estimate"} else None
 
     @field_validator("landmarks")
     @classmethod

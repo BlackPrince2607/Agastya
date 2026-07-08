@@ -4,7 +4,7 @@ export const ERRORS = {
   network: "We couldn't reach Agastya right now. Check your connection and try again.",
   guideNeedsPalm: 'Complete your palm reading first. Then the Guide can answer questions about your report.',
   guideLlmUnavailable:
-    'The Guide is temporarily unavailable. Check that GROQ_API_KEY is valid in backend/.env and restart the API.',
+    'The Guide is temporarily unavailable. Check that OPENROUTER_API_KEY is valid in backend/.env and restart the API.',
   missingSession: 'Something went wrong starting your session. Please restart the app.',
   mergeMismatch: "This sign-in doesn't match your current reading. Try signing in with the account you used before.",
   authRequired: 'Please sign in to continue.',

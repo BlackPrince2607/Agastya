@@ -17,6 +17,7 @@ import { useSessionStore } from '@/store/sessionStore';
 import type { PalmAnalysisDto } from '@/types/palmAnalysis';
 import { PREDICTION_PERIODS, type PredictionPeriod } from '@/types/predictions';
 import { buildLocalPredictions } from '@/utils/localPredictions';
+import { withApiRetry } from '@/utils/apiRetry';
 import { palmLineInsights, personalityProfile } from '@/utils/palmInsights';
 import { paywallRouteParams } from '@/utils/paywallNavigation';
 
@@ -83,13 +84,15 @@ export default function ReportScreen() {
     let alive = true;
     void (async () => {
       try {
-        const result = await fetchPredictions({
-          sessionId,
-          period,
-          seed: seed ?? undefined,
-          palmAnalysis,
-          focusTopics,
-        });
+        const result = await withApiRetry(() =>
+          fetchPredictions({
+            sessionId,
+            period,
+            seed: seed ?? undefined,
+            palmAnalysis,
+            focusTopics,
+          }),
+        );
         if (alive) setPredictions(period, result);
       } catch {
         // Local fallback already renders; ignore network errors silently.

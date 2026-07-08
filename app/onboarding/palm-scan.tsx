@@ -5,16 +5,18 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { HandToggleRow } from '@/components/onboarding/HandToggle';
 import { OnboardingHeader } from '@/components/onboarding/OnboardingHeader';
+import { PalmCaptureProcessingOverlay } from '@/components/onboarding/PalmCaptureProcessingOverlay';
 import { PalmScanBriefing } from '@/components/onboarding/PalmScanBriefing';
 import { PalmScanFrame } from '@/components/onboarding/PalmScanFrame';
 import { CosmicButton, GradientText } from '@/components/primitives';
-import { ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS } from '@/constants/onboarding';
+import { ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS, PALM_SCAN_PROCESSING_MS } from '@/constants/onboarding';
 import { PAGE_PADDING } from '@/constants/layout';
 import { colors } from '@/constants/theme';
 import { PALM_CAPTURE_FAILED } from '@/constants/userCopy';
 import type { PalmScanHand } from '@/store/sessionStore';
 import { useSessionStore } from '@/store/sessionStore';
 import { pickPalmImage } from '@/utils/pickPalmImage';
+import { delay } from '@/utils/analysisTiming';
 import { deferRouterPush } from '@/utils/routerDefer';
 
 async function continueWithCapture(
@@ -22,10 +24,13 @@ async function continueWithCapture(
   hand: PalmScanHand,
   setPalmScanHand: (hand: PalmScanHand) => void,
   setPalmCaptureBase64: (value: string) => void,
+  setProcessing: (value: boolean) => void,
 ) {
   const seed = `${hand}-${Date.now()}`;
   setPalmScanHand(hand);
   setPalmCaptureBase64(base64);
+  setProcessing(true);
+  await delay(PALM_SCAN_PROCESSING_MS);
   deferRouterPush({
     pathname: '/onboarding/analysis',
     params: { seed },
@@ -36,6 +41,7 @@ export default function PalmScanScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [pastBriefing, setPastBriefing] = useState(false);
   const [uploadBusy, setUploadBusy] = useState(false);
+  const [processing, setProcessing] = useState(false);
   const [selectedHand, setSelectedHand] = useState<PalmScanHand>('right');
   const palmScanHand = useSessionStore((s) => s.palmScanHand);
   const setPalmScanHand = useSessionStore((s) => s.setPalmScanHand);
@@ -52,7 +58,7 @@ export default function PalmScanScreen() {
     try {
       const base64 = await pickPalmImage();
       if (!base64) return;
-      await continueWithCapture(base64, hand, setPalmScanHand, setPalmCaptureBase64);
+      await continueWithCapture(base64, hand, setPalmScanHand, setPalmCaptureBase64, setProcessing);
     } finally {
       setUploadBusy(false);
     }
@@ -62,6 +68,14 @@ export default function PalmScanScreen() {
     return (
       <View className="flex-1 items-center justify-center bg-black px-8">
         <Text className="font-body text-on-surface">Loading camera...</Text>
+      </View>
+    );
+  }
+
+  if (processing) {
+    return (
+      <View className="flex-1 bg-black">
+        <PalmCaptureProcessingOverlay frameSize={Math.min(272, Math.round(windowHeight * 0.32))} />
       </View>
     );
   }
@@ -132,7 +146,7 @@ export default function PalmScanScreen() {
         Alert.alert("Couldn't capture palm", PALM_CAPTURE_FAILED);
         return;
       }
-      await continueWithCapture(photo.base64, selectedHand, setPalmScanHand, setPalmCaptureBase64);
+      await continueWithCapture(photo.base64, selectedHand, setPalmScanHand, setPalmCaptureBase64, setProcessing);
     } catch {
       Alert.alert("Couldn't capture palm", PALM_CAPTURE_FAILED);
     }
@@ -188,6 +202,7 @@ export default function PalmScanScreen() {
           </View>
         </SafeAreaView>
       </View>
+      {processing ? <PalmCaptureProcessingOverlay frameSize={frameSize} /> : null}
     </View>
   );
 }

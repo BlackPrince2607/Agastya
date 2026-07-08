@@ -13,7 +13,7 @@ export type PalmAnalysisDto = {
   hand_shape?: string;
   image_quality?: 'good' | 'acceptable' | 'poor' | 'no_hand';
   confidence?: number;
-  analysis_source?: 'groq_vision' | 'hybrid' | 'dummy' | 'fallback';
+  analysis_source?: 'openrouter_vision' | 'groq_vision' | 'hybrid' | 'dummy' | 'fallback';
   quality_warnings?: string[];
   line_details?: Record<string, { length?: string; depth?: string; breaks?: number; notes?: string }>;
   mounts?: Record<string, string>;
@@ -23,7 +23,11 @@ export type PalmAnalysisDto = {
 
 export function isLivePalmAnalysis(palm: PalmAnalysisDto | null | undefined): boolean {
   if (!palm) return false;
-  return palm.analysis_source === 'groq_vision' || palm.analysis_source === 'hybrid';
+  return (
+    palm.analysis_source === 'openrouter_vision' ||
+    palm.analysis_source === 'groq_vision' ||
+    palm.analysis_source === 'hybrid'
+  );
 }
 
 export function palmNeedsRetake(palm: PalmAnalysisDto | null | undefined): boolean {

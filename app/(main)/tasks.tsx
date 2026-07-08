@@ -16,6 +16,7 @@ import { useSessionStore } from '@/store/sessionStore';
 import { useTaskStore } from '@/store/taskStore';
 import { isTabRoute } from '@/utils/isTabRoute';
 import { LOCAL_TASKS, normalizeTask } from '@/utils/localTasks';
+import { withApiRetry } from '@/utils/apiRetry';
 
 function formatToday(): string {
   return new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
@@ -58,7 +59,7 @@ export default function TasksScreen() {
       if (tasks.length && taskDate === isoToday) return;
       setLoading(true);
       try {
-        const payload = await fetchDailyTasks({ sessionId, palmAnalysis });
+        const payload = await withApiRetry(() => fetchDailyTasks({ sessionId, palmAnalysis }));
         if (active) {
           const normalized = payload.tasks.map((t, i) => normalizeTask(t, i));
           setTasks(normalized.length ? normalized : LOCAL_TASKS, payload.variant, isoToday);

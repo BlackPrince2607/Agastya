@@ -10,7 +10,7 @@ python-multipart>=0.0.12,<0.1.0
 # Async HTTP client — Supabase REST and other services.
 httpx>=0.27.0,<0.29.0
 
-# OpenAI SDK — Groq-compatible chat completions (optional when GROQ_API_KEY absent).
+# OpenAI SDK — OpenRouter-compatible chat completions (optional when OPENROUTER_API_KEY absent).
 openai>=1.60.0,<2.0.0
 
 # Supabase JWT verification via JWKS (ES256 signing keys).

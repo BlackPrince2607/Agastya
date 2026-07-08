@@ -1,16 +1,19 @@
-"""Deterministic + optional Groq enrichment for dossier payloads."""
+"""Deterministic + optional OpenRouter enrichment for dossier payloads."""
 
 from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from typing import Literal
 
 from app.config import Settings
-from app.services.llm_client import groq_chat_completion
+from app.services.llm_client import llm_chat_completion
 from app.prompts.templates import REPORT_SYSTEM
 from app.schemas.palm import PalmAnalysis
 from app.schemas.report import AuraProfile, FullReport, InsightSection, LifeMetrics
+
+logger = logging.getLogger(__name__)
 
 
 def _digits(seed: str) -> list[int]:
@@ -136,11 +139,11 @@ async def build_report_payload(
     display_name: str | None,
     gender: str | None,
 ) -> FullReport:
-    """Return enriched report JSON, falling back if Groq unavailable or errors."""
+    """Return enriched report JSON, falling back if OpenRouter unavailable or errors."""
     fallback = deterministic_report(
         seed=seed, palm=palm, topics=topics, mode=mode, display_name=display_name, gender=gender
     )
-    if not settings.groq_enabled:
+    if not settings.llm_enabled:
         return fallback
     payload = {
         "seed": seed,
@@ -151,9 +154,9 @@ async def build_report_payload(
         "palm": palm.model_dump(),
     }
     try:
-        completion = await groq_chat_completion(
+        completion = await llm_chat_completion(
             settings,
-            model=settings.groq_chat_model,
+            model=settings.openrouter_chat_model,
             response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": REPORT_SYSTEM},
@@ -162,6 +165,7 @@ async def build_report_payload(
             temperature=0.85,
         )
         if completion is None:
+            logger.warning("llm_fallback_reason=report llm_enabled=%s", settings.llm_enabled)
             return fallback
         raw = completion.choices[0].message.content or ""
         data = json.loads(raw)
@@ -171,5 +175,6 @@ async def build_report_payload(
         # ensure palm echoes request
         report = report.model_copy(update={"palm_analysis": palm})
         return report
-    except Exception:
+    except Exception as exc:
+        logger.warning("llm_fallback_reason=report_parse error=%s", exc)
         return fallback

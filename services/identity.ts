@@ -86,13 +86,17 @@ export async function bootstrapIdentity() {
       clearTimeout(t);
       setApiHealth({
         supabase: health.supabase,
-        groq: health.groq,
-        palm_groq: health.palm_groq,
+        groq: health.groq ?? health.llm,
+        palm_groq: health.palm_groq ?? health.palm_vision,
+        llm: health.llm ?? health.groq,
+        palm_vision: health.palm_vision ?? health.palm_groq,
       });
       track('api_health_ok', {
         supabase: health.supabase,
-        groq: health.groq,
-        palm_groq: health.palm_groq,
+        groq: health.groq ?? health.llm,
+        palm_groq: health.palm_groq ?? health.palm_vision,
+        llm: health.llm ?? health.groq,
+        palm_vision: health.palm_vision ?? health.palm_groq,
       });
       if (!useSessionStore.getState().skipCloudRestore) {
         await restoreSessionFromServer();

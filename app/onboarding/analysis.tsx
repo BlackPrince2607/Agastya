@@ -22,11 +22,11 @@ import { isApiConfigured } from '@/services/env';
 import type { PalmAnalysisDto } from '@/types/palmAnalysis';
 import { isLivePalmAnalysis, palmNeedsRetake } from '@/types/palmAnalysis';
 import { useSessionStore } from '@/store/sessionStore';
-import { ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS } from '@/constants/onboarding';
+import { ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS, ANALYSIS_PHRASE_MS } from '@/constants/onboarding';
 import { deferRouterReplace } from '@/utils/routerDefer';
-import { estimateLandmarksFromRoi, trimBase64Payload } from '@/utils/palmLandmarks';
-
-const STEP_MS = 2600;
+import { analysisPresentationMs, delay, palmFieldsVisibleAt } from '@/utils/analysisTiming';
+import { withApiRetry } from '@/utils/apiRetry';
+import { trimBase64Payload } from '@/utils/palmLandmarks';
 
 const FALLBACK_PALM: PalmAnalysisDto = {
   life_line: 'strong',
@@ -48,8 +48,9 @@ export default function AnalysisScreen() {
   const [syncPulse, setSyncPulse] = useState(0.22);
   const [sampleBadge, setSampleBadge] = useState(false);
   const [palmResult, setPalmResult] = useState<PalmAnalysisDto | null>(null);
+  const [apiPalm, setApiPalm] = useState<PalmAnalysisDto | null>(null);
 
-  const runMs = STEP_MS * ANALYSIS_LOADING_PHRASES.length + 900;
+  const runMs = analysisPresentationMs(ANALYSIS_LOADING_PHRASES.length);
 
   useEffect(() => {
     const started = Date.now();
@@ -58,12 +59,13 @@ export default function AnalysisScreen() {
       const next = Math.min(99, 12 + Math.floor((elapsed / runMs) * 88));
       setPct(next);
       setSyncPulse(0.18 + (next / 99) * 0.72);
+      setPalmResult(palmFieldsVisibleAt(elapsed, apiPalm));
     }, 120);
     return () => clearInterval(tick);
-  }, [runMs]);
+  }, [runMs, apiPalm]);
 
   useEffect(() => {
-    const id = setInterval(() => setPhase((p) => (p + 1) % ANALYSIS_LOADING_PHRASES.length), STEP_MS);
+    const id = setInterval(() => setPhase((p) => (p + 1) % ANALYSIS_LOADING_PHRASES.length), ANALYSIS_PHRASE_MS);
     return () => clearInterval(id);
   }, []);
 
@@ -71,14 +73,13 @@ export default function AnalysisScreen() {
     const resolvedSeed = seed ?? `trace-${Date.now()}`;
     setReadingSeed(resolvedSeed);
 
-    const minDelay = new Promise<void>((resolve) => {
-      setTimeout(resolve, STEP_MS * ANALYSIS_LOADING_PHRASES.length + 900);
-    });
+    const minDelay = delay(runMs);
 
     let cancelled = false;
 
     void (async () => {
       let needsRetake = false;
+      let resolvedPalm: PalmAnalysisDto = FALLBACK_PALM;
 
       const pipeline = async () => {
         await bootstrapIdentity();
@@ -90,20 +91,19 @@ export default function AnalysisScreen() {
 
         const captureRaw = snap.palmCaptureBase64;
         const capture = captureRaw ? trimBase64Payload(captureRaw) : null;
-        const landmarks = estimateLandmarksFromRoi();
-        const online = isApiConfigured();
-
         let palm: PalmAnalysisDto = FALLBACK_PALM;
         try {
-          palm = await analyzePalm({
-            sessionId: snap.sessionId,
-            deviceInstallId: snap.deviceInstallId,
-            seed: resolvedSeed,
-            imageBase64: capture,
-            dominantHand: snap.palmScanHand ?? 'right',
-            landmarks,
-          });
-          setPalmResult(palm);
+          palm = await withApiRetry(() =>
+            analyzePalm({
+              sessionId: snap.sessionId!,
+              deviceInstallId: snap.deviceInstallId!,
+              seed: resolvedSeed,
+              imageBase64: capture,
+              dominantHand: snap.palmScanHand ?? 'right',
+            }),
+          );
+          resolvedPalm = palm;
+          setApiPalm(palm);
           if (palmNeedsRetake(palm)) {
             needsRetake = true;
             return;
@@ -112,6 +112,7 @@ export default function AnalysisScreen() {
             setSampleBadge(true);
           }
         } catch (err) {
+          const online = isApiConfigured();
           if (online) {
             const msg = err instanceof Error ? err.message : 'Analysis failed';
             if (msg.toLowerCase().includes('retake') || msg.toLowerCase().includes('palm')) {
@@ -124,18 +125,22 @@ export default function AnalysisScreen() {
           setSampleBadge(true);
         }
 
+        resolvedPalm = palm;
+        setApiPalm(palm);
         setPalmAnalysis(palm);
 
         try {
-          const previewPayload = await generateReport({
-            sessionId: snap.sessionId,
-            seed: resolvedSeed,
-            palmAnalysis: palm,
-            focusTopics: snap.focusTopics,
-            mode: 'preview',
-            displayName: snap.userDisplayName,
-            gender: snap.userGender,
-          });
+          const previewPayload = await withApiRetry(() =>
+            generateReport({
+              sessionId: snap.sessionId!,
+              seed: resolvedSeed,
+              palmAnalysis: palm,
+              focusTopics: snap.focusTopics,
+              mode: 'preview',
+              displayName: snap.userDisplayName,
+              gender: snap.userGender,
+            }),
+          );
           setPreviewReading(normalizeFullReport(previewPayload));
         } catch {
           setPreviewReading(buildSimulatedReading(resolvedSeed, snap.focusTopics));
@@ -153,11 +158,14 @@ export default function AnalysisScreen() {
         if (cancelled) return;
         const snap = useSessionStore.getState();
         setSampleBadge(true);
+        resolvedPalm = FALLBACK_PALM;
+        setApiPalm(FALLBACK_PALM);
         setPalmAnalysis(FALLBACK_PALM);
         setPreviewReading(buildSimulatedReading(resolvedSeed, snap.focusTopics));
         useSessionStore.getState().setSkipCloudRestore(false);
       } finally {
         if (cancelled) return;
+        setPalmResult(resolvedPalm);
         if (needsRetake) {
           router.replace('/onboarding/palm-scan');
           return;

@@ -7,6 +7,7 @@ import { CosmicDotGrid } from '@/components/layout/CosmicDotGrid';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { AnalyzingSeal, GradientText } from '@/components/primitives';
 import { ANALYSIS_LOADING_PHRASES, SAMPLE_READING_BADGE } from '@/constants/userCopy';
+import { ANALYSIS_PHRASE_MS } from '@/constants/onboarding';
 import { analyzePalm } from '@/services/agastyaApi';
 import { bootstrapIdentity } from '@/services/identity';
 import { isApiConfigured } from '@/services/env';
@@ -14,9 +15,9 @@ import type { PalmAnalysisDto } from '@/types/palmAnalysis';
 import { isLivePalmAnalysis, palmNeedsRetake } from '@/types/palmAnalysis';
 import { useSessionStore } from '@/store/sessionStore';
 import { deferRouterReplace } from '@/utils/routerDefer';
-import { estimateLandmarksFromRoi, trimBase64Payload } from '@/utils/palmLandmarks';
-
-const STEP_MS = 2200;
+import { analysisPresentationMs, delay } from '@/utils/analysisTiming';
+import { withApiRetry } from '@/utils/apiRetry';
+import { trimBase64Payload } from '@/utils/palmLandmarks';
 
 const FALLBACK_PALM: PalmAnalysisDto = {
   life_line: 'strong',
@@ -35,7 +36,7 @@ export default function PartnerPalmAnalysisScreen() {
   const [pct, setPct] = useState(12);
   const [sampleBadge, setSampleBadge] = useState(false);
 
-  const runMs = STEP_MS * ANALYSIS_LOADING_PHRASES.length + 800;
+  const runMs = analysisPresentationMs(ANALYSIS_LOADING_PHRASES.length);
 
   useEffect(() => {
     const started = Date.now();
@@ -48,7 +49,7 @@ export default function PartnerPalmAnalysisScreen() {
   }, [runMs]);
 
   useEffect(() => {
-    const id = setInterval(() => setPhase((p) => (p + 1) % ANALYSIS_LOADING_PHRASES.length), STEP_MS);
+    const id = setInterval(() => setPhase((p) => (p + 1) % ANALYSIS_LOADING_PHRASES.length), ANALYSIS_PHRASE_MS);
     return () => clearInterval(id);
   }, []);
 
@@ -57,9 +58,7 @@ export default function PartnerPalmAnalysisScreen() {
     let cancelled = false;
 
     void (async () => {
-      const minDelay = new Promise<void>((resolve) => {
-        setTimeout(resolve, STEP_MS * ANALYSIS_LOADING_PHRASES.length + 800);
-      });
+      const minDelay = delay(runMs);
 
       let needsRetake = false;
 
@@ -72,19 +71,17 @@ export default function PartnerPalmAnalysisScreen() {
 
         const captureRaw = snap.partnerPalmCaptureBase64;
         const capture = captureRaw ? trimBase64Payload(captureRaw) : null;
-        const landmarks = estimateLandmarksFromRoi();
-        const online = isApiConfigured();
-
         let palm: PalmAnalysisDto = FALLBACK_PALM;
         try {
-          palm = await analyzePalm({
-            sessionId: snap.sessionId,
-            deviceInstallId: snap.deviceInstallId,
-            seed: resolvedSeed,
-            imageBase64: capture,
-            dominantHand: snap.partnerPalmScanHand ?? 'right',
-            landmarks,
-          });
+          palm = await withApiRetry(() =>
+            analyzePalm({
+              sessionId: snap.sessionId!,
+              deviceInstallId: snap.deviceInstallId!,
+              seed: resolvedSeed,
+              imageBase64: capture,
+              dominantHand: snap.partnerPalmScanHand ?? 'right',
+            }),
+          );
           if (palmNeedsRetake(palm)) {
             needsRetake = true;
             return;
@@ -93,6 +90,7 @@ export default function PartnerPalmAnalysisScreen() {
             setSampleBadge(true);
           }
         } catch (err) {
+          const online = isApiConfigured();
           if (online) {
             const msg = err instanceof Error ? err.message : 'Analysis failed';
             if (msg.toLowerCase().includes('retake') || msg.toLowerCase().includes('palm')) {

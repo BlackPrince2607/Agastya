@@ -5,6 +5,7 @@ import type { PalmAnalysisDto } from '@/types/palmAnalysis';
 import type { PredictionPeriod, PredictionsResponse } from '@/types/predictions';
 
 import { ERRORS, mapApiError } from '@/services/apiErrors';
+import { withApiRetry } from '@/utils/apiRetry';
 import { AGASTYA_API_ROOT, apiUrl, isApiConfigured, isMisconfiguredProductionApi } from '@/services/env';
 import { getSupabaseAccessToken } from '@/services/supabase';
 import { GUIDE_FINISH_PALM_FIRST } from '@/constants/userCopy';
@@ -47,6 +48,8 @@ export type ApiHealthDto = {
   supabase?: boolean;
   groq?: boolean;
   palm_groq?: boolean;
+  llm?: boolean;
+  palm_vision?: boolean;
 };
 
 export async function fetchApiHealth(signal?: AbortSignal): Promise<ApiHealthDto> {
@@ -233,6 +236,7 @@ export async function analyzePalm(body: {
   imageBase64?: string | null;
   dominantHand?: 'left' | 'right' | null;
   landmarks?: HandLandmark[] | null;
+  landmarksSource?: 'mediapipe' | 'roi_estimate' | null;
 }) {
   return postJson<PalmAnalysisDto>('/v1/palm/analyze', {
     sessionId: body.sessionId,
@@ -241,6 +245,7 @@ export async function analyzePalm(body: {
     imageBase64: body.imageBase64,
     dominantHand: body.dominantHand ?? 'unknown',
     landmarks: body.landmarks ?? undefined,
+    landmarksSource: body.landmarksSource ?? undefined,
   });
 }
 
@@ -361,13 +366,15 @@ export async function requestGuideReply(
     .join('\n');
 
   try {
-    const { reply, suggestions } = await chatWithGuide({
-      sessionId,
-      deviceInstallId,
-      messages,
-      palmAnalysis,
-      profileSummary,
-    });
+    const { reply, suggestions } = await withApiRetry(() =>
+      chatWithGuide({
+        sessionId,
+        deviceInstallId,
+        messages,
+        palmAnalysis,
+        profileSummary,
+      }),
+    );
     if (__DEV__) {
       const frontendPlaceholder = reply.includes('You often think things through before you speak');
       console.log(

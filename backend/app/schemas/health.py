@@ -12,5 +12,10 @@ class HealthResponse(BaseModel):
     groq: bool = False
     palm_groq: bool = Field(
         default=False,
-        description="True when palm vision path may run (Groq key + palm_analysis_mode groq)",
+        description="Deprecated — use palm_vision",
+    )
+    llm: bool = False
+    palm_vision: bool = Field(
+        default=False,
+        description="True when palm vision path may run (OpenRouter key + palm_analysis_mode vision)",
     )

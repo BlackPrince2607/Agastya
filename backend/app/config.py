@@ -15,19 +15,47 @@ from pathlib import Path
 import sys
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 
 # backend/ directory (parent of app/)
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent
+_REPO_ROOT = _BACKEND_ROOT.parent
 _IN_PYTEST = "pytest" in sys.modules
+
+# OpenRouter model slugs that accept image input (see https://openrouter.ai/models?input_modalities=image)
+_OPENROUTER_VISION_ALIASES: dict[str, str] = {
+    "openai/gpt-4o-vision": "openai/gpt-4o-mini",
+    "gpt-4o-vision": "openai/gpt-4o-mini",
+    "openai/gpt-4-vision-preview": "openai/gpt-4o",
+    "gpt-4-vision-preview": "openai/gpt-4o",
+}
+
+
+def normalize_openrouter_vision_model(model: str) -> str:
+    """Map legacy/invalid vision slugs to valid OpenRouter model IDs."""
+    s = model.strip()
+    key = s.lower()
+    if key in _OPENROUTER_VISION_ALIASES:
+        return _OPENROUTER_VISION_ALIASES[key]
+    return s
+
+
+def _env_files() -> tuple[str, ...] | None:
+    if _IN_PYTEST:
+        return None
+    paths: list[Path] = []
+    for candidate in (_REPO_ROOT / ".env", _BACKEND_ROOT / ".env"):
+        if candidate.is_file():
+            paths.append(candidate)
+    return tuple(str(p) for p in paths) or None
 
 
 class Settings(BaseSettings):
     """Application settings. Add fields as you integrate Supabase / AI."""
 
     model_config = SettingsConfigDict(
-        env_file=str(_BACKEND_ROOT / ".env") if not _IN_PYTEST else None,
+        env_file=_env_files(),
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -48,8 +76,8 @@ class Settings(BaseSettings):
     # Expo tunnel dev URLs (HTTPS) — matched by regex in addition to cors_origins.
     cors_origin_regex: str | None = Field(default=r"https://.*\.exp\.direct")
 
-    # --- Palm: dummy | groq | hybrid (CV landmarks + Groq narrative) ---
-    palm_analysis_mode: Literal["dummy", "groq", "hybrid"] = "groq"
+    # --- Palm: dummy | vision | hybrid (CV landmarks + vision narrative) ---
+    palm_analysis_mode: Literal["dummy", "vision", "hybrid"] = "vision"
 
     # --- Rate limiting (optional Redis / Upstash for multi-worker deploys) ---
     redis_url: str | None = None
@@ -65,12 +93,20 @@ class Settings(BaseSettings):
     supabase_jwks_cache_seconds: int = 600
     supabase_palm_bucket: str = "palms"
 
-    # --- Groq (optional — deterministic fallbacks when unset) ---
-    groq_api_key: str | None = None
-    groq_chat_model: str = "llama-3.3-70b-versatile"
-    groq_vision_model: str = "meta-llama/llama-4-scout-17b-16e-instruct"
-    groq_chat_timeout_seconds: float = 60.0
-    groq_vision_timeout_seconds: float = 90.0
+    # --- OpenRouter (optional — deterministic fallbacks when unset) ---
+    # Key must be from https://openrouter.ai/keys (not platform.openai.com).
+    openrouter_api_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("OPENROUTER_API_KEY", "openrouter_api_key"),
+    )
+    openrouter_chat_model: str = "openai/gpt-4o-mini"
+    # Same model handles vision on OpenRouter; do NOT use openai/gpt-4o-vision (invalid slug).
+    openrouter_vision_model: str = "openai/gpt-4o-mini"
+    openrouter_chat_timeout_seconds: float = 60.0
+    openrouter_vision_timeout_seconds: float = 90.0
+    openrouter_app_url: str = "https://agastya.app"
+    openrouter_app_name: str = "Agastya"
+    allow_llm_fallback: bool = True
 
     # --- RevenueCat webhook (optional — skips signature verification when absent) ---
     revenuecat_webhook_secret: str | None = None
@@ -86,8 +122,8 @@ class Settings(BaseSettings):
     sentry_environment: str = "production"
 
     @property
-    def groq_enabled(self) -> bool:
-        return bool(self.groq_api_key)
+    def llm_enabled(self) -> bool:
+        return bool(self.openrouter_api_key)
 
     @property
     def cors_origins_list(self) -> list[str]:
@@ -106,9 +142,23 @@ class Settings(BaseSettings):
     def _strip_cors(cls, v: str) -> str:
         return v.strip()
 
-    @field_validator("groq_api_key")
+    @field_validator("palm_analysis_mode", mode="before")
     @classmethod
-    def _strip_groq_key(cls, v: str | None) -> str | None:
+    def _migrate_palm_mode(cls, v: object) -> object:
+        if isinstance(v, str) and v.strip().lower() == "groq":
+            return "vision"
+        return v
+
+    @field_validator("openrouter_vision_model", mode="before")
+    @classmethod
+    def _normalize_vision_model(cls, v: object) -> object:
+        if isinstance(v, str):
+            return normalize_openrouter_vision_model(v)
+        return v
+
+    @field_validator("openrouter_api_key")
+    @classmethod
+    def _strip_openrouter_key(cls, v: str | None) -> str | None:
         if v is None:
             return None
         stripped = v.strip()
@@ -123,8 +173,8 @@ class Settings(BaseSettings):
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
-        # Prefer backend/.env over stale OS-level GROQ_API_KEY (common on Windows dev).
-        return init_settings, dotenv_settings, env_settings, file_secret_settings
+        # backend/.env wins over repo root .env and over stale OS-level empty vars.
+        return init_settings, env_settings, dotenv_settings, file_secret_settings
 
 
 def validate_production_settings(settings: Settings) -> None:
@@ -132,8 +182,8 @@ def validate_production_settings(settings: Settings) -> None:
     if settings.debug:
         return
     missing: list[str] = []
-    if not settings.groq_api_key:
-        missing.append("GROQ_API_KEY")
+    if not settings.openrouter_api_key:
+        missing.append("OPENROUTER_API_KEY")
     if not settings.supabase_url:
         missing.append("SUPABASE_URL")
     if not settings.supabase_service_role_key:

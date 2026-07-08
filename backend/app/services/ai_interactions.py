@@ -1,4 +1,4 @@
-"""Groq-backed conversational guide + deterministic safety nets."""
+"""OpenRouter-backed conversational guide + deterministic safety nets."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import re
 import sentry_sdk
 
 from app.config import Settings
-from app.services.llm_client import groq_chat_completion
+from app.services.llm_client import llm_chat_completion
 from app.prompts.templates import CHAT_SYSTEM, TASK_SYSTEM
 from app.schemas.chat import ChatRequest
 from app.schemas.palm import PalmAnalysis
@@ -26,7 +26,7 @@ _FALLBACK_SUGGESTIONS = [
 
 
 class GuideLlmUnavailableError(Exception):
-    """Groq is configured but the completion request failed."""
+    """OpenRouter is configured but the completion request failed."""
 
 
 def _split_suggestions(text: str) -> tuple[str, list[str]]:
@@ -56,6 +56,13 @@ def _heuristic_chat(body: ChatRequest) -> str:
         "Quiet conviction arrives before language catches up. "
         "Let one vulnerable detail surface; I'll mirror the pattern underneath."
     )
+
+
+def _chat_fallback(settings: Settings, body: ChatRequest) -> tuple[str, list[str]]:
+    if settings.llm_enabled and not settings.allow_llm_fallback:
+        raise GuideLlmUnavailableError("OpenRouter chat unavailable")
+    logger.warning("llm_fallback_reason=chat_heuristic llm_enabled=%s", settings.llm_enabled)
+    return _heuristic_chat(body), list(_FALLBACK_SUGGESTIONS)
 
 
 async def generate_chat_reply(
@@ -99,30 +106,30 @@ async def generate_chat_reply(
             role = "user"
         msgs.append({"role": role, "content": turn.content})
 
-    completion = await groq_chat_completion(
+    completion = await llm_chat_completion(
         settings,
-        model=settings.groq_chat_model,
+        model=settings.openrouter_chat_model,
         messages=msgs,
         temperature=0.9,
         max_tokens=480,
     )
     if completion is None:
-        if settings.groq_enabled:
-            logger.warning("Groq chat unavailable; using heuristic guide reply")
-        return _heuristic_chat(body), list(_FALLBACK_SUGGESTIONS)
+        if settings.llm_enabled:
+            logger.warning("OpenRouter chat unavailable; using heuristic guide reply")
+        return _chat_fallback(settings, body)
 
     try:
         text = completion.choices[0].message.content or ""
         reply, suggestions = _split_suggestions(text)
         if not reply:
-            if settings.groq_enabled:
-                logger.warning("Groq chat returned an empty reply; using heuristic guide reply")
-            return _heuristic_chat(body), list(_FALLBACK_SUGGESTIONS)
+            if settings.llm_enabled:
+                logger.warning("OpenRouter chat returned an empty reply; using heuristic guide reply")
+            return _chat_fallback(settings, body)
         return reply, suggestions or list(_FALLBACK_SUGGESTIONS)
     except Exception as exc:
         logger.exception("Chat reply parse failed: %s", exc)
         sentry_sdk.capture_exception(exc)
-        return _heuristic_chat(body), list(_FALLBACK_SUGGESTIONS)
+        return _chat_fallback(settings, body)
 
 
 def _deterministic_tasks(palm: PalmAnalysis, premium: bool) -> tuple[list[Task], str]:
@@ -172,9 +179,9 @@ async def generate_daily_tasks(settings: Settings, body: DailyTasksBody) -> tupl
         "head_line": palm.head_line,
         "premium": premium,
     }
-    completion = await groq_chat_completion(
+    completion = await llm_chat_completion(
         settings,
-        model=settings.groq_chat_model,
+        model=settings.openrouter_chat_model,
         response_format={"type": "json_object"},
         messages=[
             {"role": "system", "content": TASK_SYSTEM},
@@ -183,16 +190,19 @@ async def generate_daily_tasks(settings: Settings, body: DailyTasksBody) -> tupl
         temperature=0.85,
     )
     if completion is None:
+        logger.warning("llm_fallback_reason=daily_tasks llm_enabled=%s", settings.llm_enabled)
         return fallback
     try:
         raw = completion.choices[0].message.content or "{}"
         data = json.loads(raw)
         raw_tasks = data.get("tasks") or []
         if len(raw_tasks) < 3:
+            logger.warning("llm_fallback_reason=daily_tasks_insufficient_count")
             return fallback
         try:
             tasks = [Task.model_validate(t) for t in raw_tasks[:3]]
         except Exception:
+            logger.warning("llm_fallback_reason=daily_tasks_validation")
             return fallback
         variant = "premium_predictions" if premium else "standard"
         return tasks, variant

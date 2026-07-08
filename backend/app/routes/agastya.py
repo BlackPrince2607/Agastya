@@ -109,6 +109,7 @@ def _bind_device(bkt: SessionBucket, session_id: str, device_install_id: str) ->
         session_id=session_id,
         device_install_id=device_install_id,
         stored_device_id=stored,
+        allow_rebind=False,
     )
     if device_install_id:
         bkt.meta["deviceInstallId"] = device_install_id

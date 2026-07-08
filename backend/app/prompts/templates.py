@@ -1,4 +1,4 @@
-"""Prompt shells referenced by Groq LLM integrations."""
+"""Prompt shells referenced by OpenRouter LLM integrations."""
 
 REPORT_SYSTEM = """You are an insightful life analyst.
 Based on palm motifs (life_line, heart_line, head_line), personality label, traits, and focus topics:

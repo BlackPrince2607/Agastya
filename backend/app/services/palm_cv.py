@@ -87,7 +87,7 @@ def merge_cv_into_analysis(analysis: PalmAnalysis, landmarks: list[list[float]] 
         return analysis
     data = analysis.model_dump()
     data["line_geometry"] = geometry
-    if analysis.analysis_source == "groq_vision":
+    if analysis.analysis_source in {"groq_vision", "openrouter_vision"}:
         data["analysis_source"] = "hybrid"
     elif analysis.analysis_source == "dummy":
         data["analysis_source"] = "hybrid"
