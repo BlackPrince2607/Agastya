@@ -45,5 +45,8 @@ export function mapApiError(detail: string): string {
   if (d.includes('health ') || d.includes('fetch') || d.includes('network')) {
     return ERRORS.network;
   }
+  if (d.includes('aborted') || d.includes('timeout')) {
+    return 'The Guide took too long to respond. Check your connection and try again.';
+  }
   return ERRORS.generic;
 }

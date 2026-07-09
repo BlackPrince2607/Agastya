@@ -6,11 +6,24 @@ import type { PredictionPeriod, PredictionsResponse } from '@/types/predictions'
 
 import { ERRORS, mapApiError } from '@/services/apiErrors';
 import { withApiRetry } from '@/utils/apiRetry';
-import { AGASTYA_API_ROOT, apiUrl, isApiConfigured, isMisconfiguredProductionApi } from '@/services/env';
+import { AGASTYA_API_ROOT, apiUrl, getApiHostLabel, isApiConfigured, isMisconfiguredProductionApi } from '@/services/env';
 import { getSupabaseAccessToken } from '@/services/supabase';
 import { GUIDE_FINISH_PALM_FIRST } from '@/constants/userCopy';
+import { captureException } from '@/services/sentry';
 
 const DEFAULT_FETCH_TIMEOUT_MS = 8000;
+
+function wrapFetchError(path: string, err: unknown): Error {
+  const raw = err instanceof Error ? err.message : String(err);
+  const lower = raw.toLowerCase();
+  if (lower.includes('aborted') || lower.includes('timeout')) {
+    return new Error(`timeout ${path}`);
+  }
+  if (lower.includes('network') || lower.includes('fetch')) {
+    return new Error(`Network request failed (${getApiHostLabel()}${path})`);
+  }
+  return err instanceof Error ? err : new Error(raw);
+}
 
 function apiRequestHeaders(extra: Record<string, string> = {}): Record<string, string> {
   const headers: Record<string, string> = {
@@ -134,6 +147,8 @@ async function postJson<T>(
     body: JSON.stringify(body),
     signal: opts?.signal,
     timeoutMs: opts?.timeoutMs,
+  }).catch((err) => {
+    throw wrapFetchError(path, err);
   });
   if (!res.ok) {
     const detail = await res.text();
@@ -291,7 +306,7 @@ export async function chatWithGuide(body: {
       deviceInstallId,
     },
     false,
-    { timeoutMs: 30_000 },
+    { timeoutMs: 60_000 },
   );
 }
 
@@ -355,6 +370,17 @@ export async function requestGuideReply(
 
   await syncProfileRemote();
 
+  try {
+    await fetchApiHealth();
+  } catch (probeErr) {
+    captureException(probeErr, { apiRoot: AGASTYA_API_ROOT, phase: 'chat_health_probe' });
+    return {
+      ok: false,
+      error: `${ERRORS.network} (server: ${getApiHostLabel()})`,
+      offline: true,
+    };
+  }
+
   const profileSummary = [
     userDisplayName ? `Name: ${userDisplayName}` : '',
     userGender ? `Gender: ${userGender}` : '',
@@ -386,13 +412,18 @@ export async function requestGuideReply(
   } catch (e) {
     const msg = e instanceof Error ? e.message : ERRORS.network;
     const friendly = mapApiError(msg);
+    captureException(e, { apiRoot: AGASTYA_API_ROOT, phase: 'chat_reply', friendly });
     if (__DEV__) {
       console.warn('[Agastya Guide] API error:', friendly, e);
     }
+    const hostHint =
+      friendly === ERRORS.network || friendly.includes('too long')
+        ? ` (server: ${getApiHostLabel()})`
+        : '';
     return {
       ok: false,
-      error: friendly,
-      offline: friendly === ERRORS.network,
+      error: `${friendly}${hostHint}`,
+      offline: friendly === ERRORS.network || friendly.includes('too long'),
     };
   }
 }

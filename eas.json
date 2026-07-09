@@ -17,7 +17,8 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_AGASTYA_API_URL": "https://agastya-production-397b.up.railway.app",
+        "EXPO_PUBLIC_AGASTYA_API_URL": "https://agastya-production-63c1.up.railway.app",
+        "EXPO_UPDATES_ENABLED": "false",
         "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       }
     },
@@ -27,13 +28,17 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_AGASTYA_API_URL": "https://agastya-production-397b.up.railway.app",
+        "EXPO_PUBLIC_AGASTYA_API_URL": "https://agastya-production-63c1.up.railway.app",
         "EXPO_PUBLIC_REVENUECAT_ENTITLEMENT": "premium",
+        "EXPO_UPDATES_ENABLED": "false",
         "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_AGASTYA_API_URL": "https://agastya-production-63c1.up.railway.app"
+      }
     }
   },
   "submit": {

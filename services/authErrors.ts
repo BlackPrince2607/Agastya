@@ -29,6 +29,14 @@ export function mapSupabaseAuthError(message: string): string {
   }
 
   if (
+    m.includes('disabled_client') ||
+    m.includes('oauth client') ||
+    (m.includes('client id') && m.includes('disabled'))
+  ) {
+    return 'Google sign-in is not set up yet. Use email sign-in, or ask your team to enable the OAuth client in Google Cloud and Supabase.';
+  }
+
+  if (
     m.includes('provider is not enabled') ||
     m.includes('unsupported provider') ||
     m.includes('oauth provider not enabled') ||

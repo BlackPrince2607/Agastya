@@ -12,6 +12,14 @@ function trimSlash(url: string) {
   return url.endsWith('/') ? url.slice(0, -1) : url;
 }
 
+/** Ensure production URLs always include a scheme (common EAS misconfig). */
+function normalizeConfiguredUrl(url: string): string {
+  const trimmed = url.trim();
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed)) return trimSlash(trimmed);
+  return trimSlash(`https://${trimmed}`);
+}
+
 const fallbackDev =
   Platform.OS === 'android'
     ? 'http://10.0.2.2:8000'
@@ -63,7 +71,7 @@ function resolveApiRoot(): string {
   const configured = fromExtra || fromEnv;
 
   if (configured) {
-    const root = trimSlash(configured);
+    const root = normalizeConfiguredUrl(configured);
     if (__DEV__ && Platform.OS !== 'web' && isLocalDevUrl(root)) {
       const nativeDev = resolveNativeDevApi();
       if (nativeDev) {
@@ -108,6 +116,15 @@ function resolveApiRoot(): string {
 }
 
 export const AGASTYA_API_ROOT = resolveApiRoot();
+
+export function getApiHostLabel(): string {
+  if (!AGASTYA_API_ROOT) return 'not configured';
+  try {
+    return new URL(AGASTYA_API_ROOT).host;
+  } catch {
+    return AGASTYA_API_ROOT;
+  }
+}
 
 export function isApiConfigured(): boolean {
   return AGASTYA_API_ROOT.length > 0;

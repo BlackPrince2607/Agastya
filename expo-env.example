@@ -4,7 +4,7 @@
 # secrets here.
 
 # Required for APK/production builds. Must be a public HTTPS backend URL.
-EXPO_PUBLIC_AGASTYA_API_URL=https://agastya-production-397b.up.railway.app
+EXPO_PUBLIC_AGASTYA_API_URL=https://agastya-production-63c1.up.railway.app
 
 # Required for sign-in and cloud sync.
 # Supabase Dashboard -> Project Settings -> API.

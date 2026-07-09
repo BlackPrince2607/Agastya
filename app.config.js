@@ -46,8 +46,14 @@ const hasSentryNativePlugin = basePlugins.some(
 );
 const plugins = hasSentryNativePlugin ? basePlugins : [...basePlugins, '@sentry/react-native'];
 
-const DEFAULT_PRODUCTION_API = 'https://agastya-production-397b.up.railway.app';
+const DEFAULT_PRODUCTION_API = 'https://agastya-production-63c1.up.railway.app';
 const isEasBuild = process.env.EAS_BUILD === 'true' || process.env.CI === 'true';
+const buildProfile = process.env.EAS_BUILD_PROFILE ?? '';
+const otaDisabledByProfile = buildProfile === 'prototype' || buildProfile === 'preview';
+const updatesEnabled =
+  updatesConfigured &&
+  process.env.EXPO_UPDATES_ENABLED !== 'false' &&
+  !otaDisabledByProfile;
 
 module.exports = {
   expo: {
@@ -60,7 +66,7 @@ module.exports = {
         (isEasBuild ? DEFAULT_PRODUCTION_API : undefined),
       agastyaApiLanUrl: getDevLanApiUrl(),
     },
-    // Disable OTA updates until EAS project ID is configured — avoids dev/build errors.
-    updates: updatesConfigured ? appJson.expo.updates : { enabled: false },
+    // Disable OTA for prototype/preview APKs so an old update cannot override the API URL.
+    updates: updatesEnabled ? appJson.expo.updates : { enabled: false },
   },
 };

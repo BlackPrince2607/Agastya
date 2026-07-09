@@ -113,7 +113,7 @@ export default function GoalsScreen() {
                 return (
                   <Pressable key={opt.id} onPress={() => toggle(opt.id)} className="active:opacity-95">
                     <View
-                      className={`flex-row items-center rounded-3xl border p-[18px] ${
+                      className={`flex-row items-start rounded-3xl border p-[18px] ${
                         picked ? 'bg-white/12' : 'bg-white/[0.06]'
                       }`}
                       style={
@@ -130,29 +130,31 @@ export default function GoalsScreen() {
                             }
                       }>
                       <View
-                        className="mr-4 h-12 w-12 items-center justify-center rounded-2xl border"
+                        className="mr-4 mt-0.5 h-12 w-12 shrink-0 items-center justify-center rounded-2xl border"
                         style={{
                           backgroundColor: 'rgba(26,11,46,0.9)',
                           borderColor: picked ? 'rgba(211,190,235,0.45)' : 'rgba(255,255,255,0.12)',
                         }}>
                         <MaterialCommunityIcons
                           name={opt.icon}
-                          size={26}
+                          size={24}
                           color={stitchMd3.primary}
                           style={{ opacity: picked ? 1 : 0.82 }}
                         />
                       </View>
-                      <View className="min-w-0 flex-1">
+                      <View className="min-w-0 flex-1 self-center py-0.5">
                         <Text className="font-headline-md text-[20px] leading-7 text-on-surface">{opt.label}</Text>
                         <Text className="mt-1 font-body text-[14px] leading-5 text-on-surface-variant">
                           {opt.blurb}
                         </Text>
                       </View>
-                      <MaterialCommunityIcons
-                        name={picked ? 'check-circle' : 'chevron-right'}
-                        size={picked ? 26 : 22}
-                        color={picked ? stitchMd3.primary : 'rgba(203,196,206,0.65)'}
-                      />
+                      <View className="ml-3 mt-1 h-10 w-7 shrink-0 items-center justify-center">
+                        <MaterialCommunityIcons
+                          name={picked ? 'check-circle' : 'chevron-right'}
+                          size={24}
+                          color={picked ? stitchMd3.primary : 'rgba(203,196,206,0.65)'}
+                        />
+                      </View>
                     </View>
                   </Pressable>
                 );

@@ -24,7 +24,7 @@ import { TAB_BAR_CLEARANCE } from '@/constants/layout';
 import { colors, gradients } from '@/constants/theme';
 import { useLayoutMetrics } from '@/hooks/useLayoutMetrics';
 import { track } from '@/services/analytics';
-import { isApiConfigured, isMisconfiguredProductionApi } from '@/services/env';
+import { isApiConfigured, isMisconfiguredProductionApi, getApiHostLabel } from '@/services/env';
 import { requestGuideReply } from '@/services/agastyaApi';
 import { useChatStore } from '@/store/chatStore';
 import { useSessionStore } from '@/store/sessionStore';
@@ -111,6 +111,7 @@ export default function ChatScreen() {
         needsPalm: Boolean(result.needsPalm),
         configured: isApiConfigured(),
         misconfigured: isMisconfiguredProductionApi(),
+        apiHost: getApiHostLabel(),
       });
       const devHint =
         __DEV__ && result.offline
