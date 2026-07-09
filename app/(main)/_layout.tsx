@@ -72,15 +72,6 @@ export default function MainTabsLayout() {
     );
   }
   if (!canShowTabs) {
-    if (gate === 'ok') {
-      return (
-        <CosmicScreen variant="stitch">
-          <View className="flex-1 items-center justify-center px-8">
-            <LoadingBlock message="Loading…" />
-          </View>
-        </CosmicScreen>
-      );
-    }
     if (requiresSupabaseSignIn() && authLoading) {
       return (
         <CosmicScreen variant="stitch">

@@ -1,0 +1,1 @@
+﻿app/(main)/_layout.tsx(75,9): error TS2367: This comparison appears to be unintentional because the types '"need_sign_in" | "need_ritual"' and '"ok"' have no overlap.
