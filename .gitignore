@@ -51,6 +51,10 @@ backend/venv/
 **/__pycache__/
 *.py[cod]
 
+# debug / local tool output
+tsc-out.txt
+tsc-check-out.txt
+
 # typescript
 *.tsbuildinfo
 

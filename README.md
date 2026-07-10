@@ -11,7 +11,7 @@ Users complete a guided onboarding ritual (profile, goals, palm scan, analysis, 
 | Layer | Stack |
 |-------|--------|
 | **Mobile / web** | Expo SDK 54, React Native, Expo Router, NativeWind, Zustand |
-| **Backend** | FastAPI, Groq (vision + chat), Supabase (auth, DB, storage) |
+| **Backend** | FastAPI, OpenRouter (vision + chat), Supabase (auth, DB, storage) |
 | **Billing** | RevenueCat (iOS/Android), Stripe (web) |
 | **Observability** | Sentry, PostHog / Mixpanel (optional) |
 
@@ -22,7 +22,7 @@ Users complete a guided onboarding ritual (profile, goals, palm scan, analysis, 
 - **Node.js** 18+
 - **Python** 3.11+ (for the API)
 - **Expo Go** or a dev build (for device testing)
-- Accounts (as needed): [Groq](https://console.groq.com), [Supabase](https://supabase.com), [Expo](https://expo.dev)
+- Accounts (as needed): [OpenRouter](https://openrouter.ai), [Supabase](https://supabase.com), [Expo](https://expo.dev)
 
 ---
 
@@ -45,7 +45,7 @@ copy backend\.env.example backend\.env
 Fill in at minimum:
 
 - **Frontend** (`.env`): `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`
-- **Backend** (`backend/.env`): `GROQ_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
+- **Backend** (`backend/.env`): `OPENROUTER_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
 
 See `env.example` and `backend/.env.example` for the full list.
 
@@ -113,7 +113,7 @@ Agastya/
 ├── utils/                # Navigation flow, local predictions, helpers
 ├── backend/              # FastAPI API (palm, chat, billing, webhooks)
 │   ├── app/routes/       # HTTP endpoints
-│   ├── app/services/     # Business logic (palm pipeline, Groq, storage)
+│   ├── app/services/     # Business logic (palm pipeline, OpenRouter, storage)
 │   └── tests/            # pytest suite
 ├── supabase/migrations/  # Postgres schema
 ├── legal/                # Terms & privacy HTML

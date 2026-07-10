@@ -13,7 +13,7 @@ The app is entertainment/self-reflection only. User-facing copy repeatedly clari
 ## Stack
 
 - Frontend: Expo SDK 54, React 19, React Native 0.81, Expo Router, NativeWind, Zustand.
-- Backend: FastAPI, Pydantic, Uvicorn, optional Groq inference, optional Supabase persistence/storage/auth, optional Redis rate limiting.
+- Backend: FastAPI, Pydantic, Uvicorn, optional OpenRouter inference, optional Supabase persistence/storage/auth, optional Redis rate limiting.
 - Auth: Supabase client on the app, Supabase JWT verification on the backend.
 - Billing: RevenueCat on native, Stripe Checkout on web, server-side premium flags.
 - Observability: Sentry on frontend and backend, optional PostHog/Mixpanel analytics.
@@ -224,26 +224,26 @@ Server-side premium is authoritative for protected backend features.
 - Initializes Sentry if configured.
 - Adds trusted-host, security-header, max-body-size, and CORS middleware.
 - Includes routers under `settings.api_v1_prefix` (default `/v1`).
-- Logs availability for Supabase, Groq, Redis, and billing webhooks.
+- Logs availability for Supabase, OpenRouter, Redis, and billing webhooks.
 
 ### Backend Settings
 
 `backend/app/config.py` defines settings:
 
 - App/CORS: `DEBUG`, `API_V1_PREFIX`, `CORS_ORIGINS`, `CORS_ORIGIN_REGEX`, `TRUSTED_HOSTS`.
-- Palm/AI: `PALM_ANALYSIS_MODE`, `GROQ_API_KEY`, `GROQ_CHAT_MODEL`, `GROQ_VISION_MODEL`, timeout values.
+- Palm/AI: `PALM_ANALYSIS_MODE`, `OPENROUTER_API_KEY`, `OPENROUTER_CHAT_MODEL`, `OPENROUTER_VISION_MODEL`, timeout values.
 - Supabase: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, optional `SUPABASE_JWT_SECRET`, `SUPABASE_JWKS_CACHE_SECONDS`, `SUPABASE_PALM_BUCKET`.
 - Rate limiting: `REDIS_URL`.
 - Billing: `REVENUECAT_WEBHOOK_SECRET`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_MONTHLY`, `STRIPE_PRICE_ANNUAL`.
 - Sentry: `SENTRY_DSN`, `SENTRY_ENVIRONMENT`.
 
-In production, `GROQ_API_KEY`, `SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY` are required.
+In production, `OPENROUTER_API_KEY`, `SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY` are required.
 
 ### Backend Routes
 
 `backend/app/routes/health.py`:
 
-- `GET /v1/health`: process liveness and, in debug, Supabase/Groq/palm-Groq availability.
+- `GET /v1/health`: process liveness and, in debug, Supabase/LLM/palm-vision availability.
 
 `backend/app/routes/agastya.py`:
 
@@ -278,16 +278,16 @@ In production, `GROQ_API_KEY`, `SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY` a
 - `services/session_repository.py`: Supabase REST persistence for `agastya_sessions`.
 - `services/bucket_store.py`: in-process session buckets and Supabase-user aliases.
 - `services/palm_pipeline.py`: palm analysis selection and fallback logic.
-- `services/palm_ai.py`: Groq vision palm reading.
+- `services/palm_ai.py`: OpenRouter vision palm reading.
 - `services/palm_cv.py`: merge client landmarks into palm analysis.
 - `services/palm_dummy.py`: deterministic fallback palm analysis.
-- `services/report_engine.py`: deterministic report plus optional Groq JSON enrichment.
+- `services/report_engine.py`: deterministic report plus optional OpenRouter JSON enrichment.
 - `services/ai_interactions.py`: guide chat and daily tasks with deterministic fallbacks.
-- `services/predictions_engine.py`: deterministic predictions plus optional Groq JSON enrichment.
+- `services/predictions_engine.py`: deterministic predictions plus optional OpenRouter JSON enrichment.
 - `services/palm_storage.py`: private Supabase Storage upload/delete for palm captures.
 - `services/auth_admin.py`: Supabase admin auth helpers.
 - `services/supabase_rest.py`: REST client using service role.
-- `services/groq_health.py`, `services/llm_client.py`: Groq availability and OpenAI-compatible client.
+- `services/llm_health.py`, `services/llm_client.py`: OpenRouter availability and OpenAI-compatible client.
 
 ## Data Model
 
@@ -343,7 +343,7 @@ Additional migrations:
 ### Main App Guide Chat
 
 1. `chat` screen sends local conversation, palm analysis, and profile summary through `requestGuideReply()`.
-2. Backend hydrates the session, refreshes premium from Supabase, and calls Groq if available.
+2. Backend hydrates the session, refreshes premium from Supabase, and calls OpenRouter if available.
 3. Free users are capped server-side after the preview message limit.
 4. Backend stores the last 40 turns in `chat_tail`.
 
@@ -386,9 +386,9 @@ Backend `backend/.env` commonly includes:
 - `CORS_ORIGINS`
 - `CORS_ORIGIN_REGEX`
 - `PALM_ANALYSIS_MODE`
-- `GROQ_API_KEY`
-- `GROQ_CHAT_MODEL`
-- `GROQ_VISION_MODEL`
+- `OPENROUTER_API_KEY`
+- `OPENROUTER_CHAT_MODEL`
+- `OPENROUTER_VISION_MODEL`
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `SUPABASE_PALM_BUCKET`

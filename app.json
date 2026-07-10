@@ -1,7 +1,8 @@
 {
   "expo": {
     "name": "Agastya",
-    "slug": "Agastya",
+    "slug": "agastya",
+    "owner": "anish26s-team",
     "version": "1.0.0",
     "runtimeVersion": {
       "policy": "appVersion"
@@ -94,12 +95,12 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "1b218304-7f86-4ff5-acac-b889a9ef8454"
+        "projectId": "e734e717-48c7-49ec-8e5a-8810cfed0fa4"
       },
-      "agastyaApiUrl": "https://agastya-production-63c1.up.railway.app"
+      "agastyaApiUrl": "https://agastya-production-eb56.up.railway.app"
     },
     "updates": {
-      "url": "https://u.expo.dev/1b218304-7f86-4ff5-acac-b889a9ef8454"
+      "url": "https://u.expo.dev/e734e717-48c7-49ec-8e5a-8810cfed0fa4"
     },
     "experiments": {
       "typedRoutes": true

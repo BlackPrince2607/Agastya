@@ -4,17 +4,9 @@ All code changes from the SaaS readiness pass are in place. This document covers
 
 ---
 
-## 1. Copy App Icons (generated, need to move)
+## 1. App icons
 
-The branded icons were generated and are at:
-```
-C:\Users\user\.cursor\projects\d-Agastya\assets\icon.png         → assets/images/icon.png
-C:\Users\user\.cursor\projects\d-Agastya\assets\splash-icon.png  → assets/images/splash-icon.png
-C:\Users\user\.cursor\projects\d-Agastya\assets\adaptive-icon.png → assets/images/adaptive-icon.png
-C:\Users\user\.cursor\projects\d-Agastya\assets\notification-icon.png → assets/images/notification-icon.png
-```
-
-Copy them into your repo's `assets/images/` folder. If you want custom icons instead, replace with 1024×1024 PNGs.
+Icons live in `assets/images/` (`icon.png`, `splash-icon.png`, `adaptive-icon.png`). Replace with 1024×1024 PNGs before store release if needed.
 
 ---
 
@@ -55,8 +47,8 @@ Fill in:
 cp backend/.env.example backend/.env
 ```
 Fill in:
-- `GROQ_API_KEY` — from console.groq.com
-- `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` — from Supabase (user JWTs verified via JWKS; no JWT secret needed)
+- `OPENROUTER_API_KEY` — from [openrouter.ai/keys](https://openrouter.ai/keys)
+- `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` — from Supabase (user JWTs verified via JWKS)
 - `REVENUECAT_WEBHOOK_SECRET` — from RevenueCat → Integrations → Webhooks → Authorization header value
 - `SENTRY_DSN` — from Sentry → Python project → Client Keys
 
@@ -204,7 +196,7 @@ Mobile subscriptions stay on RevenueCat + App Store / Play Billing. Stripe is fo
 fly auth login
 fly launch --no-deploy --config fly.toml
 fly secrets set \
-  GROQ_API_KEY=sk-... \
+  OPENROUTER_API_KEY=sk-or-v1-... \
   SUPABASE_URL=https://xxx.supabase.co \
   SUPABASE_SERVICE_ROLE_KEY=ey... \
   REVENUECAT_WEBHOOK_SECRET=... \
@@ -232,9 +224,9 @@ Pushes to `main` that touch `backend/**` auto-redeploy.
 
 **Via CLI:** `railway login && railway init && npm run deploy:railway`
 
-Required Railway variables: `GROQ_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DEBUG=false`
+Required Railway variables: `OPENROUTER_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DEBUG=false`
 
-If deploy crashes on startup, open **Deploy Logs** — missing `GROQ_API_KEY` or Supabase keys is the usual cause.
+If deploy crashes on startup, open **Deploy Logs** — missing `OPENROUTER_API_KEY` or Supabase keys is the usual cause.
 
 ---
 

@@ -9,7 +9,7 @@ Use this guide to build an **installable `.apk`** you can send to Android phones
 | Item | Status in your repo | Action |
 |------|---------------------|--------|
 | Expo account (free) | Not logged in yet | `npx eas-cli login` |
-| EAS project ID | Placeholder in `app.json` | `npx eas-cli project:init` |
+| EAS project ID | Set in `app.json` (`extra.eas.projectId`) | `npx eas-cli project:init` if missing |
 | App icons | Present in `assets/images/` | None |
 | JS bundle builds | Verified (`expo export --platform android`) | None |
 | **Public API URL** | `.env` still points at local/LAN | Deploy backend (step 2) |
@@ -52,14 +52,14 @@ APK builds bake in `EXPO_PUBLIC_AGASTYA_API_URL`. Testers’ phones **cannot** r
 4. **Settings → Networking → Generate Domain**
 5. Verify: `curl https://YOUR-APP.up.railway.app/v1/health`
 
-Use that URL as `EXPO_PUBLIC_AGASTYA_API_URL` in EAS secrets.
+Use that URL in `eas.json` (`prototype` / `preview` profiles) and optionally in expo.dev **Environment variables**.
 
 ### Option B: Fly.io
 
 ```powershell
 fly auth login
 fly launch --no-deploy --config fly.toml
-fly secrets set GROQ_API_KEY=sk-... SUPABASE_URL=https://xxx.supabase.co SUPABASE_SERVICE_ROLE_KEY=eyJ... DEBUG=false CORS_ORIGINS=https://agastya.app
+fly secrets set OPENROUTER_API_KEY=sk-or-v1-... SUPABASE_URL=https://xxx.supabase.co SUPABASE_SERVICE_ROLE_KEY=eyJ... DEBUG=false CORS_ORIGINS=https://agastya.app
 fly deploy --config fly.toml
 ```
 
@@ -75,22 +75,26 @@ Apply Supabase migrations (`npx supabase db push` or SQL editor) — see `DEPLOY
 
 ## Step 3 — Configure build environment variables
 
-EAS cloud builds **do not** read your local `.env`. Set secrets once:
+EAS cloud builds **do not** read your local `.env`. The **`prototype`** profile in `eas.json` already sets:
 
-```powershell
-npx eas-cli secret:create --scope project --name EXPO_PUBLIC_AGASTYA_API_URL --value https://YOUR-API.fly.dev
-npx eas-cli secret:create --scope project --name EXPO_PUBLIC_SUPABASE_URL --value https://YOUR-PROJECT.supabase.co
-npx eas-cli secret:create --scope project --name EXPO_PUBLIC_SUPABASE_ANON_KEY --value YOUR_ANON_KEY
+- `EXPO_PUBLIC_AGASTYA_API_URL` (Railway API)
+- `EXPO_UPDATES_ENABLED=false`
+
+Also set on [expo.dev](https://expo.dev) → project → **Environment variables** (preview environment):
+
+```text
+EXPO_PUBLIC_SUPABASE_URL=https://YOUR-PROJECT.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 ```
 
-Optional (prototype can skip):
+Optional:
 
 ```powershell
-npx eas-cli secret:create --scope project --name EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY --value ...
-npx eas-cli secret:create --scope project --name EXPO_PUBLIC_SENTRY_DSN --value ...
+npx eas-cli env:create --name EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY --value ...
+npx eas-cli env:create --name EXPO_PUBLIC_SENTRY_DSN --value ...
 ```
 
-See `env.prototype.example` for the full list.
+See `env.example` for the full frontend variable list.
 
 ### Supabase auth for the APK
 
