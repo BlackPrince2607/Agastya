@@ -13,20 +13,34 @@ export type PalmAnalysisDto = {
   hand_shape?: string;
   image_quality?: 'good' | 'acceptable' | 'poor' | 'no_hand';
   confidence?: number;
-  analysis_source?: 'openrouter_vision' | 'groq_vision' | 'hybrid' | 'dummy' | 'fallback';
+  analysis_source?: 'openrouter_vision' | 'hybrid' | 'dummy' | 'fallback' | 'opencv_creases';
   quality_warnings?: string[];
   line_details?: Record<string, { length?: string; depth?: string; breaks?: number; notes?: string }>;
   mounts?: Record<string, string>;
   fate_line?: string | null;
   line_geometry?: PalmLineGeometry[];
+  line_features?: Record<
+    string,
+    {
+      length?: number;
+      length_label?: string;
+      depth?: string;
+      depth_score?: number;
+      curvature?: number;
+      breaks?: number;
+      confidence?: number;
+      notes?: string;
+    }
+  >;
+  geometry_source?: 'opencv_creases' | 'landmark_heuristic' | 'unavailable' | null;
 };
 
 export function isLivePalmAnalysis(palm: PalmAnalysisDto | null | undefined): boolean {
   if (!palm) return false;
   return (
     palm.analysis_source === 'openrouter_vision' ||
-    palm.analysis_source === 'groq_vision' ||
-    palm.analysis_source === 'hybrid'
+    palm.analysis_source === 'hybrid' ||
+    palm.analysis_source === 'opencv_creases'
   );
 }
 

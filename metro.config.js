@@ -17,6 +17,19 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
       type: 'sourceFile',
     };
   }
+  // MediaPipe ESM/CJS bundles use runtime import()/require() Metro cannot parse on web.
+  if (moduleName === '@mediapipe/tasks-vision') {
+    if (platform === 'web') {
+      return {
+        filePath: path.resolve(__dirname, 'utils/mediapipeWebShim.ts'),
+        type: 'sourceFile',
+      };
+    }
+    return {
+      filePath: path.resolve(__dirname, 'node_modules/@mediapipe/tasks-vision/vision_bundle.cjs'),
+      type: 'sourceFile',
+    };
+  }
   // Zustand ESM uses import.meta — prefer CJS entry on web export.
   if (moduleName === 'zustand' || moduleName.startsWith('zustand/')) {
     return {

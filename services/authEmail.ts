@@ -5,7 +5,7 @@ import {
 } from '@/services/authErrorUtils';
 import { getSupabase, isSupabaseEnabled } from '@/services/supabase';
 import { apiUrl, isApiConfigured } from '@/services/env';
-import { SIGN_IN_UNAVAILABLE, AUTH_RATE_LIMIT_HINT } from '@/constants/userCopy';
+import { SIGN_IN_UNAVAILABLE, AUTH_RATE_LIMIT_HINT, AUTH_ACCOUNT_EXISTS_HINT } from '@/constants/userCopy';
 
 export type AuthEmailResult =
   | { ok: true; needsEmailConfirmation?: boolean }
@@ -171,7 +171,13 @@ export async function signUpWithEmailPassword(
       });
     }
 
-    // User created without a session → confirmation email was sent (even if GoTrue also returned a soft error).
+    // Supabase anti-enumeration: existing email → user with zero identities, no session, no error.
+    const identityCount = data.user?.identities?.length ?? 0;
+    if (data.user && identityCount === 0 && !data.session) {
+      return { ok: false, message: AUTH_ACCOUNT_EXISTS_HINT, reason: 'user_exists' };
+    }
+
+    // New user with email confirmation required — confirmation email was sent.
     if (data.user && !data.session) {
       return { ok: true, needsEmailConfirmation: true };
     }
@@ -196,6 +202,31 @@ export async function signUpWithEmailPassword(
     return { ok: true };
   } catch (err) {
     if (__DEV__) console.warn('[Agastya auth] signUp threw:', err);
+    return failFrom(err);
+  }
+}
+
+export async function resendSignupConfirmation(
+  email: string,
+  redirectUri: string,
+): Promise<AuthEmailResult> {
+  const supabase = getSupabase();
+  if (!isSupabaseEnabled || !supabase) return unavailable();
+
+  const trimmed = email.trim().toLowerCase();
+  if (!trimmed.includes('@')) {
+    return { ok: false, message: 'Enter a valid email address.', reason: 'email_invalid' };
+  }
+
+  try {
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email: trimmed,
+      options: redirectUri ? { emailRedirectTo: redirectUri } : undefined,
+    });
+    if (error) return failFrom(error);
+    return { ok: true, needsEmailConfirmation: true };
+  } catch (err) {
     return failFrom(err);
   }
 }

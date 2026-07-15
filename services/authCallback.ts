@@ -1,18 +1,34 @@
 import * as Linking from 'expo-linking';
 import * as QueryParams from 'expo-auth-session/build/QueryParams';
-import { Platform } from 'react-native';
 import { router } from 'expo-router';
+import { Platform } from 'react-native';
 
-import { isAccountOAuthActive } from '@/services/authFlow';
-import { isAuthCallbackUrl } from '@/services/authRedirect';
-import { readAuthSession, syncAuthUserToStore } from '@/services/authSession';
+import { isRecentAuthEstablished } from '@/services/authFlow';
+import {
+  isAuthCallbackUrl,
+  oauthRedirectMisconfigMessage,
+  parseOAuthCallbackError,
+} from '@/services/authRedirect';
+import { syncAuthUserToStore } from '@/services/authSession';
+import { dismissOAuthBrowser } from '@/services/oauthBrowser';
+import { persistentStorage } from '@/services/persistentStorage';
 import { getSupabase } from '@/services/supabase';
+
+const PENDING_AUTH_URL_KEY = 'agastya:pending_auth_return_url';
+
+export type AuthUrlResult =
+  | { ok: true; recovery?: boolean; skipped?: boolean; userId?: string | null }
+  | { ok: false; reason: 'no_client' | 'parse_error' | 'exchange_failed'; message?: string };
 
 /** OAuth return URL from WebBrowser or a deep link (consumed once after successful exchange). */
 let pendingAuthReturnUrl: string | null = null;
+const processedAuthUrls = new Set<string>();
+/** In-flight exchanges keyed by URL — prevents double PKCE redeem (deep link + browser result). */
+const authUrlInFlight = new Map<string, Promise<AuthUrlResult>>();
 
 export function setPendingAuthReturnUrl(url: string) {
   pendingAuthReturnUrl = url;
+  void persistentStorage.setItem(PENDING_AUTH_URL_KEY, url).catch(() => {});
 }
 
 export function peekPendingAuthReturnUrl(): string | null {
@@ -22,43 +38,41 @@ export function peekPendingAuthReturnUrl(): string | null {
 export function consumePendingAuthReturnUrl(): string | null {
   const url = pendingAuthReturnUrl;
   pendingAuthReturnUrl = null;
+  if (url) {
+    void persistentStorage.removeItem(PENDING_AUTH_URL_KEY).catch(() => {});
+  }
   return url;
 }
 
-/** Wait for an auth callback URL (magic link / cold start). Not used during account WebBrowser OAuth. */
-export function waitForAuthReturnUrl(): Promise<string | null> {
+/** Resolve OAuth/magic-link return URL after Custom Tabs or an exp:// reload. */
+export async function resolveAuthCallbackUrl(): Promise<string | null> {
   const pending = peekPendingAuthReturnUrl();
-  if (pending) return Promise.resolve(pending);
+  if (pending && isAuthCallbackUrl(pending)) {
+    return pending;
+  }
 
-  return new Promise((resolve) => {
-    let settled = false;
-    const finish = (url: string | null) => {
-      if (settled) return;
-      settled = true;
-      sub.remove();
-      resolve(url);
-    };
+  try {
+    const initial = await Linking.getInitialURL();
+    if (initial && isAuthCallbackUrl(initial)) {
+      setPendingAuthReturnUrl(initial);
+      return initial;
+    }
+  } catch {
+    /* ignore */
+  }
 
-    void Linking.getInitialURL().then((initial) => {
-      if (initial && isAuthCallbackUrl(initial)) {
-        finish(initial);
-      }
-    });
+  try {
+    const stored = await persistentStorage.getItem(PENDING_AUTH_URL_KEY);
+    if (stored && isAuthCallbackUrl(stored)) {
+      setPendingAuthReturnUrl(stored);
+      return stored;
+    }
+  } catch {
+    /* ignore */
+  }
 
-    const sub = Linking.addEventListener('url', ({ url }) => {
-      if (isAuthCallbackUrl(url)) {
-        setPendingAuthReturnUrl(url);
-        finish(url);
-      }
-    });
-  });
+  return null;
 }
-
-export type AuthUrlResult =
-  | { ok: true; recovery?: boolean; skipped?: boolean; userId?: string | null }
-  | { ok: false; reason: 'no_client' | 'parse_error' | 'exchange_failed'; message?: string };
-
-const processedAuthUrls = new Set<string>();
 
 function parseAuthQueryParams(url: string): { params: Record<string, string>; errorCode?: string } {
   const { params, errorCode: rawCode } = QueryParams.getQueryParams(url);
@@ -90,6 +104,17 @@ function applySessionUser(userId: string | undefined | null): string | null {
   return id;
 }
 
+async function readLocalSessionUserId(): Promise<string | null> {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+  try {
+    const { data } = await supabase.auth.getSession();
+    return data.session?.user?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** Parse magic-link / OAuth redirect URLs and establish a Supabase session. */
 export async function createSessionFromUrl(url: string): Promise<boolean> {
   const result = await createSessionFromUrlDetailed(url);
@@ -102,10 +127,18 @@ export async function createSessionFromUrlDetailed(url: string): Promise<AuthUrl
 
   const { params, errorCode } = parseAuthQueryParams(url);
 
-  const oauthError = params.error_description ?? params.error;
-  if (errorCode || oauthError) {
-    const message = oauthError ?? errorCode ?? 'Sign-in was cancelled.';
-    if (__DEV__) console.warn('[Agastya auth]', message);
+  const callbackError = parseOAuthCallbackError(url);
+  if (callbackError) {
+    if (__DEV__) console.warn('[Agastya auth] OAuth callback error:', callbackError);
+    return { ok: false, reason: 'parse_error', message: callbackError };
+  }
+
+  if (errorCode) {
+    const message =
+      errorCode !== 'null' && errorCode !== 'undefined'
+        ? `Sign-in was rejected (${errorCode}).`
+        : oauthRedirectMisconfigMessage();
+    if (__DEV__) console.warn('[Agastya auth] OAuth callback error:', message);
     return { ok: false, reason: 'parse_error', message };
   }
 
@@ -113,12 +146,17 @@ export async function createSessionFromUrlDetailed(url: string): Promise<AuthUrl
   if (code) {
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
     if (error) {
-      const auth = await readAuthSession();
-      if (auth.isSignedIn) {
-        return { ok: true, userId: auth.userId };
+      const localUserId = await readLocalSessionUserId();
+      if (localUserId) {
+        return { ok: true, userId: localUserId };
       }
-      if (__DEV__) console.warn('[Agastya auth] exchangeCodeForSession failed', error.message);
-      return { ok: false, reason: 'exchange_failed', message: error.message };
+      const message =
+        error.message?.trim() ||
+        (error.code === 'bad_code_verifier' || error.code === 'bad_oauth_state'
+          ? 'This sign-in must finish on the same device. Try again.'
+          : oauthRedirectMisconfigMessage());
+      if (__DEV__) console.warn('[Agastya auth] exchangeCodeForSession failed', message, error.code);
+      return { ok: false, reason: 'exchange_failed', message };
     }
     const userId = applySessionUser(data.session?.user?.id);
     return { ok: true, recovery: params.type === 'recovery', userId };
@@ -135,9 +173,9 @@ export async function createSessionFromUrlDetailed(url: string): Promise<AuthUrl
     refresh_token: refresh_token ?? '',
   });
   if (error) {
-    const auth = await readAuthSession();
-    if (auth.isSignedIn) {
-      return { ok: true, recovery: params.type === 'recovery', userId: auth.userId };
+    const localUserId = await readLocalSessionUserId();
+    if (localUserId) {
+      return { ok: true, recovery: params.type === 'recovery', userId: localUserId };
     }
     if (__DEV__) console.warn('[Agastya auth] setSession failed', error.message);
     return { ok: false, reason: 'exchange_failed', message: error.message };
@@ -148,33 +186,56 @@ export async function createSessionFromUrlDetailed(url: string): Promise<AuthUrl
 
 /** Establish session from redirect URL. Caller handles navigation. */
 export async function completeAuthFromUrl(url: string): Promise<AuthUrlResult> {
-  if (processedAuthUrls.has(url)) {
-    const auth = await readAuthSession();
-    if (auth.isSignedIn) {
-      return { ok: true, skipped: true, userId: auth.userId };
+  const existing = authUrlInFlight.get(url);
+  if (existing) return existing;
+
+  const run = (async (): Promise<AuthUrlResult> => {
+    if (url.includes('established=1')) {
+      const localUserId = await readLocalSessionUserId();
+      if (localUserId) {
+        return { ok: true, userId: localUserId };
+      }
     }
-    processedAuthUrls.delete(url);
+
+    if (processedAuthUrls.has(url)) {
+      const localUserId = await readLocalSessionUserId();
+      if (localUserId) {
+        return { ok: true, skipped: true, userId: localUserId };
+      }
+      processedAuthUrls.delete(url);
+    }
+
+    processedAuthUrls.add(url);
+
+    const recovery = isRecoveryUrl(url);
+    const result = await createSessionFromUrlDetailed(url);
+    if (!result.ok) {
+      processedAuthUrls.delete(url);
+      return result;
+    }
+
+    if (__DEV__) {
+      console.log('[Agastya auth] session established for', result.userId?.slice(0, 8) ?? 'user');
+    }
+
+    consumePendingAuthReturnUrl();
+
+    if (recovery || result.recovery) {
+      return { ok: true, recovery: true, userId: result.userId };
+    }
+
+    return { ok: true, userId: result.userId };
+  })();
+
+  authUrlInFlight.set(url, run);
+  try {
+    return await run;
+  } finally {
+    authUrlInFlight.delete(url);
   }
-
-  processedAuthUrls.add(url);
-
-  const recovery = isRecoveryUrl(url);
-  const result = await createSessionFromUrlDetailed(url);
-  if (!result.ok) {
-    processedAuthUrls.delete(url);
-    return result;
-  }
-
-  consumePendingAuthReturnUrl();
-
-  if (recovery || result.recovery) {
-    return { ok: true, recovery: true, userId: result.userId };
-  }
-
-  return { ok: true, userId: result.userId };
 }
 
-/** Wire deep links (OTP + magic link). Native OAuth on account screen is handled inline. */
+/** Wire deep links for OAuth + magic-link / email confirm. */
 export function subscribeAuthDeepLinks(): () => void {
   if (Platform.OS === 'web') {
     return () => {};
@@ -185,13 +246,18 @@ export function subscribeAuthDeepLinks(): () => void {
 
   const handle = (url: string | null) => {
     if (!url || !isAuthCallbackUrl(url)) return;
+    if (__DEV__) {
+      console.log('[Agastya auth] deep link callback:', url.slice(0, 200));
+    }
+
     setPendingAuthReturnUrl(url);
-    if (isAccountOAuthActive()) {
-      if (__DEV__) {
-        console.log('[Agastya auth] deep link held for account OAuth handler');
-      }
+    void dismissOAuthBrowser().catch(() => {});
+
+    if (isRecentAuthEstablished()) {
+      void completeAuthFromUrl(url).catch(() => {});
       return;
     }
+
     router.replace('/auth/callback');
   };
 

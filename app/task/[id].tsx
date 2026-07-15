@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BackButton } from '@/components/layout/BackButton';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { PAGE_PADDING } from '@/constants/layout';
-import { GlassCard, Icon, NebulaButton } from '@/components/ui';
+import { GlassCard, Icon, PrimaryButton } from '@/components/ui';
 import { useTaskStore } from '@/store/taskStore';
 import { goBack } from '@/utils/navigationBack';
 import { LOCAL_TASKS } from '@/utils/localTasks';
@@ -70,9 +70,9 @@ export default function TaskDetailScreen() {
         <View
           className="absolute bottom-0 left-0 right-0 pt-4"
           style={{ paddingHorizontal: PAGE_PADDING, paddingBottom: Math.max(insets.bottom, 16) }}>
-          <NebulaButton
+          <PrimaryButton
             label={completed ? 'Completed ✦' : 'Mark as Complete'}
-            variant={completed ? 'ghost' : 'nebula'}
+            variant={completed ? 'ghost' : 'primary'}
             onPress={() => {
               toggleComplete(task.id);
               if (!completed) goBack({ pathname: `/task/${task.id}` });

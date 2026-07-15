@@ -34,7 +34,6 @@ export function StackScroll({
       keyboardShouldPersistTaps={keyboardShouldPersistTaps}
       contentContainerStyle={[
         {
-          gap: sectionGap,
           paddingTop: 8,
           paddingBottom: insets.bottom + bottomInset,
           paddingHorizontal: pad,
@@ -43,7 +42,7 @@ export function StackScroll({
         },
         contentContainerStyle,
       ]}>
-      <ScreenBody>{children}</ScreenBody>
+      <ScreenBody style={{ gap: sectionGap }}>{children}</ScreenBody>
     </ScrollView>
   );
 }

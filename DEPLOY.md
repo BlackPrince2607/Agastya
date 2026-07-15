@@ -101,7 +101,8 @@ User access tokens are verified via JWKS at `{SUPABASE_URL}/auth/v1/.well-known/
 Add to **Redirect URLs**:
 
 - `agastya://**` — standalone / dev builds
-- `exp://**` — Expo Go (copy exact URI from Metro: `[Agastya auth] redirect URI`)
+- `http://**` — Expo Go OAuth via Metro (`http://<lan>:8081/auth/callback`)
+- `exp://**` — Expo Go deep links / magic links
 - `https://agastya.app/**` — web / universal links
 
 ### Google OAuth

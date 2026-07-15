@@ -2,7 +2,7 @@ import * as Linking from 'expo-linking';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -18,20 +18,19 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { GoogleLogo } from '@/components/auth/GoogleLogo';
+import { LoadingBlock } from '@/components/feedback';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { StickyActionBar, STICKY_ACTION_BAR_COMFORTABLE } from '@/components/layout/StickyActionBar';
 import { DecorativePalmArt } from '@/components/onboarding/DecorativePalmArt';
 import { OnboardingHeader } from '@/components/onboarding/OnboardingHeader';
-import { GlassCard, CosmicTextField, Icon, NebulaButton, type IconName } from '@/components/ui';
+import { TrustBadgeRow } from '@/components/onboarding/TrustBadgeRow';
+import { GlassCard, CosmicTextField, PrimaryButton } from '@/components/ui';
 import { LEGAL_URLS } from '@/constants/legal';
 import { ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS } from '@/constants/onboarding';
 import { SIGN_IN_UNAVAILABLE } from '@/constants/userCopy';
-import { track } from '@/services/analytics';
-import { completeAuthFromUrl, setPendingAuthReturnUrl } from '@/services/authCallback';
-import { beginAccountOAuth, endAccountOAuth } from '@/services/authFlow';
-import { isEmailAuthEnabled, isOAuthSignInEnabled } from '@/services/authConfig';
+import { runNativeOAuth } from '@/services/authCoordinator';
 import { alertForAuthFailure, parseAuthFailure } from '@/services/authErrorUtils';
-import { getAuthRedirectUri } from '@/services/authRedirect';
+import { isEmailAuthEnabled, isOAuthSignInEnabled } from '@/services/authConfig';
 import { setPostSignInReturn } from '@/services/authSession';
 import { finishSignIn } from '@/services/authSignIn';
 import { warmUpOAuthBrowser } from '@/services/oauthBrowser';
@@ -39,23 +38,22 @@ import { getSupabase, isSupabaseEnabled } from '@/services/supabase';
 import { useSessionStore } from '@/store/sessionStore';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { hasRitualReading } from '@/utils/navigationFlow';
-import { resetAppNavigation } from '@/utils/routerDefer';
+import { previewReportHref } from '@/utils/premiumAccess';
 
 WebBrowser.maybeCompleteAuthSession();
 
-const TRUST_BADGES: { icon: IconName; label: string }[] = [
-  { icon: 'cloud_done', label: 'Secure Backup' },
-  { icon: 'encrypted', label: 'Private & Safe' },
-  { icon: 'devices', label: 'Any Device' },
+const TRUST_BADGES = [
+  { icon: 'cloud_done' as const, label: 'Secure Backup' },
+  { icon: 'encrypted' as const, label: 'Private & Safe' },
+  { icon: 'devices' as const, label: 'Any Device' },
 ];
 
 export default function SaveJourneyScreen() {
   const insets = useSafeAreaInsets();
-  const { seed, fromPaywall, fromProfile, fromWelcome } = useLocalSearchParams<{
+  const { seed, fromPaywall, fromProfile } = useLocalSearchParams<{
     seed?: string;
     fromPaywall?: string;
     fromProfile?: string;
-    fromWelcome?: string;
   }>();
   const storeSeed = useSessionStore((s) => s.readingSeed);
   const mergedSeed = seed ?? storeSeed ?? 'stillness';
@@ -64,14 +62,11 @@ export default function SaveJourneyScreen() {
   const { isSignedIn, email: authEmail } = useAuthSession();
   const afterPaywall = fromPaywall === '1';
   const fromProfileFlow = fromProfile === '1';
-  const fromWelcomeFlow = fromWelcome === '1';
 
   const [email, setEmail] = useState('');
   const [oauthBusy, setOauthBusy] = useState<'apple' | 'google' | null>(null);
   const [enterBusy, setEnterBusy] = useState(false);
-  const autoGoogleStarted = useRef(false);
 
-  const redirectUri = getAuthRedirectUri();
   const showOAuth = isOAuthSignInEnabled && !isSignedIn;
 
   useEffect(() => {
@@ -81,7 +76,7 @@ export default function SaveJourneyScreen() {
   }, [fromProfileFlow]);
 
   useEffect(() => {
-    warmUpOAuthBrowser();
+    void warmUpOAuthBrowser();
   }, []);
 
   const openLegal = (url: string) => {
@@ -109,105 +104,31 @@ export default function SaveJourneyScreen() {
   };
 
   const oauth = async (provider: 'apple' | 'google') => {
-    const supabase = getSupabase();
-    if (!isSupabaseEnabled || !supabase) {
+    if (!isSupabaseEnabled || !getSupabase()) {
       Alert.alert('Sign-in unavailable', SIGN_IN_UNAVAILABLE);
       return;
     }
     if (oauthBusy) return;
 
-    // Clear any stale "skip cloud restore" flag from a previous "Start fresh" so a
-    // returning user's palm reading / report can be pulled back down after sign-in.
-    if (useSessionStore.getState().skipCloudRestore) {
-      useSessionStore.getState().setSkipCloudRestore(false);
-    }
-
     setOauthBusy(provider);
-    beginAccountOAuth();
+    setEnterBusy(true);
     try {
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider,
-        options: {
-          redirectTo: redirectUri,
-          skipBrowserRedirect: Platform.OS !== 'web',
-        },
-      });
-
-      if (error) {
-        const alert = alertForAuthFailure(parseAuthFailure(error));
+      const result = await runNativeOAuth(provider);
+      if (!result.ok) {
+        if (result.cancelled) return;
+        const alert = alertForAuthFailure(parseAuthFailure(result.message ?? 'Sign-in failed.'));
         Alert.alert(alert.title, alert.body);
         return;
       }
-
-      if (Platform.OS === 'web') {
-        if (data.url) {
-          window.location.assign(data.url);
-        } else {
-          Alert.alert('Sign-in unavailable', 'Could not open the sign-in page. Please try again.');
-        }
-        return;
-      }
-
-      if (!data.url) {
-        Alert.alert(
-          'Sign-in unavailable',
-          `Could not start ${provider === 'apple' ? 'Apple' : 'Google'} sign-in. Please try again.`,
-        );
-        return;
-      }
-
-      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUri);
-
-      if (result.type === 'success' && result.url) {
-        setPendingAuthReturnUrl(result.url);
-        setEnterBusy(true);
-        try {
-          const authResult = await completeAuthFromUrl(result.url);
-          if (!authResult.ok) {
-            const alert = alertForAuthFailure(
-              parseAuthFailure(authResult.message ?? 'We could not finish signing you in.'),
-            );
-            Alert.alert(alert.title, alert.body);
-            return;
-          }
-          track('auth_oauth_attempt', { provider });
-          try {
-            await finishSignIn({ userId: authResult.userId, recovery: authResult.recovery });
-          } catch {
-            if (authResult.recovery) {
-              router.replace('/auth/reset-password');
-              return;
-            }
-            useSessionStore.getState().setEnteredMain(true);
-            resetAppNavigation('/(main)/home');
-          }
-        } finally {
-          setEnterBusy(false);
-        }
-        return;
-      } else if (result.type === 'cancel' || result.type === 'dismiss') {
-        return;
-      } else {
-        Alert.alert(
-          'Sign-in incomplete',
-          'The sign-in window closed before we could verify your account. Try again.',
-        );
-      }
+      // runNativeOAuth exchanges the Supabase session and navigates via completeSignIn.
     } catch (err) {
       const alert = alertForAuthFailure(parseAuthFailure(err instanceof Error ? err : String(err)));
       Alert.alert(alert.title, alert.body);
     } finally {
-      endAccountOAuth();
+      setEnterBusy(false);
       setOauthBusy(null);
     }
   };
-
-  useEffect(() => {
-    if (!fromWelcomeFlow || !showOAuth || autoGoogleStarted.current || oauthBusy || enterBusy) return;
-    autoGoogleStarted.current = true;
-    const provider = Platform.OS === 'ios' ? 'apple' : 'google';
-    void oauth(provider);
-  }, [fromWelcomeFlow, showOAuth, oauthBusy, enterBusy]);
 
   const continueOnboarding = () => {
     if (enterBusy) return;
@@ -250,9 +171,11 @@ export default function SaveJourneyScreen() {
               />
             </View>
 
-            <View className="items-center gap-3">
+            <View className="items-center gap-3.5 px-1">
               <Text className="text-center font-headline text-[30px] leading-9 text-on-surface">{headline}</Text>
-              <Text className="text-center font-body text-[15px] leading-6 text-on-surface-variant">{subhead}</Text>
+              <Text className="max-w-sm text-center font-body text-[15px] leading-6 text-on-surface-variant">
+                {subhead}
+              </Text>
             </View>
 
             {isSignedIn ? (
@@ -262,24 +185,15 @@ export default function SaveJourneyScreen() {
                   {fromProfileFlow
                     ? 'Return to your profile below.'
                     : hasRitualReading() || hasEnteredMain
-                      ? 'Tap Enter Agastya below.'
+                      ? premium
+                        ? 'Tap Enter Agastya below.'
+                        : 'You are signed in. Unlock full access to enter the app.'
                       : 'Tap Enter Agastya to restore your journey or start from Home.'}
                 </Text>
               </GlassCard>
             ) : null}
 
-            {!fromProfileFlow ? (
-              <View className="flex-row gap-3">
-                {TRUST_BADGES.map((b) => (
-                  <GlassCard key={b.label} className="min-w-0 flex-1 items-center gap-2 px-3 py-3">
-                    <Icon name={b.icon} size={22} color="#d3beeb" />
-                    <Text className="text-center font-label text-[10px] uppercase tracking-[0.08em] text-on-surface">
-                      {b.label}
-                    </Text>
-                  </GlassCard>
-                ))}
-              </View>
-            ) : null}
+            {!fromProfileFlow ? <TrustBadgeRow badges={TRUST_BADGES} /> : null}
 
             {!isSupabaseEnabled && !isSignedIn ? (
               <GlassCard className="w-full px-4 py-3" style={{ borderColor: 'rgba(251,191,36,0.35)' }}>
@@ -338,7 +252,9 @@ export default function SaveJourneyScreen() {
             {isEmailAuthEnabled && !isSignedIn && showOAuth ? (
               <View className="flex-row items-center gap-4">
                 <View className="h-px flex-1 bg-white/10" />
-                <Text className="font-label text-[10px] uppercase tracking-[0.28em] text-on-surface-variant">Or</Text>
+                <Text className="font-label text-[10px] uppercase leading-4 tracking-[0.28em] text-on-surface-variant">
+                  Or
+                </Text>
                 <View className="h-px flex-1 bg-white/10" />
               </View>
             ) : null}
@@ -356,24 +272,24 @@ export default function SaveJourneyScreen() {
                   onSubmitEditing={() => continueWithEmail()}
                   returnKeyType="go"
                 />
-                <NebulaButton label="Continue with Email" onPress={continueWithEmail} />
+                <PrimaryButton label="Continue with Email" onPress={continueWithEmail} />
               </View>
             ) : null}
 
             <View className="items-center gap-2 pt-1">
               <View className="flex-row justify-center gap-6">
                 <Pressable onPress={() => openLegal(LEGAL_URLS.terms)}>
-                  <Text className="font-label text-[11px] uppercase tracking-[0.08em] text-on-surface-variant">
+                  <Text className="font-label text-[11px] uppercase leading-4 tracking-[0.08em] text-on-surface-variant">
                     Terms of Use
                   </Text>
                 </Pressable>
                 <Pressable onPress={() => openLegal(LEGAL_URLS.privacy)}>
-                  <Text className="font-label text-[11px] uppercase tracking-[0.08em] text-on-surface-variant">
+                  <Text className="font-label text-[11px] uppercase leading-4 tracking-[0.08em] text-on-surface-variant">
                     Privacy Policy
                   </Text>
                 </Pressable>
               </View>
-              <Text className="font-label text-[10px] uppercase tracking-[0.08em] text-on-surface-variant/70">
+              <Text className="font-label text-[10px] uppercase leading-4 tracking-[0.08em] text-on-surface-variant/70">
                 (c) {new Date().getFullYear()} Agastya
               </Text>
             </View>
@@ -382,16 +298,22 @@ export default function SaveJourneyScreen() {
           <StickyActionBar contentStyle={{ gap: 10 }}>
             <View className="gap-y-3">
               {isSignedIn && fromProfileFlow ? (
-                <NebulaButton label="Back to profile" onPress={() => router.replace('/(main)/profile')} />
-              ) : isSignedIn ? (
-                <NebulaButton
+                <PrimaryButton label="Back to profile" onPress={() => router.replace('/(main)/profile')} />
+              ) : isSignedIn && premium ? (
+                <PrimaryButton
                   label={enterBusy ? 'Opening Agastya...' : 'Enter Agastya'}
                   disabled={enterBusy || oauthBusy !== null}
                   onPress={continueOnboarding}
                 />
+              ) : isSignedIn ? (
+                <PrimaryButton
+                  label="View report preview"
+                  disabled={enterBusy || oauthBusy !== null}
+                  onPress={() => router.replace(previewReportHref())}
+                />
               ) : null}
               {!isSignedIn ? (
-                <Text className="mt-1 text-center font-inter text-[12px] leading-5 text-md-on-surface-variant">
+                <Text className="mt-1 text-center font-body text-[12px] leading-5 text-on-surface-variant">
                   Sign in above to save your reading and access the app.
                 </Text>
               ) : null}
@@ -408,6 +330,14 @@ export default function SaveJourneyScreen() {
           </StickyActionBar>
         </View>
       </KeyboardAvoidingView>
+      {enterBusy ? (
+        <View
+          style={[StyleSheet.absoluteFillObject, { zIndex: 50 }]}
+          className="items-center justify-center bg-black/80 px-8"
+          pointerEvents="auto">
+          <LoadingBlock message="Signing you in…" />
+        </View>
+      ) : null}
     </CosmicScreen>
   );
 }

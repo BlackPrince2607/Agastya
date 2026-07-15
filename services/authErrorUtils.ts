@@ -1,6 +1,7 @@
 import type { AuthError } from '@supabase/supabase-js';
 
 import { mapSupabaseAuthError } from '@/services/authErrors';
+import { oauthRedirectMisconfigMessage } from '@/services/authRedirect';
 
 export type AuthFailureReason =
   | 'invalid_credentials'
@@ -59,7 +60,7 @@ function reasonFromMessage(message: string): AuthFailureReason {
   if (m.includes('already registered') || m.includes('already exists') || m.includes('email_exists')) {
     return 'user_exists';
   }
-  if (m.includes('redirect')) return 'redirect';
+  if (m.includes('redirect') || m === 'null' || m === 'undefined') return 'redirect';
   if (m.includes('rate') || m.includes('too many') || m.includes('once every')) return 'rate_limit';
   if (m.includes('invalid email') || m.includes('email_address_invalid')) return 'email_invalid';
   if (m.includes('weak password') || m.includes('weak_password')) return 'weak_password';
@@ -78,25 +79,29 @@ export function parseAuthFailure(error: AuthError | Error | string | null | unde
     return { message, reason: reasonFromMessage(message) };
   }
 
-  const authError = error as AuthError;
+  const authError = error as AuthError & { message?: string; name?: string };
   const code = authError.code;
   const status = authError.status;
+  const rawMessage = authError.message?.trim() ?? '';
   const message =
-    authError.message?.trim() ||
+    rawMessage ||
     (code ? `Supabase auth error (${code})` : '') ||
     (status ? `Supabase auth HTTP ${status}` : '') ||
-    error.name ||
+    authError.name ||
     'Sign-in failed.';
 
   return {
     message,
     code,
     status,
-    reason: reasonFromCode(code) ?? reasonFromMessage(message),
+    reason: reasonFromCode(code) ?? reasonFromMessage(message || authError.name || ''),
   };
 }
 
 export function userMessageForAuthFailure(failure: ParsedAuthFailure): string {
+  if (failure.reason === 'network') {
+    return "We couldn't reach the sign-in service. Check your connection, disable VPN, or try Android Private DNS (dns.google) if you're on a hotspot.";
+  }
   if (failure.reason === 'rate_limit') {
     return 'Too many emails were sent recently. If you already created an account, sign in with your password. Otherwise wait about an hour and try again.';
   }
@@ -105,6 +110,9 @@ export function userMessageForAuthFailure(failure: ParsedAuthFailure): string {
   }
   if (failure.reason === 'pkce') {
     return 'This sign-in link must be opened on the same phone where you requested it. Force-close the app, reopen it, and try again. You can also sign in with your password after confirming your email.';
+  }
+  if (failure.reason === 'redirect' || failure.message === 'null') {
+    return oauthRedirectMisconfigMessage();
   }
   const mapped = mapSupabaseAuthError(failure.message);
   if (
@@ -117,8 +125,16 @@ export function userMessageForAuthFailure(failure: ParsedAuthFailure): string {
   return mapped;
 }
 
+function isUselessAuthMessage(message: string | undefined): boolean {
+  const m = message?.trim().toLowerCase();
+  return !m || m === 'null' || m === 'undefined';
+}
+
 export function alertForAuthFailure(failure: ParsedAuthFailure): { title: string; body: string } {
   const friendly = userMessageForAuthFailure(failure);
+  if (failure.reason !== 'unknown' || isUselessAuthMessage(failure.message)) {
+    return { title: 'Sign-in failed', body: friendly };
+  }
   const technical = [failure.code, failure.status ? `HTTP ${failure.status}` : '', failure.message]
     .filter(Boolean)
     .join(' - ');

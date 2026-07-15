@@ -30,9 +30,10 @@ function snapshotFromSession(session: { user?: { id?: string; email?: string | n
 }
 
 const AUTH_PROBE_TIMEOUT_MS = 4000;
+const AUTH_PROBE_EXTRA_MS = 1500;
 
 /** Read session via INITIAL_SESSION, with getSession fallback if the listener is late. */
-export function readAuthSession(): Promise<AuthSessionSnapshot> {
+export function readAuthSession(maxMs = AUTH_PROBE_TIMEOUT_MS): Promise<AuthSessionSnapshot> {
   const supabase = getSupabase();
   if (!supabase || !isSupabaseEnabled) {
     return Promise.resolve(EMPTY);
@@ -45,16 +46,21 @@ export function readAuthSession(): Promise<AuthSessionSnapshot> {
     const finish = (snap: AuthSessionSnapshot) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timeout);
+      clearTimeout(probeTimeout);
+      clearTimeout(ceilingTimeout);
       sub?.subscription.unsubscribe();
       resolve(snap);
     };
 
-    const timeout = setTimeout(() => {
-      void supabase.auth.getSession().then(({ data }) => {
-        finish(snapshotFromSession(data.session));
-      });
-    }, AUTH_PROBE_TIMEOUT_MS);
+    const probeWithGetSession = () => {
+      void supabase.auth
+        .getSession()
+        .then(({ data }) => finish(snapshotFromSession(data.session)))
+        .catch(() => finish(EMPTY));
+    };
+
+    const probeTimeout = setTimeout(probeWithGetSession, maxMs);
+    const ceilingTimeout = setTimeout(() => finish(EMPTY), maxMs + AUTH_PROBE_EXTRA_MS);
 
     const { data } = supabase.auth.onAuthStateChange((event, session) => {
       if (

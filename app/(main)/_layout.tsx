@@ -4,17 +4,21 @@ import { BackHandler, Platform, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { LoadingBlock } from '@/components/feedback';
-import { Icon, type IconName } from '@/components/ui';
+import { type IconName } from '@/components/ui';
+import { AnimatedTabIcon } from '@/components/navigation/AnimatedTabIcon';
 import MainTabBarBlurBackground from '@/components/navigation/MainTabBarBlurBackground';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { TAB_BAR_BODY_HEIGHT } from '@/constants/layout';
+import { colors } from '@/constants/theme';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { usePersistHydration } from '@/hooks/usePersistHydration';
 import { requiresSupabaseSignIn } from '@/services/authConfig';
+import { isRecentAuthEstablished } from '@/services/authFlow';
 import { leaveMainAppForOnboarding, syncAuthUserToStore } from '@/services/authSession';
 import { useSessionStore } from '@/store/sessionStore';
 import { useTaskStore } from '@/store/taskStore';
 import { canEnterMainAppSync, resolveBlockedAppHref } from '@/utils/navigationFlow';
+import { hasPremiumAccess } from '@/utils/premiumAccess';
 import { LOCAL_TASKS } from '@/utils/localTasks';
 
 /** Home • Chat • Tasks • Profile (Reports & Compatibility pushed from Home). */
@@ -26,17 +30,19 @@ export default function MainTabsLayout() {
   const tabBarBottom = Math.max(insets.bottom, Platform.OS === 'web' ? 14 : 10);
   const tabBarHeight = TAB_BAR_BODY_HEIGHT + tabBarBottom + 6;
   const palmAnalysis = useSessionStore((s) => s.palmAnalysis);
+  const storeUserId = useSessionStore((s) => s.supabaseUserId);
   const tasks = useTaskStore((s) => s.tasks);
   const completedIds = useTaskStore((s) => s.completedIds);
   const gate = canEnterMainAppSync();
-  const canShowTabs = entered || gate === 'ok';
+  const canShowTabs = (entered || gate === 'ok') && hasPremiumAccess();
+  const authPending = authLoading && !isSignedIn && !storeUserId;
 
   useEffect(() => {
     if (entered) return;
     if (userId) {
       syncAuthUserToStore(userId);
     }
-    if (canEnterMainAppSync() === 'ok') {
+    if (canEnterMainAppSync() === 'ok' && hasPremiumAccess()) {
       useSessionStore.getState().setEnteredMain(true);
     }
   }, [entered, isSignedIn, userId, authLoading]);
@@ -49,12 +55,14 @@ export default function MainTabsLayout() {
   }, [palmAnalysis, tasks, completedIds]);
 
   useEffect(() => {
-    if (!requiresSupabaseSignIn() || authLoading || isSignedIn) return;
+    if (!requiresSupabaseSignIn() || authLoading || isSignedIn || storeUserId || isRecentAuthEstablished()) {
+      return;
+    }
     syncAuthUserToStore(null);
     if (useSessionStore.getState().hasEnteredMain) {
       leaveMainAppForOnboarding();
     }
-  }, [authLoading, isSignedIn]);
+  }, [authLoading, isSignedIn, storeUserId]);
 
   useEffect(() => {
     if (Platform.OS === 'web' || !entered) return;
@@ -72,7 +80,7 @@ export default function MainTabsLayout() {
     );
   }
   if (!canShowTabs) {
-    if (requiresSupabaseSignIn() && authLoading) {
+    if (requiresSupabaseSignIn() && authPending) {
       return (
         <CosmicScreen variant="stitch">
           <View className="flex-1 items-center justify-center px-8">
@@ -85,7 +93,7 @@ export default function MainTabsLayout() {
     return <Redirect href={target} />;
   }
 
-  if (requiresSupabaseSignIn() && authLoading) {
+  if (requiresSupabaseSignIn() && authPending) {
     return (
       <CosmicScreen variant="stitch">
         <View className="flex-1 items-center justify-center px-8">
@@ -125,34 +133,44 @@ export default function MainTabsLayout() {
           borderTopRightRadius: 36,
         },
         tabBarBackground: () => <MainTabBarBlurBackground />,
-        tabBarActiveTintColor: '#c084fc',
+        tabBarActiveTintColor: colors.growth,
         tabBarInactiveTintColor: 'rgba(232,225,229,0.45)',
+        tabBarActiveBackgroundColor: 'transparent',
       }}>
       <Tabs.Screen
         name="home"
-        options={{ title: 'Home', tabBarIcon: ({ color }) => <Glyph name="auto_awesome" color={color} /> }}
+        options={{
+          title: 'Home',
+          tabBarIcon: ({ color, focused }) => <Glyph name="auto_awesome" color={color} focused={focused} />,
+        }}
       />
       <Tabs.Screen
         name="chat"
-        options={{ title: 'Chat', tabBarIcon: ({ color }) => <Glyph name="auto_fix_high" color={color} /> }}
+        options={{
+          title: 'Chat',
+          tabBarIcon: ({ color, focused }) => <Glyph name="auto_fix_high" color={color} focused={focused} />,
+        }}
       />
       <Tabs.Screen
         name="tasks"
         options={{
           title: 'Tasks',
           tabBarBadge: tasksTabBadge,
-          tabBarIcon: ({ color }) => <Glyph name="task_alt" color={color} />,
+          tabBarIcon: ({ color, focused }) => <Glyph name="task_alt" color={color} focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="profile"
-        options={{ title: 'Profile', tabBarIcon: ({ color }) => <Glyph name="person" color={color} /> }}
+        options={{
+          title: 'Profile',
+          tabBarIcon: ({ color, focused }) => <Glyph name="person" color={color} focused={focused} />,
+        }}
       />
       <Tabs.Screen name="edit-profile" options={{ href: null }} />
     </Tabs>
   );
 }
 
-function Glyph({ name, color }: { name: IconName; color: string }) {
-  return <Icon name={name} size={24} color={color} />;
+function Glyph({ name, color, focused }: { name: IconName; color: string; focused: boolean }) {
+  return <AnimatedTabIcon name={name} color={color} focused={focused} />;
 }

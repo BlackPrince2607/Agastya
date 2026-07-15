@@ -52,7 +52,7 @@ export default function TrustOnboardingScreen() {
           </View>
 
           <View className="mb-10 items-center gap-4 px-1">
-            <Text className="text-center font-headline text-[30px] leading-[34px] tracking-tight text-on-surface">
+            <Text className="text-center font-headline text-[30px] leading-9 tracking-tight text-on-surface">
               Palm reading, made for today.
             </Text>
             <Text className="max-w-md text-center font-body text-[15px] leading-6 text-on-surface-variant">
@@ -68,7 +68,7 @@ export default function TrustOnboardingScreen() {
                 <Ionicons name="lock-closed" size={22} color={stitchMd3.primary} />
               </View>
               <View className="min-w-0 flex-1 pt-0.5">
-                <Text className="font-label text-[12px] uppercase tracking-[0.12em] text-on-surface">
+                <Text className="font-label text-[12px] uppercase leading-4 tracking-[0.12em] text-on-surface">
                   Privacy first
                 </Text>
                 <Text className="mt-2 font-body text-[13px] leading-5 text-on-surface-variant">
@@ -78,23 +78,23 @@ export default function TrustOnboardingScreen() {
             </View>
 
             <View className="flex-row gap-3">
-              <View className="min-h-[124px] flex-1 justify-between rounded-2xl border border-white/10 bg-white/[0.06] p-4">
+              <View className="min-h-[124px] flex-1 items-start rounded-2xl border border-white/10 bg-white/[0.06] p-4">
                 <View
                   className="h-11 w-11 items-center justify-center rounded-full"
                   style={{ backgroundColor: 'rgba(26,11,46,0.75)', borderWidth: 1, borderColor: 'rgba(219,195,159,0.28)' }}>
                   <Ionicons name="hand-left-outline" size={22} color="#dbc39f" />
                 </View>
-                <Text className="font-label text-[12px] uppercase leading-4 tracking-[0.12em] text-on-surface">
+                <Text className="mt-auto font-label text-[12px] uppercase leading-4 tracking-[0.12em] text-on-surface">
                   Detailed palm reading
                 </Text>
               </View>
-              <View className="min-h-[124px] flex-1 justify-between rounded-2xl border border-white/10 bg-white/[0.06] p-4">
+              <View className="min-h-[124px] flex-1 items-start rounded-2xl border border-white/10 bg-white/[0.06] p-4">
                 <View
                   className="h-11 w-11 items-center justify-center rounded-full"
                   style={{ backgroundColor: 'rgba(26,11,46,0.75)', borderWidth: 1, borderColor: 'rgba(192,179,207,0.28)' }}>
                   <Ionicons name="sparkles-outline" size={22} color="#c0b3cf" />
                 </View>
-                <Text className="font-label text-[12px] uppercase leading-4 tracking-[0.12em] text-on-surface">
+                <Text className="mt-auto font-label text-[12px] uppercase leading-4 tracking-[0.12em] text-on-surface">
                   Daily guidance
                 </Text>
               </View>

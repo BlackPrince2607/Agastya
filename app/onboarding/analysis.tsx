@@ -1,6 +1,6 @@
-import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
-import { Text, View } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Text, View } from 'react-native';
 
 import { MotiView } from '@/components/moti/MotiView';
 import { CosmicDotGrid } from '@/components/layout/CosmicDotGrid';
@@ -10,8 +10,10 @@ import { ReadingChecklist, type ChecklistItem } from '@/components/onboarding/Re
 import { AnalyzingSeal, GradientText } from '@/components/primitives';
 import {
   ANALYSIS_LOADING_PHRASES,
+  PALM_RETAKE_DEFAULT,
   SAMPLE_READING_BADGE,
 } from '@/constants/userCopy';
+import { isPalmRetakeError } from '@/services/apiErrors';
 import { analyzePalm, generateReport } from '@/services/agastyaApi';
 import { bootstrapIdentity, syncProfileRemote } from '@/services/identity';
 import { normalizeFullReport } from '@/services/normalizeReport';
@@ -22,10 +24,21 @@ import { isApiConfigured } from '@/services/env';
 import type { PalmAnalysisDto } from '@/types/palmAnalysis';
 import { isLivePalmAnalysis, palmNeedsRetake } from '@/types/palmAnalysis';
 import { useSessionStore } from '@/store/sessionStore';
-import { ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS, ANALYSIS_PHRASE_MS } from '@/constants/onboarding';
+import {
+  ANALYSIS_PHRASE_MS,
+  ANALYSIS_SETTLE_MS,
+  ONBOARDING_STEPS,
+  ONBOARDING_TOTAL_STEPS,
+} from '@/constants/onboarding';
 import { deferRouterReplace } from '@/utils/routerDefer';
-import { analysisPresentationMs, delay, palmFieldsVisibleAt } from '@/utils/analysisTiming';
+import {
+  analysisPresentationMs,
+  analysisProgressPct,
+  delay,
+  palmFieldsVisibleAt,
+} from '@/utils/analysisTiming';
 import { withApiRetry } from '@/utils/apiRetry';
+import { palmHandForGender } from '@/utils/palmHand';
 import { trimBase64Payload } from '@/utils/palmLandmarks';
 
 const FALLBACK_PALM: PalmAnalysisDto = {
@@ -44,8 +57,8 @@ export default function AnalysisScreen() {
   const setPreviewReading = useSessionStore((s) => s.setPreviewReading);
 
   const [phase, setPhase] = useState(0);
-  const [pct, setPct] = useState(12);
-  const [syncPulse, setSyncPulse] = useState(0.22);
+  const [pct, setPct] = useState(0);
+  const [syncPulse, setSyncPulse] = useState(0);
   const [sampleBadge, setSampleBadge] = useState(false);
   const [palmResult, setPalmResult] = useState<PalmAnalysisDto | null>(null);
   const [apiPalm, setApiPalm] = useState<PalmAnalysisDto | null>(null);
@@ -56,11 +69,11 @@ export default function AnalysisScreen() {
     const started = Date.now();
     const tick = setInterval(() => {
       const elapsed = Date.now() - started;
-      const next = Math.min(99, 12 + Math.floor((elapsed / runMs) * 88));
+      const next = analysisProgressPct(elapsed, runMs);
       setPct(next);
-      setSyncPulse(0.18 + (next / 99) * 0.72);
+      setSyncPulse(next / 100);
       setPalmResult(palmFieldsVisibleAt(elapsed, apiPalm));
-    }, 120);
+    }, 80);
     return () => clearInterval(tick);
   }, [runMs, apiPalm]);
 
@@ -69,9 +82,21 @@ export default function AnalysisScreen() {
     return () => clearInterval(id);
   }, []);
 
+  const runIdRef = useRef(0);
+
   useEffect(() => {
+    const runId = ++runIdRef.current;
     const resolvedSeed = seed ?? `trace-${Date.now()}`;
+
     setReadingSeed(resolvedSeed);
+
+    // Snapshot before any await — cloud restore / merge after sign-in can race with a second pipeline.
+    const snap0 = useSessionStore.getState();
+    const captureSnapshot = snap0.palmCaptureBase64;
+    const landmarksSnapshot = snap0.palmCaptureLandmarks;
+    const landmarksSourceSnapshot = snap0.palmLandmarksSource;
+    const genderSnapshot = snap0.userGender;
+    const handSnapshot = snap0.palmScanHand ?? palmHandForGender(genderSnapshot);
 
     const minDelay = delay(runMs);
 
@@ -79,6 +104,7 @@ export default function AnalysisScreen() {
 
     void (async () => {
       let needsRetake = false;
+      let retakeReason = PALM_RETAKE_DEFAULT;
       let resolvedPalm: PalmAnalysisDto = FALLBACK_PALM;
 
       const pipeline = async () => {
@@ -89,8 +115,12 @@ export default function AnalysisScreen() {
           throw new Error('missing_session');
         }
 
-        const captureRaw = snap.palmCaptureBase64;
-        const capture = captureRaw ? trimBase64Payload(captureRaw) : null;
+        const capture = captureSnapshot ? trimBase64Payload(captureSnapshot) : null;
+        if (isApiConfigured() && !capture) {
+          needsRetake = true;
+          retakeReason = 'The palm photo was lost before upload. Please scan again.';
+          return;
+        }
         let palm: PalmAnalysisDto = FALLBACK_PALM;
         try {
           palm = await withApiRetry(() =>
@@ -99,13 +129,17 @@ export default function AnalysisScreen() {
               deviceInstallId: snap.deviceInstallId!,
               seed: resolvedSeed,
               imageBase64: capture,
-              dominantHand: snap.palmScanHand ?? 'right',
+              dominantHand: handSnapshot,
+              gender: genderSnapshot,
+              landmarks: landmarksSnapshot ?? undefined,
+              landmarksSource: landmarksSourceSnapshot ?? undefined,
             }),
           );
           resolvedPalm = palm;
           setApiPalm(palm);
           if (palmNeedsRetake(palm)) {
             needsRetake = true;
+            retakeReason = PALM_RETAKE_DEFAULT;
             return;
           }
           if (!isLivePalmAnalysis(palm)) {
@@ -115,8 +149,9 @@ export default function AnalysisScreen() {
           const online = isApiConfigured();
           if (online) {
             const msg = err instanceof Error ? err.message : 'Analysis failed';
-            if (msg.toLowerCase().includes('retake') || msg.toLowerCase().includes('palm')) {
+            if (isPalmRetakeError(msg)) {
               needsRetake = true;
+              retakeReason = msg;
               return;
             }
             throw err;
@@ -143,11 +178,10 @@ export default function AnalysisScreen() {
           );
           setPreviewReading(normalizeFullReport(previewPayload));
         } catch {
-          setPreviewReading(buildSimulatedReading(resolvedSeed, snap.focusTopics));
+          setPreviewReading(buildSimulatedReading(resolvedSeed, snap.focusTopics, palm));
         }
 
         track('analysis_pipeline_complete', { seed_len: resolvedSeed.length });
-        useSessionStore.getState().setPalmCaptureBase64(null);
         useSessionStore.getState().setSkipCloudRestore(false);
         void scheduleReadyNotification();
       };
@@ -155,21 +189,38 @@ export default function AnalysisScreen() {
       try {
         await Promise.all([minDelay, pipeline()]);
       } catch {
-        if (cancelled) return;
+        if (cancelled || runId !== runIdRef.current) return;
         const snap = useSessionStore.getState();
         setSampleBadge(true);
         resolvedPalm = FALLBACK_PALM;
         setApiPalm(FALLBACK_PALM);
         setPalmAnalysis(FALLBACK_PALM);
-        setPreviewReading(buildSimulatedReading(resolvedSeed, snap.focusTopics));
+        setPreviewReading(buildSimulatedReading(resolvedSeed, snap.focusTopics, FALLBACK_PALM));
         useSessionStore.getState().setSkipCloudRestore(false);
       } finally {
-        if (cancelled) return;
+        if (cancelled || runId !== runIdRef.current) return;
         setPalmResult(resolvedPalm);
+        setPct(100);
+        setSyncPulse(1);
+        await delay(ANALYSIS_SETTLE_MS);
+        if (cancelled || runId !== runIdRef.current) return;
         if (needsRetake) {
-          router.replace('/onboarding/palm-scan');
+          useSessionStore.getState().setPalmCaptureBase64(null);
+          useSessionStore.getState().setPalmCaptureLandmarks(null, null);
+          Alert.alert('Try again', retakeReason, [
+            {
+              text: 'OK',
+              onPress: () =>
+                deferRouterReplace({
+                  pathname: '/onboarding/palm-scan',
+                  params: { retakeReason: encodeURIComponent(retakeReason) },
+                }),
+            },
+          ]);
           return;
         }
+        // Keep palmCaptureBase64 so report-preview can overlay scanned lines on the photo.
+        useSessionStore.getState().setPalmCaptureLandmarks(null, null);
         deferRouterReplace({
           pathname: '/onboarding/report-preview',
           params: { seed: resolvedSeed },
@@ -180,7 +231,7 @@ export default function AnalysisScreen() {
     return () => {
       cancelled = true;
     };
-  }, [seed, setPalmAnalysis, setPreviewReading, setReadingSeed]);
+  }, [seed, setPalmAnalysis, setPreviewReading, setReadingSeed, runMs]);
 
   const caption = ANALYSIS_LOADING_PHRASES[phase] ?? ANALYSIS_LOADING_PHRASES[0];
 
@@ -194,7 +245,7 @@ export default function AnalysisScreen() {
       { label: 'Major Lines', state: lineDone ? 'done' : pct > 30 ? 'active' : 'pending' },
       { label: 'Mounts', state: mountsDone ? 'done' : pct > 55 ? 'active' : 'pending' },
       { label: 'Hand Shape', state: shapeDone ? 'done' : pct > 78 ? 'active' : 'pending' },
-      { label: 'Finger Analysis', state: fingersDone ? 'done' : pct >= 99 ? 'active' : 'pending' },
+      { label: 'Finger Analysis', state: fingersDone ? 'done' : pct >= 100 ? 'active' : 'pending' },
     ];
   }, [palmResult, pct]);
 
@@ -206,17 +257,17 @@ export default function AnalysisScreen() {
           <OnboardingHeader step={ONBOARDING_STEPS.analysis} total={ONBOARDING_TOTAL_STEPS} showBack={false} />
 
           <View className="items-center gap-5">
-            <GradientText className="font-label text-[12px] uppercase tracking-[0.12em] text-stitch-signal">
+            <GradientText className="font-label text-[12px] uppercase tracking-[0.12em] text-cyan">
               Analyzing your palm
             </GradientText>
             {sampleBadge ? (
-              <Text className="font-inter text-[12px] text-amber-200/90">{SAMPLE_READING_BADGE}</Text>
+              <Text className="font-body text-[12px] text-amber-200/90">{SAMPLE_READING_BADGE}</Text>
             ) : null}
             <View className="relative items-center justify-center">
               <AnalyzingSeal diameter={244} hideCenterGlyph />
               <View className="pointer-events-none absolute items-center justify-center gap-1">
-                <Text className="font-space-grotesk text-[28px] font-semibold text-mist/95">{pct}%</Text>
-                <Text className="font-space-grotesk text-[10px] uppercase tracking-[0.35em] text-md-on-surface-variant">
+                <Text className="font-label text-[28px] font-semibold text-on-surface/95">{pct}%</Text>
+                <Text className="font-label text-[10px] uppercase tracking-[0.35em] text-on-surface-variant">
                   processing
                 </Text>
               </View>
@@ -237,20 +288,22 @@ export default function AnalysisScreen() {
 
             <View className="gap-2">
               <View className="flex-row items-center justify-between">
-                <Text className="font-space-grotesk text-[9px] uppercase tracking-[0.28em] text-md-on-primary-container">
+                <Text className="font-label text-[9px] uppercase tracking-[0.28em] text-on-primary-container">
                   Reading progress
                 </Text>
-                <Text className="font-inter text-[11px] text-stitch-signal/85">{pct}%</Text>
+                <Text className="font-body text-[11px] text-cyan/85">{pct}%</Text>
               </View>
               <View className="h-1.5 overflow-hidden rounded-full bg-white/10">
                 <View
-                  className="h-full rounded-full bg-stitch-signal shadow-glow-teal"
+                  className="h-full rounded-full bg-cyan shadow-glow-teal"
                   style={{ width: `${Math.round(syncPulse * 100)}%` }}
                 />
               </View>
             </View>
 
-            <Text className="text-center font-body text-[13px] text-on-surface-variant">Almost ready</Text>
+            <Text className="text-center font-body text-[13px] text-on-surface-variant">
+              {pct >= 100 ? 'Ready' : 'Almost ready'}
+            </Text>
           </View>
         </View>
       </View>

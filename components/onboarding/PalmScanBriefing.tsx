@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
@@ -10,24 +9,25 @@ import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { HandToggleRow } from '@/components/onboarding/HandToggle';
 import { PalmScanFrame } from '@/components/onboarding/PalmScanFrame';
 import { OnboardingHeader } from '@/components/onboarding/OnboardingHeader';
+import { PalmScanCoachingTips } from '@/components/onboarding/PalmScanCoachingTips';
 import { CosmicButton } from '@/components/primitives';
 import { ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS } from '@/constants/onboarding';
 import { PAGE_PADDING } from '@/constants/layout';
 import { stitchMd3 } from '@/constants/stitchWelcome';
 import { triggerLightTap } from '@/hooks/useHapticTap';
-import type { PalmScanHand } from '@/store/sessionStore';
-
-const SCAN_TIPS = [
-  { icon: 'sunny-outline' as const, label: 'Good light' },
-  { icon: 'hand-right-outline' as const, label: 'Open palm' },
-  { icon: 'expand-outline' as const, label: 'Fill frame' },
-];
+import type { Gender, PalmScanHand } from '@/store/sessionStore';
+import {
+  isPalmHandLockedByGender,
+  palmHandForGender,
+  palmHandGuidanceLabel,
+} from '@/utils/palmHand';
 
 type PalmScanBriefingProps = {
   primaryLabel: string;
   primaryIcon: 'camera' | 'image';
   onPrimaryPress: (hand: PalmScanHand) => void;
   hand: PalmScanHand | null;
+  gender?: Gender | null;
   onHandChange?: (hand: PalmScanHand) => void;
   beforePrimary?: ReactNode;
 };
@@ -37,20 +37,28 @@ export function PalmScanBriefing({
   primaryIcon,
   onPrimaryPress,
   hand,
+  gender,
   onHandChange,
   beforePrimary,
 }: PalmScanBriefingProps) {
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
-  const [selectedHand, setSelectedHand] = useState<PalmScanHand>(hand ?? 'right');
+  const locked = isPalmHandLockedByGender(gender);
+  const recommended = palmHandForGender(gender);
+  const [selectedHand, setSelectedHand] = useState<PalmScanHand>(hand ?? recommended);
 
   useEffect(() => {
+    if (locked) {
+      setSelectedHand(recommended);
+      return;
+    }
     if (hand) setSelectedHand(hand);
-  }, [hand]);
+  }, [hand, locked, recommended]);
 
   const frameSize = Math.min(272, Math.max(200, Math.round(windowHeight * 0.26)));
 
   const pickHand = (next: PalmScanHand) => {
+    if (locked) return;
     setSelectedHand(next);
     onHandChange?.(next);
   };
@@ -75,7 +83,9 @@ export function PalmScanBriefing({
               Scan your palm
             </Text>
             <Text className="font-body text-[15px] leading-6 text-on-surface-variant">
-              Pick your hand, then open the camera or upload a photo.
+              {locked
+                ? `Use your ${recommended} hand for the clearest reading, then open the camera or upload a photo.`
+                : 'Pick your hand, then open the camera or upload a photo.'}
             </Text>
           </View>
 
@@ -96,19 +106,21 @@ export function PalmScanBriefing({
             </View>
           </View>
 
-          <HandToggleRow hand={selectedHand} onSelect={pickHand} />
+          {locked ? (
+            <View className="rounded-2xl border border-white/12 bg-white/[0.06] px-4 py-3.5">
+              <Text className="font-label text-[11px] uppercase tracking-[0.12em] text-cyan">
+                Hand for your reading
+              </Text>
+              <Text className="mt-1.5 font-headline-md text-[18px] text-on-surface">
+                {palmHandGuidanceLabel(selectedHand, gender)}
+              </Text>
+            </View>
+          ) : (
+            <HandToggleRow hand={selectedHand} onSelect={pickHand} />
+          )}
 
-          <View className="mt-4 flex-row justify-between gap-2">
-            {SCAN_TIPS.map((tip) => (
-              <View
-                key={tip.label}
-                className="flex-1 items-center rounded-2xl border border-white/10 bg-white/[0.04] px-2 py-3">
-                <Ionicons name={tip.icon} size={20} color={stitchMd3.primary} />
-                <Text className="mt-2 text-center font-space-grotesk text-[10px] uppercase tracking-[0.1em] text-mist">
-                  {tip.label}
-                </Text>
-              </View>
-            ))}
+          <View className="mt-4">
+            <PalmScanCoachingTips />
           </View>
         </ScrollView>
 
@@ -132,7 +144,7 @@ export function PalmScanBriefing({
               );
             }}
             className="items-center py-1">
-            <Text className="font-space-grotesk text-[12px] uppercase tracking-[0.14em] text-mist/55">
+            <Text className="font-label text-[12px] uppercase tracking-[0.14em] text-on-surface/55">
               More tips
             </Text>
           </Pressable>

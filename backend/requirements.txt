@@ -25,5 +25,11 @@ redis>=5.0.0,<6.0.0
 # Test runner
 pytest>=8.0.0,<9.0.0
 
+# Palm landmark + crease detection
+mediapipe>=0.10.9,<0.11.0
+opencv-python-headless>=4.8.0,<5.0.0
+Pillow>=10.0.0,<12.0.0
+numpy>=1.26.0,<3.0.0
+
 # Stripe — web Checkout + webhooks (optional)
 stripe>=11.0.0,<13.0.0

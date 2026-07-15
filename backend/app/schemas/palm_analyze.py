@@ -11,6 +11,7 @@ class PalmAnalyzeBody(BaseModel):
     image_base64: str | None = Field(default=None, alias="imageBase64", max_length=6_000_000)
     device_install_id: str | None = Field(default=None, alias="deviceInstallId")
     dominant_hand: str | None = Field(default=None, alias="dominantHand")
+    gender: str | None = Field(default=None, max_length=32)
     landmarks: list[list[float]] | None = Field(default=None, max_length=21)
     landmarks_source: str | None = Field(default=None, alias="landmarksSource")
 
@@ -35,6 +36,16 @@ class PalmAnalyzeBody(BaseModel):
         if s in {"left", "right", "unknown"}:
             return s
         return "unknown"
+
+    @field_validator("gender")
+    @classmethod
+    def _gender(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        s = v.strip().lower()
+        if s in {"male", "female", "non_binary", "prefer_not"}:
+            return s
+        return None
 
     @field_validator("landmarks_source")
     @classmethod

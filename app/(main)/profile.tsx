@@ -1,61 +1,62 @@
+import Constants from 'expo-constants';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { Alert, Linking, Pressable, Text, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { Alert, Linking, Platform, View } from 'react-native';
 
-import { SectionHeader } from '@/components/feedback';
 import { MainTabScroll } from '@/components/layout/MainTabScroll';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { MainCosmicHeader } from '@/components/layout/MainCosmicHeader';
-import { MembershipBadge } from '@/components/profile/MembershipBadge';
-import { CosmicButton, GlowCard } from '@/components/primitives';
-import { GlassCard, Icon, type IconName } from '@/components/ui';
+import { MotiView } from '@/components/moti/MotiView';
+import { DevPremiumPanel } from '@/components/dev/DevPremiumPanel';
+import { MembershipCard } from '@/components/profile/MembershipCard';
+import { ProfileHero } from '@/components/profile/ProfileHero';
+import { SettingsRow } from '@/components/profile/SettingsRow';
+import { SettingsSection } from '@/components/profile/SettingsSection';
+import { StatsGrid } from '@/components/profile/StatCard';
+import { SectionHeader } from '@/components/feedback';
 import { LEGAL_URLS } from '@/constants/legal';
-import { MAIN_SECTION_GAP } from '@/constants/layout';
-import { colors } from '@/constants/theme';
+import { MAIN_SECTION_GAP, STACK_GAP } from '@/constants/layout';
 import { displayNameOrDefault, SIGN_IN_UNAVAILABLE } from '@/constants/userCopy';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { warmUpOAuthBrowser, coolDownOAuthBrowser } from '@/services/oauthBrowser';
 import { signInFromProfile, signOutAndReturnToWelcome, resetLocalAndSignOut, deleteAccountAndReset } from '@/services/authSession';
 import { unlockPremiumFromStore } from '@/services/premiumUnlock';
 import { isSupabaseEnabled } from '@/services/supabase';
+import { useChatStore } from '@/store/chatStore';
 import { useSessionStore } from '@/store/sessionStore';
-import { initialsFor } from '@/utils/initials';
+import { useTaskStore } from '@/store/taskStore';
 import { replayOnboarding } from '@/utils/navigationFlow';
 import { paywallRouteParams } from '@/utils/paywallNavigation';
+import { previewReportHref } from '@/utils/premiumAccess';
 
-type RowProps = {
-  icon: IconName;
-  label: string;
-  onPress: () => void;
-  accessibilityLabel?: string;
-  tint?: string;
-  last?: boolean;
-  destructive?: boolean;
-};
+function appVersionLabel(): string {
+  const version = Constants.expoConfig?.version ?? '1.0.0';
+  const build =
+    Platform.OS === 'ios'
+      ? Constants.expoConfig?.ios?.buildNumber
+      : Platform.OS === 'android'
+        ? Constants.expoConfig?.android?.versionCode?.toString()
+        : undefined;
+  return build ? `${version} (${build})` : version;
+}
 
-function SettingsRow({ icon, label, onPress, accessibilityLabel, tint, last, destructive }: RowProps) {
-  return (
-    <Pressable
-      onPress={onPress}
-      className={`min-h-[52px] flex-row items-center gap-3 py-4 active:opacity-80 ${last ? '' : 'border-b border-white/[0.06]'}`}
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel ?? label}>
-      <View className="h-10 w-10 items-center justify-center rounded-xl bg-white/[0.06]">
-        <Icon name={icon} size={18} color={tint ?? colors.purple} />
-      </View>
-      <Text className={`min-w-0 flex-1 font-body text-[15px] ${destructive ? 'text-error' : 'text-on-surface'}`}>
-        {label}
-      </Text>
-      <Icon name="chevron_right" size={18} color="rgba(255,255,255,0.35)" />
-    </Pressable>
-  );
+function storeSubscriptionsUrl(): string | null {
+  if (Platform.OS === 'ios') return 'https://apps.apple.com/account/subscriptions';
+  if (Platform.OS === 'android') return 'https://play.google.com/store/account/subscriptions';
+  return null;
 }
 
 export default function ProfileScreen() {
   const name = useSessionStore((s) => s.userDisplayName);
+  const avatarId = useSessionStore((s) => s.avatarId);
   const premium = useSessionStore((s) => s.hasUnlockedPremium);
   const hasEnteredMain = useSessionStore((s) => s.hasEnteredMain);
+  const palmAnalysis = useSessionStore((s) => s.palmAnalysis);
+  const partnerPalmAnalysis = useSessionStore((s) => s.partnerPalmAnalysis);
   const { isSignedIn, email, loading: authLoading } = useAuthSession();
+
+  const streak = useTaskStore((s) => s.streak);
+  const messageCount = useChatStore((s) => s.messageCount);
 
   const [restoreBusy, setRestoreBusy] = useState(false);
   const [signOutBusy, setSignOutBusy] = useState(false);
@@ -70,7 +71,11 @@ export default function ProfileScreen() {
   }, []);
 
   const displayName = displayNameOrDefault(name);
-  const initial = initialsFor(displayName);
+  const emailLabel = isSignedIn ? email ?? 'Signed in' : 'Not signed in';
+  const version = useMemo(() => appVersionLabel(), []);
+
+  const reportsGenerated = (palmAnalysis ? 1 : 0) + (partnerPalmAnalysis ? 1 : 0);
+  const manageSubsUrl = storeSubscriptionsUrl();
 
   const handleRestorePurchases = async () => {
     if (restoreBusy) return;
@@ -155,124 +160,184 @@ export default function ProfileScreen() {
     );
   };
 
+  const goEditProfile = () => router.push('/edit-profile');
+  const goUpgrade = () => router.push(paywallRouteParams('/(main)/profile'));
+
+  const accountBusy = signOutBusy || deleteBusy || startFreshBusy;
+
   return (
     <CosmicScreen variant="stitch">
       <MainTabScroll sectionGap={MAIN_SECTION_GAP}>
-        <MainCosmicHeader displayName={name} />
+        <MainCosmicHeader displayName={name} avatarId={avatarId} />
 
-        <GlassCard className="w-full p-5" innerClassName="gap-4">
-          <View className="flex-row items-start gap-4">
-            <View className="h-16 w-16 shrink-0 items-center justify-center rounded-full border border-purple/35 bg-primary/20">
-              <Text className="font-headline text-[24px] text-on-surface">{initial}</Text>
-            </View>
-            <View className="min-w-0 flex-1 gap-1">
-              <Text className="font-headline-md text-[20px] leading-7 text-on-surface" accessibilityRole="header" numberOfLines={2}>
-                {displayName}
-              </Text>
-              <Text className="font-body text-[13px] leading-5 text-on-surface-variant" numberOfLines={1}>
-                {isSignedIn ? email ?? 'Signed in' : 'Not signed in'}
-              </Text>
-              <View className="mt-1 self-start">
-                <MembershipBadge premium={premium} />
-              </View>
-            </View>
-          </View>
-          <Pressable
-            onPress={() => router.push('/edit-profile')}
-            className="min-h-[48px] flex-row items-center justify-center gap-2 rounded-2xl border border-white/12 bg-white/[0.05] active:opacity-90"
-            accessibilityRole="button"
-            accessibilityLabel="Edit profile">
-            <Icon name="edit" size={18} color={colors.primary} />
-            <Text className="font-body-medium text-[15px] text-primary">Edit profile</Text>
-          </Pressable>
-        </GlassCard>
-
-        <View className="gap-3">
-          <SectionHeader title="Your reading" />
-          <GlowCard className="w-full py-1">
-            <SettingsRow icon="description" label="Palm report" onPress={() => router.push('/report')} />
-            <SettingsRow icon="favorite_border" label="Compatibility" onPress={() => router.push('/report/compatibility')} last />
-          </GlowCard>
+        {/* Identity cluster — tighter gaps; major sections use MAIN_SECTION_GAP */}
+        <View style={{ width: '100%', gap: STACK_GAP }}>
+          <ProfileHero
+            displayName={displayName}
+            emailLabel={emailLabel}
+            avatarId={avatarId}
+            premium={premium}
+            onAvatarPress={goEditProfile}
+            onEditPress={goEditProfile}
+          />
+          <MembershipCard premium={premium} onPress={premium ? undefined : goUpgrade} />
+          <MotiView
+            from={{ opacity: 0, translateY: 10 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 400, delay: 70 }}
+            className="w-full">
+            <StatsGrid
+              items={[
+                {
+                  icon: 'local_fire_department',
+                  label: 'Streak',
+                  value: streak,
+                  accessibilityLabel: `Current streak: ${streak} days`,
+                },
+                {
+                  icon: 'description',
+                  label: 'Reports',
+                  value: reportsGenerated,
+                  accessibilityLabel: `Reports generated: ${reportsGenerated}`,
+                },
+                {
+                  icon: 'chat_bubble',
+                  label: 'Chats',
+                  value: messageCount,
+                  accessibilityLabel: `Conversations: ${messageCount}`,
+                },
+                {
+                  icon: 'calendar_today',
+                  label: 'Plan',
+                  value: premium ? 'Pro' : 'Free',
+                  accessibilityLabel: `Plan: ${premium ? 'Pro' : 'Free'}`,
+                },
+              ]}
+            />
+          </MotiView>
         </View>
 
-        <View className="gap-3">
-          <SectionHeader title="Subscription" />
-          <GlowCard className="w-full py-1">
-            {!premium ? (
-              <SettingsRow
-                icon="auto_awesome"
-                label="Upgrade to Pro"
-                onPress={() => router.push(paywallRouteParams('/(main)/profile'))}
-              />
-            ) : null}
+        <SettingsSection index={0} title="Reading" subtitle="Palm insights and compatibility">
+          {!palmAnalysis ? (
             <SettingsRow
-              icon="refresh"
-              label={restoreBusy ? 'Restoring…' : 'Restore purchases'}
-              onPress={() => void handleRestorePurchases()}
+              icon="front_hand"
+              title="Start your first reading"
+              subtitle="Scan your palm to unlock insights"
+              onPress={() => router.push('/onboarding/palm-scan')}
+            />
+          ) : null}
+          <SettingsRow
+            icon="description"
+            title="Palm report"
+            subtitle="Lines, traits, and full reading"
+            onPress={() => router.push(premium ? '/report' : previewReportHref())}
+          />
+          <SettingsRow
+            icon="favorite_border"
+            title="Compatibility"
+            subtitle="See how your energies align"
+            onPress={() => router.push(premium ? '/report/compatibility' : paywallRouteParams('/(main)/profile'))}
+            last
+          />
+        </SettingsSection>
+
+        <SettingsSection index={1} title="Subscription" subtitle="Membership and billing">
+          <SettingsRow
+            icon="refresh"
+            title={restoreBusy ? 'Restoring…' : 'Restore purchases'}
+            subtitle="Recover Pro on this device"
+            onPress={() => void handleRestorePurchases()}
+            last={!manageSubsUrl || !premium}
+          />
+          {premium && manageSubsUrl ? (
+            <SettingsRow
+              icon="settings"
+              title="Manage subscription"
+              subtitle={Platform.OS === 'ios' ? 'App Store subscriptions' : 'Play Store subscriptions'}
+              onPress={() => openLink(manageSubsUrl)}
               last
             />
-          </GlowCard>
-        </View>
+          ) : null}
+        </SettingsSection>
 
-        <View className="gap-3">
-          <SectionHeader title="About" />
-          <GlowCard className="w-full py-1">
-            <SettingsRow icon="lock" label="Privacy policy" onPress={() => openLink(LEGAL_URLS.privacy)} />
-            <SettingsRow icon="article" label="Terms of use" onPress={() => openLink(LEGAL_URLS.terms)} last />
-          </GlowCard>
-        </View>
+        <SettingsSection index={2} title="Account" subtitle="Identity, backup, and security">
+          <SettingsRow
+            icon="edit"
+            title="Edit profile"
+            subtitle="Name, avatar, and focus areas"
+            onPress={goEditProfile}
+            last={authLoading}
+          />
+          {authLoading ? null : isSignedIn ? (
+            <>
+              <SettingsRow
+                icon="cloud_done"
+                title="Cloud backup"
+                subtitle="Reading synced across devices"
+                showChevron={false}
+              />
+              <SettingsRow
+                icon="logout"
+                title={signOutBusy ? 'Signing out…' : 'Sign out'}
+                onPress={accountBusy ? undefined : handleSignOut}
+                disabled={accountBusy}
+                accessibilityLabel="Sign out"
+              />
+              <SettingsRow
+                icon="delete_outline"
+                title={deleteBusy ? 'Deleting account…' : 'Delete account'}
+                destructive
+                onPress={accountBusy ? undefined : handleDeleteAccount}
+                disabled={accountBusy}
+                last={!hasEnteredMain}
+              />
+              {hasEnteredMain ? (
+                <SettingsRow
+                  icon="refresh"
+                  title={startFreshBusy ? 'Resetting…' : 'Start over'}
+                  subtitle="Replay setup or wipe this device"
+                  onPress={accountBusy ? undefined : confirmStartOver}
+                  disabled={accountBusy}
+                  last
+                />
+              ) : null}
+            </>
+          ) : isSupabaseEnabled ? (
+            <SettingsRow
+              icon="person"
+              title="Sign in"
+              subtitle="Back up and sync your reading"
+              onPress={() => void signInFromProfile()}
+              last
+            />
+          ) : (
+            <SettingsRow
+              icon="info"
+              title="Sign-in unavailable"
+              subtitle={SIGN_IN_UNAVAILABLE}
+              showChevron={false}
+              last
+            />
+          )}
+        </SettingsSection>
 
-        <View className="gap-3" style={{ marginTop: 8 }}>
-          <SectionHeader title="Account" />
-          <GlowCard className="w-full p-5">
-            <View className="gap-4">
-              {authLoading ? (
-                <Text className="font-body text-[14px] leading-6 text-on-surface-variant">Checking account…</Text>
-              ) : isSignedIn ? (
-                <>
-                  <Text className="font-body text-[14px] leading-6 text-on-surface-variant">
-                    Your reading is backed up and synced across devices.
-                  </Text>
-                  <View className="gap-3">
-                    <CosmicButton
-                      variant="ghost"
-                      label={signOutBusy ? 'Signing out…' : 'Sign out'}
-                      disabled={signOutBusy || deleteBusy}
-                      onPress={handleSignOut}
-                    />
-                    <CosmicButton
-                      variant="ghost"
-                      label={deleteBusy ? 'Deleting account…' : 'Delete account'}
-                      disabled={deleteBusy || signOutBusy}
-                      onPress={handleDeleteAccount}
-                    />
-                    {hasEnteredMain ? (
-                      <CosmicButton
-                        variant="ghost"
-                        label={startFreshBusy ? 'Resetting…' : 'Start over'}
-                        disabled={startFreshBusy || signOutBusy}
-                        onPress={confirmStartOver}
-                      />
-                    ) : null}
-                  </View>
-                </>
-              ) : isSupabaseEnabled ? (
-                <>
-                  <Text className="font-body text-[14px] leading-6 text-on-surface-variant">
-                    Sign in to back up your reading, sync across devices, and access the app.
-                  </Text>
-                  <CosmicButton gradient="nebulaMd3" label="Sign in" onPress={() => void signInFromProfile()} />
-                </>
-              ) : (
-                <Text className="font-body text-[14px] leading-6 text-on-surface-variant">{SIGN_IN_UNAVAILABLE}</Text>
-              )}
-            </View>
-          </GlowCard>
-        </View>
+        <SettingsSection index={3} title="About" subtitle="Legal and app information">
+          <SettingsRow icon="lock" title="Privacy policy" onPress={() => openLink(LEGAL_URLS.privacy)} />
+          <SettingsRow icon="article" title="Terms of use" onPress={() => openLink(LEGAL_URLS.terms)} />
+          <SettingsRow icon="info" title="Version" subtitle={version} showChevron={false} last />
+        </SettingsSection>
 
-        <Text className="pb-2 text-center font-body text-[12px] leading-5 text-on-surface-variant">
-          For self-reflection and fun. Not medical, legal, or financial advice.
-        </Text>
+        {__DEV__ ? (
+          <MotiView
+            from={{ opacity: 0, translateY: 12 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 400, delay: 280 }}
+            className="w-full"
+            style={{ gap: STACK_GAP }}>
+            <SectionHeader title="Developer" subtitle="Visible only in development builds" />
+            <DevPremiumPanel showOpenReport />
+          </MotiView>
+        ) : null}
       </MainTabScroll>
     </CosmicScreen>
   );

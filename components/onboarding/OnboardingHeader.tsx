@@ -68,10 +68,10 @@ export function OnboardingHeader({
       {step ? (
         <View className="mt-5">
           <View className="mb-2 flex-row items-end justify-between px-0.5">
-            <Text className="font-label text-[12px] uppercase tracking-[0.12em] text-on-surface-variant">
+            <Text className="font-label text-[12px] uppercase leading-4 tracking-[0.12em] text-on-surface-variant">
               Progress
             </Text>
-            <Text className="font-label text-[12px] uppercase tracking-[0.12em] text-primary">
+            <Text className="font-label text-[12px] uppercase leading-4 tracking-[0.12em] text-primary">
               Step {step} of {total}
             </Text>
           </View>

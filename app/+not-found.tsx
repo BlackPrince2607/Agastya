@@ -3,7 +3,7 @@ import { Stack } from 'expo-router';
 import { EmptyState } from '@/components/feedback';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { useSessionStore } from '@/store/sessionStore';
-import { enterMainApp, resolveResumeHref } from '@/utils/navigationFlow';
+import { enterMainApp, resolveOnboardingHref } from '@/utils/navigationFlow';
 import { deferRouterReplace } from '@/utils/routerDefer';
 
 export default function NotFoundScreen() {
@@ -13,7 +13,7 @@ export default function NotFoundScreen() {
       enterMainApp();
       return;
     }
-    deferRouterReplace(resolveResumeHref());
+    deferRouterReplace(resolveOnboardingHref());
   };
 
   return (

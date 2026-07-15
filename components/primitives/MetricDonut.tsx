@@ -1,6 +1,8 @@
 import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { View, Text } from 'react-native';
 
+import { colors } from '@/constants/theme';
+
 type MetricDonutProps = {
   label: string;
   value: number;
@@ -12,7 +14,7 @@ export function MetricDonut({
   label,
   value,
   size = 86,
-  strokeGradient = ['#00CED1', '#a855f7'] as const,
+  strokeGradient = [colors.cyan, colors.purple] as const,
 }: MetricDonutProps) {
   const clamped = Math.max(8, Math.min(100, value));
   const stroke = 8;
@@ -42,7 +44,7 @@ export function MetricDonut({
             </LinearGradient>
           </Defs>
         </Svg>
-        <Text className="absolute text-[15px] font-semibold tracking-tight text-mist">{clamped}%</Text>
+        <Text className="absolute text-[15px] font-semibold tracking-tight text-on-surface">{clamped}%</Text>
       </View>
       <Text className="text-center text-[11px] font-semibold uppercase tracking-[0.28em] text-white/52">
         {label}

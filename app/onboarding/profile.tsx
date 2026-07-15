@@ -6,7 +6,7 @@ import { OnboardingScroll } from '@/components/layout/OnboardingScroll';
 import { StickyActionBar, STICKY_ACTION_BAR_SINGLE } from '@/components/layout/StickyActionBar';
 import { OnboardingHeader } from '@/components/onboarding/OnboardingHeader';
 import { alertProfileValidationError, ProfileBasicsForm } from '@/components/profile/ProfileBasicsForm';
-import { NebulaButton } from '@/components/ui';
+import { PrimaryButton } from '@/components/ui';
 import { ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS } from '@/constants/onboarding';
 import { syncProfileRemote } from '@/services/identity';
 import { deferRouterPush } from '@/utils/routerDefer';
@@ -51,7 +51,7 @@ export default function ProfileOnboardingScreen() {
         </OnboardingScroll>
 
         <StickyActionBar>
-          <NebulaButton label="Continue" onPress={() => void handleContinue()} />
+          <PrimaryButton label="Continue" onPress={() => void handleContinue()} />
         </StickyActionBar>
       </View>
     </CosmicScreen>

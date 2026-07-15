@@ -32,7 +32,6 @@ export function MainTabScroll({
       keyboardShouldPersistTaps="handled"
       contentContainerStyle={[
         {
-          gap,
           paddingTop: 8,
           paddingBottom: TAB_BAR_CLEARANCE + insets.bottom + 8,
           paddingHorizontal: pad,
@@ -41,7 +40,8 @@ export function MainTabScroll({
         },
         contentContainerStyle,
       ]}>
-      <ScreenBody>{children}</ScreenBody>
+      {/* Gap must live on ScreenBody — scroll content only has one child. */}
+      <ScreenBody style={{ gap }}>{children}</ScreenBody>
     </ScrollView>
   );
 }

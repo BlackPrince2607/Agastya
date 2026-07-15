@@ -4,10 +4,7 @@ import { router } from 'expo-router';
 type PushHref = Parameters<typeof router.push>[0];
 type ReplaceHref = Parameters<typeof router.replace>[0];
 
-/**
- * Run navigation on the next tick after async work (`await sync…`).
- * Avoids InteractionManager-only scheduling, which can never run if RN thinks interactions are perpetual.
- */
+/** Run navigation on the next tick after async work (`await sync…`). */
 function scheduleNavigation(run: () => void) {
   queueMicrotask(() => {
     try {
@@ -27,15 +24,9 @@ export function deferRouterReplace(href: ReplaceHref) {
 }
 
 /**
- * Replace a route and peel nested stacks so hardware back cannot return to onboarding.
+ * Replace route after sign-in / onboarding completion.
+ * Uses a single replace — dismissAll loops trigger POP_TO_TOP on expo-router stacks.
  */
 export function resetAppNavigation(href: Href) {
-  scheduleNavigation(() => {
-    let guard = 0;
-    while (router.canDismiss() && guard < 32) {
-      router.dismissAll();
-      guard += 1;
-    }
-    router.replace(href as ReplaceHref);
-  });
+  deferRouterReplace(href as ReplaceHref);
 }

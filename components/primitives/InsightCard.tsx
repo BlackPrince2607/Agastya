@@ -1,22 +1,29 @@
 import type { PropsWithChildren } from 'react';
-import { Text, View } from 'react-native';
+import { Text } from 'react-native';
 
+import { GlassCard } from '@/components/ui/GlassCard';
 import type { InsightSection } from '@/types/report';
 
-import { GlowCard } from './GlowCard';
-
-type InsightCardProps = PropsWithChildren<{
+type ReportInsightCardProps = PropsWithChildren<{
   insight: InsightSection;
 }>;
 
-export function InsightCard({ insight }: InsightCardProps) {
+/**
+ * Report section insight — glass card aligned with the global design system.
+ * Prefer this name over the legacy `InsightCard` alias to avoid clashing with
+ * `@/components/ui/InsightCard` (home daily insight).
+ */
+export function ReportInsightCard({ insight }: ReportInsightCardProps) {
   return (
-    <GlowCard className="w-full gap-2 py-4">
-      <Text className="font-inter-medium text-[13px] uppercase tracking-wide text-stitch-signal">Daily insight</Text>
-      <Text className="font-inter-medium text-[17px] text-mist">{insight.title}</Text>
-      <Text className="text-[14px] leading-6 text-md-on-surface-variant" numberOfLines={4}>
+    <GlassCard className="w-full p-5" muted innerClassName="gap-2">
+      <Text className="font-label text-[12px] uppercase tracking-[0.12em] text-primary">Insight</Text>
+      <Text className="font-headline-md text-[18px] leading-6 text-on-surface">{insight.title}</Text>
+      <Text className="font-body text-[15px] leading-6 text-on-surface-variant" numberOfLines={4}>
         {insight.body}
       </Text>
-    </GlowCard>
+    </GlassCard>
   );
 }
+
+/** @deprecated Use ReportInsightCard — kept for existing report/preview imports. */
+export const InsightCard = ReportInsightCard;

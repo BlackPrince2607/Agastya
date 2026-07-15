@@ -1,5 +1,6 @@
 """Core Agastya HTTP surface — palm v1, dossiers, chat, daily rituals."""
 
+import logging
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -9,6 +10,7 @@ from app.config import Settings, get_settings
 from app.middleware.rate_limit import check_rate_limit
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.schemas.palm_analyze import PalmAnalyzeBody
+from app.schemas.palm_landmarks import PalmLandmarksBody, PalmLandmarksResponse
 from app.schemas.predictions import PredictionsGenerateBody, PredictionsResponse
 from app.schemas.report import GenerateReportBody
 from app.schemas.session import (
@@ -24,11 +26,14 @@ from app.schemas.tasks import DailyTasksBody, DailyTasksResponse
 from app.services.ai_interactions import GuideLlmUnavailableError, generate_chat_reply, generate_daily_tasks
 from app.services.bucket_store import SessionBucket, bucket, has_bucket, link_supabase_user, merge_bucket_data, set_bucket
 from app.services.palm_pipeline import analyze_palm
-from app.services.palm_storage import upload_palm_capture_if_configured
+from app.services.palm_landmarks import detect_hand_landmarks_from_bytes
+from app.services.palm_storage import decode_capture_bytes, upload_palm_capture_if_configured
 from app.services.predictions_engine import build_predictions_payload
 from app.services.report_engine import build_report_payload
 from app.services import session_repository
 from app.utils.validators import assert_device_binding, validate_session_id
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["agastya"], dependencies=[Depends(check_rate_limit)])
 
@@ -301,21 +306,38 @@ async def palm_analyze(
     body: PalmAnalyzeBody,
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> dict[str, Any]:
-    await _hydrate(body.session_id, settings)
-    bkt = bucket(body.session_id)
-    if body.device_install_id:
-        _bind_device(bkt, body.session_id, body.device_install_id)
-    palm = await analyze_palm(settings, body)
-    bkt.palm = palm
-    storage_path = await upload_palm_capture_if_configured(
-        settings,
-        session_id=body.session_id,
-        image_base64=body.image_base64,
-    )
-    if storage_path:
-        bkt.meta["palmStoragePath"] = storage_path
-    await _persist(body.session_id, settings)
-    return palm.model_dump()
+    try:
+        await _hydrate(body.session_id, settings)
+        bkt = bucket(body.session_id)
+        if body.device_install_id:
+            _bind_device(bkt, body.session_id, body.device_install_id)
+        palm = await analyze_palm(settings, body)
+        bkt.palm = palm
+        storage_path = await upload_palm_capture_if_configured(
+            settings,
+            session_id=body.session_id,
+            image_base64=body.image_base64,
+        )
+        if storage_path:
+            bkt.meta["palmStoragePath"] = storage_path
+        await _persist(body.session_id, settings)
+        return palm.model_dump()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("palm/analyze failed session=%s", body.session_id)
+        raise HTTPException(status_code=500, detail="Palm analysis failed. Please try again.") from exc
+
+
+@router.post("/palm/landmarks")
+async def palm_landmarks(body: PalmLandmarksBody) -> dict[str, Any]:
+    """Detect hand landmarks from a palm photo (MediaPipe). Used by native clients."""
+    decoded = decode_capture_bytes(body.image_base64)
+    if not decoded:
+        return PalmLandmarksResponse(landmarks=None, source="not_found").model_dump()
+    image_bytes, _, _ = decoded
+    landmarks, source = detect_hand_landmarks_from_bytes(image_bytes, body.dominant_hand or "right")
+    return PalmLandmarksResponse(landmarks=landmarks, source=source).model_dump()
 
 
 @router.post("/reports/generate")

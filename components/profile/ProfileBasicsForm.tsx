@@ -1,14 +1,20 @@
-import { Alert, Pressable, Text, View } from 'react-native';
+import { Alert, Text, View } from 'react-native';
 
+import { SelectionCard } from '@/components/profile/SelectionCard';
 import { CosmicTextField, GlassCard } from '@/components/ui';
-import { colors } from '@/constants/theme';
+import type { IconName } from '@/components/ui';
 import type { Gender } from '@/store/sessionStore';
 
-export const GENDER_OPTIONS: Array<{ id: Gender; label: string }> = [
-  { id: 'female', label: 'Woman' },
-  { id: 'male', label: 'Man' },
-  { id: 'non_binary', label: 'Non-binary' },
-  { id: 'prefer_not', label: 'Prefer not to say' },
+export const GENDER_OPTIONS: Array<{
+  id: Gender;
+  label: string;
+  description: string;
+  icon: IconName;
+}> = [
+  { id: 'male', label: 'Man', description: 'Readings shaped with this lens', icon: 'person' },
+  { id: 'female', label: 'Woman', description: 'Readings shaped with this lens', icon: 'person' },
+  { id: 'non_binary', label: 'Non-binary', description: 'Inclusive, identity-aware guidance', icon: 'psychology' },
+  { id: 'prefer_not', label: 'Prefer not to say', description: 'We keep your reading general', icon: 'visibility' },
 ];
 
 type ProfileBasicsFormProps = {
@@ -17,6 +23,8 @@ type ProfileBasicsFormProps = {
   gender?: Gender;
   onGenderChange: (value: Gender) => void;
   showIntro?: boolean;
+  /** Hide outer glass wrapping when parent already provides section cards. */
+  bare?: boolean;
 };
 
 export function validateProfileBasics(name: string, gender?: Gender): string | null {
@@ -39,9 +47,64 @@ export function alertProfileValidationError(name: string, gender?: Gender): bool
   return true;
 }
 
-export function ProfileBasicsForm({ name, onNameChange, gender, onGenderChange, showIntro = false }: ProfileBasicsFormProps) {
+export function ProfileBasicsForm({
+  name,
+  onNameChange,
+  gender,
+  onGenderChange,
+  showIntro = false,
+  bare = false,
+}: ProfileBasicsFormProps) {
+  const nameField = (
+    <CosmicTextField
+      label="Your name"
+      value={name}
+      onChangeText={onNameChange}
+      placeholder="How should Agastya address you?"
+      autoCapitalize="words"
+      maxLength={40}
+      leadingIcon="sparkles-outline"
+      accessibilityLabel="Your name"
+      accessibilityHint="Enter the name Agastya should use when speaking to you"
+    />
+  );
+
+  const genderField = (
+    <View className="gap-3">
+      {!bare ? (
+        <Text className="font-label text-[12px] uppercase tracking-[0.12em] text-primary" maxFontSizeMultiplier={1.3}>
+          Gender
+        </Text>
+      ) : null}
+      <View className="gap-2.5">
+        {GENDER_OPTIONS.map((opt) => (
+          <SelectionCard
+            key={opt.id}
+            title={opt.label}
+            description={opt.description}
+            icon={opt.icon}
+            selected={gender === opt.id}
+            onPress={() => onGenderChange(opt.id)}
+            indicator="radio"
+            accessibilityLabel={opt.label}
+            accessibilityHint="Select gender for personalized readings"
+          />
+        ))}
+      </View>
+    </View>
+  );
+
+  if (bare) {
+    return (
+      <View className="w-full gap-8">
+        {nameField}
+        {genderField}
+      </View>
+    );
+  }
+
   return (
-    <View className="w-full gap-5">
+    <View className="w-full gap-6">
       {showIntro ? (
         <View>
           <Text className="font-label text-[12px] uppercase tracking-[0.1em] text-primary">About you</Text>
@@ -52,43 +115,9 @@ export function ProfileBasicsForm({ name, onNameChange, gender, onGenderChange, 
         </View>
       ) : null}
 
-      <GlassCard className="gap-4 p-5">
-        <CosmicTextField
-          label="Your name"
-          value={name}
-          onChangeText={onNameChange}
-          placeholder="How should Agastya address you?"
-          autoCapitalize="words"
-          maxLength={40}
-        />
-      </GlassCard>
-
+      <GlassCard className="gap-4 p-5">{nameField}</GlassCard>
       <GlassCard muted className="gap-4 p-5">
-        <Text className="font-label text-[11px] uppercase tracking-[0.1em] text-primary">Gender</Text>
-        <View className="gap-3">
-          {GENDER_OPTIONS.map((opt) => {
-            const active = gender === opt.id;
-            return (
-              <Pressable key={opt.id} onPress={() => onGenderChange(opt.id)} accessibilityRole="button">
-                <View
-                  className={`rounded-pill border px-5 py-4 ${
-                    active ? 'border-primary bg-primary/10' : 'border-white/10 bg-surface-container-lowest/50'
-                  }`}
-                  style={
-                    active
-                      ? {
-                          shadowColor: colors.primary,
-                          shadowOpacity: 0.35,
-                          shadowRadius: 12,
-                        }
-                      : undefined
-                  }>
-                  <Text className="font-body-medium text-[15px] text-on-surface">{opt.label}</Text>
-                </View>
-              </Pressable>
-            );
-          })}
-        </View>
+        {genderField}
       </GlassCard>
     </View>
   );

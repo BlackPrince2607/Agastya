@@ -1,7 +1,7 @@
 import type { Href } from 'expo-router';
 import { router } from 'expo-router';
 
-import { resolveAccountBackHref, resolveResumeHref } from '@/utils/navigationFlow';
+import { resolveAccountBackHref, resolveOnboardingHref } from '@/utils/navigationFlow';
 import { resolvePaywallBackHref } from '@/utils/paywallNavigation';
 import { useSessionStore } from '@/store/sessionStore';
 
@@ -133,6 +133,6 @@ export function goBack({
   }
 
   router.replace(
-    useSessionStore.getState().hasEnteredMain ? '/(main)/home' : resolveResumeHref(),
+    useSessionStore.getState().hasEnteredMain ? '/(main)/home' : resolveOnboardingHref(),
   );
 }

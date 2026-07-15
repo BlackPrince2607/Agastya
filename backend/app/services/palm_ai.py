@@ -88,12 +88,19 @@ def _clamp_confidence(value: object) -> float:
     return max(0.0, min(1.0, n))
 
 
+def _parse_line_geometry(raw: object) -> list[dict] | None:
+    """Deprecated — vision models must not supply overlays. Always returns None."""
+    del raw
+    return None
+
+
 async def palm_analysis_from_vision(
     settings: Settings,
     *,
     image_base64: str,
     seed: str,
     dominant_hand: str | None = None,
+    gender: str | None = None,
 ) -> PalmAnalysis | None:
     mime, payload = _parse_data_url(image_base64)
     if _decode_len_hint(payload) > 3_800_000:
@@ -117,6 +124,12 @@ async def palm_analysis_from_vision(
     img_url = f"data:image/{media};base64,{payload}"
     seed_note = seed[:280]
     hand_note = dominant_hand or "unknown"
+    gender_note = gender or "unspecified"
+    tradition = ""
+    if gender == "male":
+        tradition = " Traditional reading hand for male: right."
+    elif gender == "female":
+        tradition = " Traditional reading hand for female: left."
     messages = [
         {"role": "system", "content": PALM_VISION_SYSTEM},
         {
@@ -126,7 +139,8 @@ async def palm_analysis_from_vision(
                     "type": "text",
                     "text": (
                         "Read this palm photo. Return ONLY valid JSON matching the schema. "
-                        f"Dominant hand (client): {hand_note}. "
+                        f"Scanned hand (client): {hand_note}. "
+                        f"Gender (client): {gender_note}.{tradition} "
                         f"Nonce (ignore unless tie-break): {seed_note!r}"
                     ),
                 },
@@ -141,7 +155,7 @@ async def palm_analysis_from_vision(
             messages=messages,
             response_format={"type": "json_object"},
             temperature=0.35,
-            max_tokens=800,
+            max_tokens=1200,
             timeout_seconds=settings.openrouter_vision_timeout_seconds,
         )
         if completion is None:
@@ -200,6 +214,7 @@ async def palm_analysis_from_vision(
             line_details=data.get("line_details") if isinstance(data.get("line_details"), dict) else None,
             mounts=data.get("mounts") if isinstance(data.get("mounts"), dict) else None,
             fate_line=str(data.get("fate_line", "")).strip() or None,
+            line_geometry=None,
         )
     except Exception as exc:
         logger.exception("OpenRouter palm vision failed: %s", exc)

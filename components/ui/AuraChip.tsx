@@ -1,4 +1,5 @@
 import { Pressable, Text } from 'react-native';
+import { colors } from '@/constants/theme';
 
 type AuraChipProps = {
   label: string;
@@ -12,11 +13,11 @@ type AuraChipProps = {
  * Stitch "Aura Chip" — fully rounded pill with low-opacity accent fill.
  * Used for traits, suggestions, and filter pills.
  */
-export function AuraChip({ label, selected, onPress, tint = '#d3beeb' }: AuraChipProps) {
+export function AuraChip({ label, selected, onPress, tint = colors.primary }: AuraChipProps) {
   const body = (
     <Text
       className="font-label uppercase tracking-[0.08em]"
-      style={{ color: selected ? '#0f0e10' : tint }}>
+      style={{ color: selected ? colors.surfaceLowest : tint }}>
       {label}
     </Text>
   );

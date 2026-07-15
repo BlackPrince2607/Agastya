@@ -3,7 +3,7 @@ import { MotiView } from '@/components/moti/MotiView';
 import { View } from 'react-native';
 import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
 
-import { cosmicGradients } from '@/constants/theme';
+import { colors, cosmicGradients } from '@/constants/theme';
 
 type Props = { diameter?: number; hideCenterGlyph?: boolean };
 
@@ -42,7 +42,7 @@ export function AnalyzingSeal({ diameter = 220, hideCenterGlyph }: Props) {
           <Defs>
             <LinearGradient id={gid} x1="0" y1="0" x2="1" y2="1">
               <Stop offset="0%" stopColor={cosmicGradients.pulse[0]} />
-              <Stop offset="100%" stopColor="#00CED1" />
+              <Stop offset="100%" stopColor={colors.cyan} />
             </LinearGradient>
           </Defs>
         </Svg>

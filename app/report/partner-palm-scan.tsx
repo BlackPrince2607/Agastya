@@ -1,62 +1,101 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { router } from 'expo-router';
 import { useRef, useState } from 'react';
-import { Alert, Text, View } from 'react-native';
+import { Alert, Pressable, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CosmicDotGrid } from '@/components/layout/CosmicDotGrid';
 import { BackButton } from '@/components/layout/BackButton';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { HandToggleRow } from '@/components/onboarding/HandToggle';
-import { PalmCaptureProcessingOverlay } from '@/components/onboarding/PalmCaptureProcessingOverlay';
+import { PalmCaptureReview } from '@/components/onboarding/PalmCaptureReview';
+import { PalmScanCoachingTips } from '@/components/onboarding/PalmScanCoachingTips';
 import { PalmScanFrame } from '@/components/onboarding/PalmScanFrame';
 import { CosmicButton, GradientText } from '@/components/primitives';
 import { PAGE_PADDING } from '@/constants/layout';
-import { PALM_SCAN_PROCESSING_MS } from '@/constants/onboarding';
-import { PALM_CAPTURE_FAILED } from '@/constants/userCopy';
+import { colors } from '@/constants/theme';
+import {
+  PALM_CAMERA_CAPTURING,
+  PALM_CAMERA_COACHING,
+  PALM_CAPTURE_FAILED,
+} from '@/constants/userCopy';
+import { triggerLightTap } from '@/hooks/useHapticTap';
 import type { PalmScanHand } from '@/store/sessionStore';
 import { useSessionStore } from '@/store/sessionStore';
 import { pickPalmImage } from '@/utils/pickPalmImage';
-import { delay } from '@/utils/analysisTiming';
 import { deferRouterPush } from '@/utils/routerDefer';
+
+type ScanStep = 'camera' | 'review';
 
 /** Scan a partner's palm for compatibility matching. */
 export default function PartnerPalmScanScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [uploadBusy, setUploadBusy] = useState(false);
-  const [processing, setProcessing] = useState(false);
+  const [capturing, setCapturing] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [step, setStep] = useState<ScanStep>('camera');
+  const [previewBase64, setPreviewBase64] = useState<string | null>(null);
   const [selectedHand, setSelectedHand] = useState<PalmScanHand>(
     () => useSessionStore.getState().partnerPalmScanHand ?? 'right',
   );
   const setPartnerPalmScanHand = useSessionStore((s) => s.setPartnerPalmScanHand);
   const setPartnerPalmCaptureBase64 = useSessionStore((s) => s.setPartnerPalmCaptureBase64);
+  const setPartnerPalmCaptureLandmarks = useSessionStore((s) => s.setPartnerPalmCaptureLandmarks);
   const camRef = useRef<CameraView>(null);
+  const { width: windowWidth } = useWindowDimensions();
+  const frameSize = Math.min(windowWidth - PAGE_PADDING * 2 - 8, 300);
 
   const hand = selectedHand;
 
-  const continueWithCapture = async (base64: string) => {
+  const goToReview = (base64: string) => {
+    setPreviewBase64(base64);
+    setStep('review');
+  };
+
+  const uploadFromGallery = async () => {
+    if (uploadBusy || capturing) return;
+    setUploadBusy(true);
+    try {
+      const base64 = await pickPalmImage();
+      if (!base64) return;
+      goToReview(base64);
+    } finally {
+      setUploadBusy(false);
+    }
+  };
+
+  const confirmReview = (
+    landmarks: Array<[number, number]>,
+    source: 'mediapipe' | 'roi_estimate',
+  ) => {
+    if (!previewBase64 || confirming) return;
+    setConfirming(true);
     const seed = `partner-${hand}-${Date.now()}`;
     setPartnerPalmScanHand(hand);
-    setPartnerPalmCaptureBase64(base64);
-    setProcessing(true);
-    await delay(PALM_SCAN_PROCESSING_MS);
+    setPartnerPalmCaptureBase64(previewBase64);
+    setPartnerPalmCaptureLandmarks(landmarks, source);
     deferRouterPush({
       pathname: '/report/partner-palm-analysis' as never,
       params: { seed },
     });
   };
 
-  const uploadFromGallery = async () => {
-    if (uploadBusy || processing) return;
-    setUploadBusy(true);
-    try {
-      const base64 = await pickPalmImage();
-      if (!base64) return;
-      await continueWithCapture(base64);
-    } finally {
-      setUploadBusy(false);
-    }
-  };
+  if (step === 'review' && previewBase64) {
+    return (
+      <PalmCaptureReview
+        base64={previewBase64}
+        hand={hand}
+        variant="partner"
+        showOnboardingHeader={false}
+        confirming={confirming}
+        onRetake={() => {
+          setPreviewBase64(null);
+          setConfirming(false);
+          setStep('camera');
+        }}
+        onConfirm={confirmReview}
+      />
+    );
+  }
 
   if (!permission) {
     return (
@@ -79,11 +118,11 @@ export default function PartnerPalmScanScreen() {
               <Text className="font-headline text-[20px] text-on-surface">Partner palm scan</Text>
             </View>
             <View className="gap-3">
-              <GradientText className="font-space-grotesk text-[12px] uppercase tracking-[0.4em] text-stitch-signal">
+              <GradientText className="font-label text-[12px] uppercase tracking-[0.4em] text-cyan">
                 Camera access
               </GradientText>
-              <Text className="font-noto-serif text-[26px] leading-8 text-mist">We need your camera to scan their palm</Text>
-              <Text className="font-inter text-[15px] leading-7 text-md-on-surface-variant">
+              <Text className="font-headline text-[26px] leading-8 text-on-surface">We need your camera to scan their palm</Text>
+              <Text className="font-body text-[15px] leading-7 text-on-surface-variant">
                 Ask your partner to hold their palm steady in a well-lit space. We only capture the hand, not their face.
               </Text>
             </View>
@@ -98,30 +137,25 @@ export default function PartnerPalmScanScreen() {
   }
 
   const startScan = async () => {
+    if (capturing) return;
+    setCapturing(true);
     try {
       const photo = await camRef.current?.takePictureAsync({
         base64: true,
-        quality: 0.55,
+        quality: 0.72,
       });
       if (!photo?.base64) {
         Alert.alert('Couldn’t capture palm', PALM_CAPTURE_FAILED);
         return;
       }
-      await continueWithCapture(photo.base64);
+      void triggerLightTap();
+      goToReview(photo.base64);
     } catch {
       Alert.alert('Couldn’t capture palm', PALM_CAPTURE_FAILED);
+    } finally {
+      setCapturing(false);
     }
   };
-
-  if (processing) {
-    return (
-      <CosmicScreen insetTop={false}>
-        <View className="flex-1 bg-black">
-          <PalmCaptureProcessingOverlay frameSize={260} label="Analyzing partner palm" />
-        </View>
-      </CosmicScreen>
-    );
-  }
 
   return (
     <CosmicScreen insetTop={false}>
@@ -138,28 +172,33 @@ export default function PartnerPalmScanScreen() {
                 </Text>
               </View>
 
-              <Text className="mt-4 font-inter text-[14px] leading-6 text-md-on-surface-variant">
+              <Text className="mt-4 font-body text-[14px] leading-6 text-on-surface-variant">
                 Center their palm inside the guide. Hold steady for a clear read.
+              </Text>
+              <Text className="mt-1 font-body text-[12px] leading-5 text-on-surface-variant/80">
+                {PALM_CAMERA_COACHING}
               </Text>
 
               <View className="flex-1 items-center justify-center py-4" pointerEvents="none">
-                <PalmScanFrame hand={hand} />
+                <PalmScanFrame hand={hand} size={frameSize} cornerColor={colors.primary} />
               </View>
 
               <View className="gap-4">
-                <HandToggleRow
-                  hand={selectedHand}
-                  onSelect={setSelectedHand}
-                  compact
+                <PalmScanCoachingTips compact />
+                <HandToggleRow hand={selectedHand} onSelect={setSelectedHand} compact />
+                <CosmicButton
+                  gradient="nebulaMd3"
+                  label={capturing ? PALM_CAMERA_CAPTURING : 'Capture palm'}
+                  disabled={capturing}
+                  onPress={() => void startScan()}
                 />
-                <CosmicButton gradient="nebulaMd3" label="Capture palm" onPress={() => void startScan()} />
                 <CosmicButton
                   variant="ghost"
                   label={uploadBusy ? 'Opening gallery…' : 'Upload from gallery'}
-                  disabled={uploadBusy}
+                  disabled={uploadBusy || capturing}
                   onPress={() => void uploadFromGallery()}
                 />
-                <Text className="text-center font-inter text-[12px] leading-5 text-stitch-signal/80">
+                <Text className="text-center font-body text-[12px] leading-5 text-cyan/80">
                   Palm data is analyzed for matching only and stays on this device.
                 </Text>
               </View>

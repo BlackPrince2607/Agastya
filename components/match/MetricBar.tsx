@@ -14,7 +14,7 @@ export function MetricBar({ label, pct }: MetricBarProps) {
     <View className="w-full gap-2">
       <View className="w-full flex-row items-center justify-between gap-3">
         <Text className="min-w-0 flex-1 font-body text-[15px] text-on-surface">{label}</Text>
-        <Text className="shrink-0 font-space-grotesk text-[14px] font-semibold text-primary">{clamped}%</Text>
+        <Text className="shrink-0 font-label text-[14px] font-semibold text-primary">{clamped}%</Text>
       </View>
       <View className="h-2.5 overflow-hidden rounded-full bg-white/10">
         <LinearGradient

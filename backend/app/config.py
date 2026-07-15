@@ -76,8 +76,10 @@ class Settings(BaseSettings):
     # Expo tunnel dev URLs (HTTPS) — matched by regex in addition to cors_origins.
     cors_origin_regex: str | None = Field(default=r"https://.*\.exp\.direct")
 
-    # --- Palm: dummy | vision | hybrid (CV landmarks + vision narrative) ---
+    # --- Palm: dummy | vision | hybrid (CV creases + vision narrative) ---
     palm_analysis_mode: Literal["dummy", "vision", "hybrid"] = "vision"
+    # Debug only: invent overlays from knuckle geometry when crease CV fails.
+    palm_crease_fallback_heuristic: bool = False
 
     # --- Rate limiting (optional Redis / Upstash for multi-worker deploys) ---
     redis_url: str | None = None

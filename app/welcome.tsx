@@ -99,16 +99,13 @@ export default function WelcomeScreen() {
           <View style={styles.headBlock}>
             <Text style={styles.kicker}>Agastya</Text>
             <Text style={styles.headline}>{`Your palm.\nYour guide.`}</Text>
-            <Text style={styles.subhead}></Text>
           </View>
 
-          <Text style={styles.body}>
-            A personalized palm reading and guide for reflection and fun.
-          </Text>
+          <Text style={styles.body}>A personalized palm reading and guide.</Text>
         </View>
       </ScrollView>
 
-      <StickyActionBar bottomPadding={28} contentStyle={styles.welcomeDock}>
+      <StickyActionBar bottomPadding={32} contentStyle={styles.welcomeDock}>
         <View style={styles.ctaStack}>
           <MotiPressable
             onPress={() => {
@@ -148,8 +145,6 @@ export default function WelcomeScreen() {
         <View style={styles.progressTrack}>
           <View style={styles.progressFill} />
         </View>
-        <View style={styles.footerRule} />
-        <Text style={styles.footerLine}>Entertainment only. Not medical or financial advice.</Text>
       </StickyActionBar>
     </View>
   );
@@ -171,10 +166,10 @@ const styles = StyleSheet.create({
     width: '100%',
     alignSelf: 'center',
     alignItems: 'center',
-    gap: 18,
+    gap: 22,
   },
   iconWrap: {
-    marginBottom: 6,
+    marginBottom: 4,
   },
   iconShell: {
     width: 64,
@@ -200,15 +195,7 @@ const styles = StyleSheet.create({
   },
   headBlock: {
     alignItems: 'center',
-    gap: 12,
-  },
-  subhead: {
-    fontFamily: 'Inter_400Regular',
-    fontSize: 14,
-    lineHeight: 20,
-    color: stitchMd3.onSurfaceVariant,
-    textAlign: 'center',
-    maxWidth: 300,
+    gap: 14,
   },
   kicker: {
     fontFamily: 'SpaceGrotesk_600SemiBold',
@@ -222,7 +209,7 @@ const styles = StyleSheet.create({
   headline: {
     fontFamily: 'NotoSerif_700Bold',
     fontSize: 36,
-    lineHeight: 40,
+    lineHeight: 42,
     letterSpacing: -0.75,
     color: '#ffffff',
     textAlign: 'center',
@@ -230,11 +217,12 @@ const styles = StyleSheet.create({
   body: {
     fontFamily: 'Inter_400Regular',
     fontSize: 15,
-    lineHeight: 22,
+    lineHeight: 23,
     color: stitchMd3.onSurfaceVariant,
     textAlign: 'center',
-    maxWidth: 300,
+    maxWidth: 320,
     alignSelf: 'center',
+    paddingHorizontal: 4,
   },
   ctaStack: {
     width: '100%',
@@ -329,22 +317,6 @@ const styles = StyleSheet.create({
   },
   welcomeDock: {
     alignItems: 'center',
-  },
-  footerRule: {
-    height: StyleSheet.hairlineWidth,
-    width: '100%',
-    backgroundColor: 'transparent',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,255,255,0.14)',
-  },
-  footerLine: {
-    fontFamily: 'Inter_400Regular',
-    fontStyle: 'italic',
-    fontSize: 12,
-    lineHeight: 16,
-    color: stitchMd3.onSurfaceVariant,
-    opacity: 0.78,
-    textAlign: 'center',
-    maxWidth: 300,
+    gap: 14,
   },
 });

@@ -1,16 +1,17 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Image, Pressable, Text, View, useWindowDimensions } from 'react-native';
+import { colors } from '@/constants/theme';
 
+import { DevPremiumPanel } from '@/components/dev/DevPremiumPanel';
 import { EmptyState } from '@/components/feedback';
 import { BackButton } from '@/components/layout/BackButton';
 import { StackScroll } from '@/components/layout/StackScroll';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
-import { EntertainmentDisclaimer } from '@/components/legal/EntertainmentDisclaimer';
 import { AuraNebulaCard, GradientText, InsightCard, MetricDonut } from '@/components/primitives';
 import { PalmLineCard, PredictionCard, StrengthDots } from '@/components/report';
-import { PalmLineOverlay } from '@/components/report/PalmLineOverlay';
-import { AuraChip, GlassCard, Icon, NebulaButton } from '@/components/ui';
+import { PalmLineOverlay, palmLineLegend } from '@/components/report/PalmLineOverlay';
+import { AuraChip, GlassCard, Icon, PrimaryButton } from '@/components/ui';
 import { fetchPredictions } from '@/services/agastyaApi';
 import { buildSimulatedReading } from '@/services/simulatedReading';
 import { useSessionStore } from '@/store/sessionStore';
@@ -18,7 +19,7 @@ import type { PalmAnalysisDto } from '@/types/palmAnalysis';
 import { PREDICTION_PERIODS, type PredictionPeriod } from '@/types/predictions';
 import { buildLocalPredictions } from '@/utils/localPredictions';
 import { withApiRetry } from '@/utils/apiRetry';
-import { palmLineInsights, personalityProfile } from '@/utils/palmInsights';
+import { palmLineInsights, personalityProfile, headlineNeedsPalmFix } from '@/utils/palmInsights';
 import { paywallRouteParams } from '@/utils/paywallNavigation';
 
 type ReportTab = 'overview' | 'lines' | 'personality' | 'predictions';
@@ -38,11 +39,17 @@ const FALLBACK_PALM: PalmAnalysisDto = {
   traits: ['creative', 'independent', 'intuitive', 'empathetic'],
 };
 
+function toImageUri(base64: string): string {
+  if (base64.startsWith('data:')) return base64;
+  return `data:image/jpeg;base64,${base64}`;
+}
+
 export default function ReportScreen() {
   const { tab } = useLocalSearchParams<{ tab?: string }>();
   const seed = useSessionStore((s) => s.readingSeed);
   const focuses = useSessionStore((s) => s.focusTopics);
   const palmAnalysis = useSessionStore((s) => s.palmAnalysis);
+  const palmCaptureBase64 = useSessionStore((s) => s.palmCaptureBase64);
   const previewReading = useSessionStore((s) => s.previewReading);
   const fullReading = useSessionStore((s) => s.fullReading);
   const premium = useSessionStore((s) => s.hasUnlockedPremium);
@@ -51,6 +58,30 @@ export default function ReportScreen() {
   const initialTab = (TABS.find((t) => t.id === tab)?.id ?? 'overview') as ReportTab;
   const [active, setActive] = useState<ReportTab>(initialTab);
   const [period, setPeriod] = useState<PredictionPeriod>('month');
+  const { width: windowWidth } = useWindowDimensions();
+  const overlayWidth = Math.min(windowWidth - 48, 320);
+  const overlayHeight = Math.round(overlayWidth * 0.7);
+  const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(null);
+
+  useEffect(() => {
+    if (!palmCaptureBase64) {
+      setImageSize(null);
+      return;
+    }
+    let cancelled = false;
+    Image.getSize(
+      toImageUri(palmCaptureBase64),
+      (width, height) => {
+        if (!cancelled) setImageSize({ width, height });
+      },
+      () => {
+        if (!cancelled) setImageSize({ width: 3, height: 4 });
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [palmCaptureBase64]);
 
   useEffect(() => {
     const next = TABS.find((t) => t.id === tab)?.id;
@@ -60,10 +91,15 @@ export default function ReportScreen() {
   const hasStoredReading = Boolean(previewReading || fullReading);
   const palm = palmAnalysis ?? FALLBACK_PALM;
 
-  const dossier = useMemo(
-    () => (premium ? fullReading ?? previewReading : previewReading) ?? buildSimulatedReading(seed ?? 'pulse', focuses),
-    [premium, fullReading, previewReading, seed, focuses],
-  );
+  const dossier = useMemo(() => {
+    const base =
+      (premium ? fullReading ?? previewReading : previewReading) ??
+      buildSimulatedReading(seed ?? 'pulse', focuses, palm);
+    if (palmAnalysis && base && headlineNeedsPalmFix(base.headline)) {
+      return buildSimulatedReading(seed ?? 'pulse', focuses, palm);
+    }
+    return base;
+  }, [premium, fullReading, previewReading, seed, focuses, palm, palmAnalysis]);
   const lines = useMemo(() => palmLineInsights(palm, seed ?? 'lines'), [palm, seed]);
   const persona = useMemo(() => personalityProfile(palm, seed ?? 'persona'), [palm, seed]);
 
@@ -130,6 +166,8 @@ export default function ReportScreen() {
         <View className="w-full gap-5">
           <ReportHeader />
 
+          {__DEV__ ? <DevPremiumPanel /> : null}
+
           {/* Pill tab bar */}
           <View className="w-full flex-row flex-wrap gap-2">
             {TABS.map((t) => (
@@ -140,7 +178,7 @@ export default function ReportScreen() {
                   }`}>
                   <Text
                     className="font-label text-[12px] uppercase tracking-[0.08em]"
-                    style={{ color: active === t.id ? '#d3beeb' : 'rgba(203,196,206,0.8)' }}>
+                    style={{ color: active === t.id ? colors.primary : 'rgba(203,196,206,0.8)' }}>
                     {t.label}
                   </Text>
                 </View>
@@ -151,7 +189,7 @@ export default function ReportScreen() {
           {active === 'overview' ? (
             <View className="w-full gap-4">
               <Text className="w-full font-headline text-[26px] text-on-surface">{dossier.blueprintTitle}</Text>
-              <GlassCard glow className="w-full gap-2.5 p-5">
+              <GlassCard glow className="w-full p-5" innerClassName="gap-2.5">
                 <GradientText className="text-[12px] uppercase tracking-[0.3em]">{dossier.visionaryTitle}</GradientText>
                 <Text className="mt-2 font-headline-md text-[22px] text-on-surface">{dossier.visionarySubtitle}</Text>
                 <Text className="mt-3 font-body text-[15px] leading-7 text-on-surface-variant">{dossier.archetypeLine}</Text>
@@ -166,7 +204,7 @@ export default function ReportScreen() {
                 </View>
               </GlassCard>
               <AuraNebulaCard aura={dossier.aura} />
-              <GlassCard muted className="w-full gap-2.5 p-5">
+              <GlassCard muted className="w-full p-5" innerClassName="gap-2.5">
                 <Text className="font-headline-md text-[18px] text-on-surface">Outlook</Text>
                 <Text className="font-body text-[16px] leading-7 text-on-surface-variant">{dossier.boldPrediction}</Text>
               </GlassCard>
@@ -179,9 +217,66 @@ export default function ReportScreen() {
 
           {active === 'lines' ? (
             <View className="w-full gap-4">
+              {palm.confidence != null ? (
+                <GlassCard muted className="w-full p-4" innerClassName="gap-2">
+                  <Text className="font-label text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">
+                    Reading confidence
+                  </Text>
+                  <Text className="font-headline-md text-[18px] text-on-surface">
+                    {Math.round(palm.confidence * 100)}%
+                  </Text>
+                  {palm.fate_line ? (
+                    <Text className="font-body text-[14px] text-on-surface-variant">
+                      Fate line: {palm.fate_line}
+                    </Text>
+                  ) : null}
+                  {palm.quality_warnings?.length ? (
+                    <View className="mt-1 gap-1">
+                      {palm.quality_warnings.map((w) => (
+                        <Text key={w} className="font-body text-[13px] text-amber-200/90">
+                          {w}
+                        </Text>
+                      ))}
+                    </View>
+                  ) : null}
+                </GlassCard>
+              ) : null}
               {palm.line_geometry?.length ? (
-                <View className="relative h-56 w-full overflow-hidden rounded-3xl border border-white/10 bg-black/40">
-                  <PalmLineOverlay geometry={palm.line_geometry} width={320} height={224} />
+                <View className="gap-2">
+                  <Text className="font-label text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">
+                    Your palm lines
+                  </Text>
+                  <View
+                    className="relative w-full overflow-hidden rounded-3xl border border-white/10 bg-black/40"
+                    style={{ height: overlayHeight }}>
+                    {palmCaptureBase64 ? (
+                      <Image
+                        source={{ uri: toImageUri(palmCaptureBase64) }}
+                        style={{ width: overlayWidth, height: overlayHeight, alignSelf: 'center' }}
+                        resizeMode="cover"
+                      />
+                    ) : null}
+                    <PalmLineOverlay
+                      geometry={palm.line_geometry}
+                      width={overlayWidth}
+                      height={overlayHeight}
+                      imageWidth={imageSize?.width}
+                      imageHeight={imageSize?.height}
+                      resizeMode="cover"
+                    />
+                    <View className="absolute bottom-3 left-3 flex-row gap-2">
+                      {palmLineLegend().map((item) => (
+                        <View
+                          key={item.key}
+                          className="flex-row items-center gap-1 rounded-full border border-white/15 bg-black/55 px-2 py-1">
+                          <View className="h-2 w-2 rounded-full" style={{ backgroundColor: item.color }} />
+                          <Text className="font-label text-[8px] uppercase tracking-[0.18em] text-white/80">
+                            {item.label}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
                 </View>
               ) : null}
               {lines.map((line) => (
@@ -192,24 +287,24 @@ export default function ReportScreen() {
 
           {active === 'personality' ? (
             <View className="w-full gap-4">
-              <GlassCard glow className="w-full items-center gap-5 p-6">
+              <GlassCard glow className="w-full p-6" innerClassName="items-center gap-5">
                 <View className="items-center justify-center">
                   <View
                     className="absolute h-32 w-32 rounded-full"
                     style={{
                       backgroundColor: 'rgba(168,85,247,0.15)',
-                      shadowColor: '#a855f7',
+                      shadowColor: colors.purple,
                       shadowOpacity: 0.5,
                       shadowRadius: 20,
                     }}
                   />
                   <View className="h-24 w-24 items-center justify-center overflow-hidden rounded-full border-2 border-purple/50 bg-primary/15">
-                    <Icon name="psychology" size={44} color="#c084fc" />
+                    <Icon name="psychology" size={44} color={colors.growth} />
                   </View>
                 </View>
                 <View className="flex-row flex-wrap justify-center gap-2">
                   {persona.traits.map((t) => (
-                    <AuraChip key={t} label={t} tint="#c084fc" />
+                    <AuraChip key={t} label={t} tint={colors.growth} />
                   ))}
                 </View>
                 <Text className="text-center font-body text-[15px] leading-7 text-on-surface-variant">
@@ -217,16 +312,16 @@ export default function ReportScreen() {
                 </Text>
               </GlassCard>
 
-              <GlassCard muted className="w-full gap-3 p-5">
+              <GlassCard muted className="w-full p-5" innerClassName="gap-3">
                 <Text className="font-headline-md text-[18px] text-on-surface">Shadow Traits</Text>
                 <View className="flex-row flex-wrap gap-2">
                   {persona.shadowTraits.map((t) => (
-                    <AuraChip key={t} label={t} tint="#f472b6" />
+                    <AuraChip key={t} label={t} tint={colors.love} />
                   ))}
                 </View>
               </GlassCard>
 
-              <GlassCard muted className="w-full gap-4 p-5">
+              <GlassCard muted className="w-full p-5" innerClassName="gap-4">
                 <Text className="font-headline-md text-[18px] text-on-surface">Your Strengths</Text>
                 {persona.strengths.map((s) => (
                   <StrengthDots key={s.label} label={s.label} value={s.value} />
@@ -246,7 +341,7 @@ export default function ReportScreen() {
                       }`}>
                       <Text
                         className="font-label text-[11px] uppercase tracking-[0.08em]"
-                        style={{ color: period === p.id ? '#d3beeb' : 'rgba(203,196,206,0.8)' }}>
+                        style={{ color: period === p.id ? colors.primary : 'rgba(203,196,206,0.8)' }}>
                         {p.label}
                       </Text>
                     </View>
@@ -265,14 +360,14 @@ export default function ReportScreen() {
               ))}
 
               {!periodUnlocked ? (
-                <GlassCard glow className="w-full items-center gap-3 p-5">
+                <GlassCard glow className="w-full p-5" innerClassName="items-center gap-3">
                   <Text className="text-center font-headline-md text-[18px] text-on-surface">
                     Unlock longer-range predictions
                   </Text>
                   <Text className="text-center font-body text-[14px] text-on-surface-variant">
                     Go premium to reveal your 3-month and 1-year forecasts.
                   </Text>
-                  <NebulaButton
+                  <PrimaryButton
                     variant="cta"
                     label="Go Premium"
                     onPress={() =>
@@ -283,8 +378,6 @@ export default function ReportScreen() {
               ) : null}
             </View>
           ) : null}
-
-          <EntertainmentDisclaimer dense />
         </View>
       </StackScroll>
     </CosmicScreen>
@@ -294,7 +387,7 @@ export default function ReportScreen() {
 function ReportHeader() {
   return (
     <View className="w-full flex-row items-center gap-3">
-      <BackButton color="#c084fc" />
+      <BackButton color={colors.growth} />
       <Text className="font-headline text-[22px] text-on-surface" accessibilityRole="header">
         Palm Report
       </Text>
@@ -304,12 +397,12 @@ function ReportHeader() {
 
 function UpgradeBanner() {
   return (
-    <GlassCard glow className="w-full items-center gap-3 p-5">
+    <GlassCard glow className="w-full p-5" innerClassName="items-center gap-3">
       <Text className="text-center font-headline-md text-[18px] text-on-surface">Preview mode</Text>
       <Text className="text-center font-body text-[14px] text-on-surface-variant">
         Upgrade for full scores, every chapter, and deeper predictions.
       </Text>
-      <NebulaButton
+      <PrimaryButton
         variant="cta"
         label="See plans"
         onPress={() => router.push(paywallRouteParams('/report', useSessionStore.getState().readingSeed ?? undefined))}

@@ -59,10 +59,10 @@ export type ApiHealthDto = {
   status: string;
   service?: string;
   supabase?: boolean;
-  groq?: boolean;
-  palm_groq?: boolean;
   llm?: boolean;
   palm_vision?: boolean;
+  chat_model?: string | null;
+  vision_model?: string | null;
 };
 
 export async function fetchApiHealth(signal?: AbortSignal): Promise<ApiHealthDto> {
@@ -70,12 +70,35 @@ export async function fetchApiHealth(signal?: AbortSignal): Promise<ApiHealthDto
     method: 'GET',
     headers: apiRequestHeaders(),
     signal,
-    timeoutMs: 6000,
+    timeoutMs: 15000,
   });
   if (!res.ok) {
     throw new Error(`health ${res.status}`);
   }
   return res.json() as Promise<ApiHealthDto>;
+}
+
+/** Retry health on cold start / flaky mobile radios (browser may succeed while first fetch fails). */
+export async function fetchApiHealthWithRetry(
+  attempts = 4,
+  pauseMs = 2000,
+): Promise<ApiHealthDto> {
+  let lastError: unknown;
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      if (i > 0) {
+        await new Promise((resolve) => setTimeout(resolve, pauseMs));
+      }
+      const health = await fetchApiHealth();
+      return health;
+    } catch (err) {
+      lastError = err;
+      if (__DEV__) {
+        console.warn(`[Agastya API] health attempt ${i + 1}/${attempts} failed`, err);
+      }
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('health check failed');
 }
 
 async function getJson<T>(path: string, signal?: AbortSignal, auth = false): Promise<T> {
@@ -250,6 +273,7 @@ export async function analyzePalm(body: {
   seed: string;
   imageBase64?: string | null;
   dominantHand?: 'left' | 'right' | null;
+  gender?: string | null;
   landmarks?: HandLandmark[] | null;
   landmarksSource?: 'mediapipe' | 'roi_estimate' | null;
 }) {
@@ -259,9 +283,30 @@ export async function analyzePalm(body: {
     seed: body.seed,
     imageBase64: body.imageBase64,
     dominantHand: body.dominantHand ?? 'unknown',
+    gender: body.gender ?? undefined,
     landmarks: body.landmarks ?? undefined,
     landmarksSource: body.landmarksSource ?? undefined,
   });
+}
+
+export type PalmLandmarksDto = {
+  landmarks: HandLandmark[] | null;
+  source: 'mediapipe' | 'not_found' | 'unavailable' | 'roi_estimate';
+};
+
+export async function detectPalmLandmarks(body: {
+  imageBase64: string;
+  dominantHand?: 'left' | 'right';
+}): Promise<PalmLandmarksDto> {
+  return postJson<PalmLandmarksDto>(
+    '/v1/palm/landmarks',
+    {
+      imageBase64: body.imageBase64,
+      dominantHand: body.dominantHand ?? 'right',
+    },
+    false,
+    { timeoutMs: 30_000 },
+  );
 }
 
 export async function deleteAccountFromServer() {
@@ -387,6 +432,14 @@ export async function requestGuideReply(
     focusTopics.length ? `Focus areas: ${focusTopics.join(', ')}` : '',
     `Personality: ${palmAnalysis.personality}`,
     `Traits: ${palmAnalysis.traits.join(', ')}`,
+    `Life line: ${palmAnalysis.life_line}`,
+    `Heart line: ${palmAnalysis.heart_line}`,
+    `Head line: ${palmAnalysis.head_line}`,
+    palmAnalysis.fate_line ? `Fate line: ${palmAnalysis.fate_line}` : '',
+    palmAnalysis.line_details
+      ? `Line details: ${JSON.stringify(palmAnalysis.line_details)}`
+      : '',
+    palmAnalysis.mounts ? `Mounts: ${JSON.stringify(palmAnalysis.mounts)}` : '',
   ]
     .filter(Boolean)
     .join('\n');

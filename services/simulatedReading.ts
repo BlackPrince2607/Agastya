@@ -1,10 +1,30 @@
 import type { FocusTopic } from '@/store/sessionStore';
+import type { PalmAnalysisDto } from '@/types/palmAnalysis';
 import type { SimulatedReading } from '@/types/report';
 import { inRange, seedDigits } from '@/utils/deterministicNumbers';
+import {
+  palmArchetypeLine,
+  palmHeadline,
+  palmSelfSectionBody,
+  palmVisionarySubtitle,
+  palmVisionaryTitle,
+} from '@/utils/palmInsights';
+
+const DEFAULT_PALM: PalmAnalysisDto = {
+  life_line: 'strong',
+  heart_line: 'curved',
+  head_line: 'long',
+  personality: 'visionary',
+  traits: ['independent', 'intuitive'],
+};
 
 /** V1: deterministic “reading” layered on ritual + chosen topics—not computer vision output. */
-export function buildSimulatedReading(seedHint: string, focusTopics?: FocusTopic[]): SimulatedReading {
-  const condensed = seedHint.slice(0, 32).trim() || 'stillness';
+export function buildSimulatedReading(
+  seedHint: string,
+  focusTopics?: FocusTopic[],
+  palmAnalysis?: PalmAnalysisDto | null,
+): SimulatedReading {
+  const palm = palmAnalysis ?? DEFAULT_PALM;
   const digs = seedDigits(seedHint || 'pulse', 8);
   const base: Record<'love' | 'career' | 'money' | 'growth', number> = {
     love: inRange(digs[0] ?? 0, 52, 86),
@@ -36,16 +56,15 @@ export function buildSimulatedReading(seedHint: string, focusTopics?: FocusTopic
 
   return {
     blueprintTitle: 'Your Life Blueprint',
-    visionaryTitle: 'The Visionary',
-    visionarySubtitle: 'Architect of Quiet Intensity',
-    archetypeLine:
-      'Your patterns suggest someone who takes things in quietly and speaks up only when it truly matters.',
-    headline: `The pattern “${condensed}” runs quietly through the way you move.`,
+    visionaryTitle: palmVisionaryTitle(palm),
+    visionarySubtitle: palmVisionarySubtitle(palm),
+    archetypeLine: palmArchetypeLine(palm),
+    headline: palmHeadline(palm),
     sections: [
       {
         id: 'self',
         title: 'Who you are',
-        body: `You turn overwhelm into plans. Sometimes that protects you; sometimes it keeps people at arm’s length. The theme “${condensed}” keeps surfacing whenever you put off being direct.`,
+        body: palmSelfSectionBody(palm),
       },
       {
         id: 'love',

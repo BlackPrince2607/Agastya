@@ -7,15 +7,16 @@ import { CosmicDotGrid } from '@/components/layout/CosmicDotGrid';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { AnalyzingSeal, GradientText } from '@/components/primitives';
 import { ANALYSIS_LOADING_PHRASES, SAMPLE_READING_BADGE } from '@/constants/userCopy';
-import { ANALYSIS_PHRASE_MS } from '@/constants/onboarding';
+import { ANALYSIS_PHRASE_MS, ANALYSIS_SETTLE_MS } from '@/constants/onboarding';
 import { analyzePalm } from '@/services/agastyaApi';
 import { bootstrapIdentity } from '@/services/identity';
 import { isApiConfigured } from '@/services/env';
+import { isPalmRetakeError } from '@/services/apiErrors';
 import type { PalmAnalysisDto } from '@/types/palmAnalysis';
 import { isLivePalmAnalysis, palmNeedsRetake } from '@/types/palmAnalysis';
 import { useSessionStore } from '@/store/sessionStore';
 import { deferRouterReplace } from '@/utils/routerDefer';
-import { analysisPresentationMs, delay } from '@/utils/analysisTiming';
+import { analysisPresentationMs, analysisProgressPct, delay } from '@/utils/analysisTiming';
 import { withApiRetry } from '@/utils/apiRetry';
 import { trimBase64Payload } from '@/utils/palmLandmarks';
 
@@ -33,7 +34,7 @@ export default function PartnerPalmAnalysisScreen() {
   const { seed } = useLocalSearchParams<{ seed?: string }>();
   const setPartnerPalmAnalysis = useSessionStore((s) => s.setPartnerPalmAnalysis);
   const [phase, setPhase] = useState(0);
-  const [pct, setPct] = useState(12);
+  const [pct, setPct] = useState(0);
   const [sampleBadge, setSampleBadge] = useState(false);
 
   const runMs = analysisPresentationMs(ANALYSIS_LOADING_PHRASES.length);
@@ -42,9 +43,8 @@ export default function PartnerPalmAnalysisScreen() {
     const started = Date.now();
     const tick = setInterval(() => {
       const elapsed = Date.now() - started;
-      const next = Math.min(99, 12 + Math.floor((elapsed / runMs) * 88));
-      setPct(next);
-    }, 120);
+      setPct(analysisProgressPct(elapsed, runMs));
+    }, 80);
     return () => clearInterval(tick);
   }, [runMs]);
 
@@ -71,6 +71,8 @@ export default function PartnerPalmAnalysisScreen() {
 
         const captureRaw = snap.partnerPalmCaptureBase64;
         const capture = captureRaw ? trimBase64Payload(captureRaw) : null;
+        const landmarksSnapshot = snap.partnerPalmCaptureLandmarks;
+        const landmarksSourceSnapshot = snap.partnerPalmLandmarksSource;
         let palm: PalmAnalysisDto = FALLBACK_PALM;
         try {
           palm = await withApiRetry(() =>
@@ -80,6 +82,8 @@ export default function PartnerPalmAnalysisScreen() {
               seed: resolvedSeed,
               imageBase64: capture,
               dominantHand: snap.partnerPalmScanHand ?? 'right',
+              landmarks: landmarksSnapshot ?? undefined,
+              landmarksSource: landmarksSourceSnapshot ?? undefined,
             }),
           );
           if (palmNeedsRetake(palm)) {
@@ -93,7 +97,7 @@ export default function PartnerPalmAnalysisScreen() {
           const online = isApiConfigured();
           if (online) {
             const msg = err instanceof Error ? err.message : 'Analysis failed';
-            if (msg.toLowerCase().includes('retake') || msg.toLowerCase().includes('palm')) {
+            if (isPalmRetakeError(msg)) {
               needsRetake = true;
               return;
             }
@@ -104,7 +108,11 @@ export default function PartnerPalmAnalysisScreen() {
         }
 
         setPartnerPalmAnalysis(palm);
-        useSessionStore.setState({ partnerPalmCaptureBase64: null });
+        useSessionStore.setState({
+          partnerPalmCaptureBase64: null,
+          partnerPalmCaptureLandmarks: null,
+          partnerPalmLandmarksSource: null,
+        });
       };
 
       try {
@@ -113,8 +121,15 @@ export default function PartnerPalmAnalysisScreen() {
         if (cancelled) return;
         setSampleBadge(true);
         setPartnerPalmAnalysis(FALLBACK_PALM);
-        useSessionStore.setState({ partnerPalmCaptureBase64: null });
+        useSessionStore.setState({
+          partnerPalmCaptureBase64: null,
+          partnerPalmCaptureLandmarks: null,
+          partnerPalmLandmarksSource: null,
+        });
       } finally {
+        if (cancelled) return;
+        setPct(100);
+        await delay(ANALYSIS_SETTLE_MS);
         if (cancelled) return;
         if (needsRetake) {
           Alert.alert(
@@ -131,7 +146,7 @@ export default function PartnerPalmAnalysisScreen() {
     return () => {
       cancelled = true;
     };
-  }, [seed, setPartnerPalmAnalysis]);
+  }, [seed, setPartnerPalmAnalysis, runMs]);
 
   const caption = ANALYSIS_LOADING_PHRASES[phase] ?? ANALYSIS_LOADING_PHRASES[0];
 
@@ -141,17 +156,17 @@ export default function PartnerPalmAnalysisScreen() {
         <CosmicDotGrid />
         <View className="flex-1 justify-between px-7 pb-16 pt-12">
           <View className="items-center gap-5">
-            <GradientText className="font-space-grotesk text-[12px] uppercase tracking-[0.5em] text-stitch-signal">
+            <GradientText className="font-label text-[12px] uppercase tracking-[0.5em] text-cyan">
               Reading partner palm
             </GradientText>
             {sampleBadge ? (
-              <Text className="font-inter text-[12px] text-amber-200/90">{SAMPLE_READING_BADGE}</Text>
+              <Text className="font-body text-[12px] text-amber-200/90">{SAMPLE_READING_BADGE}</Text>
             ) : null}
             <View className="relative items-center justify-center">
               <AnalyzingSeal diameter={220} hideCenterGlyph />
               <View className="pointer-events-none absolute items-center justify-center gap-1">
-                <Text className="font-space-grotesk text-[28px] font-semibold text-mist/95">{pct}%</Text>
-                <Text className="font-space-grotesk text-[10px] uppercase tracking-[0.35em] text-md-on-surface-variant">
+                <Text className="font-label text-[28px] font-semibold text-on-surface/95">{pct}%</Text>
+                <Text className="font-label text-[10px] uppercase tracking-[0.35em] text-on-surface-variant">
                   processing
                 </Text>
               </View>
@@ -159,7 +174,7 @@ export default function PartnerPalmAnalysisScreen() {
           </View>
 
           <MotiView key={phase} from={{ opacity: 0 }} animate={{ opacity: 1 }}>
-            <Text className="text-center font-inter text-[17px] font-medium leading-7 text-mist/95">{caption}</Text>
+            <Text className="text-center font-body text-[17px] font-medium leading-7 text-on-surface/95">{caption}</Text>
           </MotiView>
         </View>
       </View>

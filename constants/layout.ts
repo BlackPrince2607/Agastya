@@ -29,7 +29,7 @@ export const PAGE_PADDING = spacing['2xl'];
 export const SECTION_GAP = spacing.xl;
 
 /** Larger gap between major home/profile sections (greeting, cards, grids). */
-export const MAIN_SECTION_GAP = 32;
+export const MAIN_SECTION_GAP = spacing['3xl'];
 
 /** Gap between stacked cards / list items. */
 export const STACK_GAP = spacing.md;

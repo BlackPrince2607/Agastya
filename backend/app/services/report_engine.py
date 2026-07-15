@@ -15,6 +15,109 @@ from app.schemas.report import AuraProfile, FullReport, InsightSection, LifeMetr
 
 logger = logging.getLogger(__name__)
 
+PERSONALITY_MOTIFS = {
+    "visionary": "visionary clarity",
+    "seeker": "quiet seeking",
+    "guardian": "steady protection",
+    "empath": "warm intuition",
+    "strategist": "measured insight",
+    "healer": "gentle resilience",
+    "builder": "grounded ambition",
+}
+
+LINE_MOTIFS = {
+    "strong": "steady resilience",
+    "moderate": "quiet balance",
+    "subtle": "gentle adaptability",
+    "curved": "warm intuition",
+    "straight": "clear conviction",
+    "broken": "layered depth",
+    "long": "thoughtful vision",
+    "medium": "balanced insight",
+    "short": "decisive focus",
+}
+
+VISIONARY_SUBTITLES = {
+    "visionary": "Architect of Quiet Intensity",
+    "seeker": "Reader of Hidden Signs",
+    "guardian": "Keeper of Steady Ground",
+    "empath": "Voice of Warm Conviction",
+    "strategist": "Mind That Maps the Quiet Path",
+    "healer": "Gentle Force Behind the Surface",
+    "builder": "Builder of Lasting Momentum",
+}
+
+LINE_DESCRIPTOR = {
+    "life_line": {
+        "strong": "strong & deep",
+        "moderate": "steady",
+        "subtle": "gentle",
+    },
+    "heart_line": {
+        "curved": "warm",
+        "straight": "clear",
+        "broken": "complex",
+    },
+    "head_line": {
+        "long": "thoughtful",
+        "medium": "balanced",
+        "short": "focused",
+    },
+}
+
+
+def _palm_motif(palm: PalmAnalysis) -> str:
+    persona = (palm.personality or "").strip().lower()
+    if persona in PERSONALITY_MOTIFS:
+        return PERSONALITY_MOTIFS[persona]
+    heart = (palm.heart_line or "").strip().lower()
+    life = (palm.life_line or "").strip().lower()
+    head = (palm.head_line or "").strip().lower()
+    return LINE_MOTIFS.get(heart) or LINE_MOTIFS.get(life) or LINE_MOTIFS.get(head) or "quiet purpose"
+
+
+def _visionary_title(palm: PalmAnalysis) -> str:
+    persona = (palm.personality or "seeker").strip().title() or "Seeker"
+    return f"The {persona}"
+
+
+def _visionary_subtitle(palm: PalmAnalysis) -> str:
+    persona = (palm.personality or "").strip().lower()
+    return VISIONARY_SUBTITLES.get(persona, "Reader of Your Inner Lines")
+
+
+def _archetype_line(palm: PalmAnalysis, gender_frag: str) -> str:
+    life_desc = LINE_DESCRIPTOR["life_line"].get((palm.life_line or "").lower(), "steady")
+    heart_desc = LINE_DESCRIPTOR["heart_line"].get((palm.heart_line or "").lower(), "warm")
+    traits = " and ".join(palm.traits[:2]) if palm.traits else "depth and intuition"
+    hand = (palm.dominant_hand or "").lower()
+    hand_frag = f"Read from your {hand} palm, " if hand in {"left", "right"} else ""
+    feat = palm.line_features or {}
+    feature_frag = ""
+    if feat:
+        bits = []
+        life_f = feat.get("life_line") if isinstance(feat.get("life_line"), dict) else None
+        heart_f = feat.get("heart_line") if isinstance(feat.get("heart_line"), dict) else None
+        if life_f and life_f.get("depth"):
+            bits.append(f"{life_f['depth']} life crease")
+        if heart_f and heart_f.get("breaks", 0):
+            bits.append("interrupted heart crease")
+        if bits:
+            feature_frag = f" Measured on your scan: {', '.join(bits)}. "
+    return (
+        f"{gender_frag}{hand_frag}your {life_desc} life line and {heart_desc} heart line suggest someone "
+        f"{traits}.{feature_frag} You take things in quietly and speak up only when it truly matters."
+    )
+
+
+def _self_section_body(palm: PalmAnalysis) -> str:
+    motif = _palm_motif(palm)
+    head_desc = LINE_DESCRIPTOR["head_line"].get((palm.head_line or "").lower(), "balanced")
+    return (
+        "You turn overwhelm into plans. Sometimes that protects you; sometimes it keeps people at arm's length. "
+        f"Your {head_desc} mind and the pattern of {motif} keep surfacing whenever you put off being direct."
+    )
+
 
 def _digits(seed: str) -> list[int]:
     digest = hashlib.sha256(seed.encode("utf-8")).digest()
@@ -63,7 +166,7 @@ def deterministic_report(
     display_name: str | None,
     gender: str | None,
 ) -> FullReport:
-    condensed = seed[:32].strip() or "stillness"
+    motif = _palm_motif(palm)
     traits_join = ", ".join(palm.traits)
     name_hint = display_name or "traveler"
 
@@ -72,9 +175,9 @@ def deterministic_report(
             id="personality",
             title="Personality",
             body=(
-                f"{name_hint}, your palm reads like {palm.personality} voltage—traits "
+                f"{name_hint}, your palm reads like {palm.personality} energy—traits "
                 f"({traits_join}) braid discipline with longing. "
-                f"The motif “{condensed}” surfaces whenever you dodge naming desire aloud."
+                f"The pattern of {motif} surfaces whenever you dodge naming desire aloud."
             ),
         ),
         InsightSection(
@@ -107,17 +210,20 @@ def deterministic_report(
     metrics = _metrics(seed, topics)
     aura = _aura_palette(seed)
 
-    gender_frag = f"Identity note: {gender}. " if gender else ""
+    gender_frag = ""
+    if gender == "male":
+        gender_frag = "Read for a masculine presence. "
+    elif gender == "female":
+        gender_frag = "Read for a feminine presence. "
+    elif gender:
+        gender_frag = f"Identity note: {gender}. "
 
     return FullReport(
         blueprint_title="Your Life Blueprint",
-        visionary_title=palm.personality.title() if palm.personality else "The Seeker",
-        visionary_subtitle="Architect of Quiet Intensity",
-        archetype_line=(
-            f"{gender_frag}Lines say {palm.life_line} life, {palm.heart_line} heart, "
-            f"{palm.head_line} head—a triad tuned to decisive reinvention."
-        ),
-        headline=f"The constellation “{condensed}” hums beside your pacing.",
+        visionary_title=_visionary_title(palm),
+        visionary_subtitle=_visionary_subtitle(palm),
+        archetype_line=_archetype_line(palm, gender_frag),
+        headline=f'The pattern "{motif}" runs quietly through the way you move.',
         sections=sections,
         bold_prediction=(
             "Within forty quiet turns, a signal you shrugged off as coincidence knocks louder—"

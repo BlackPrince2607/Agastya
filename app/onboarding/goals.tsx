@@ -76,12 +76,6 @@ export default function GoalsScreen() {
     deferRouterPush('/onboarding/palm-scan');
   };
 
-  const skipFlow = async () => {
-    if (topics.length === 0) setTopics(['growth']);
-    await syncProfileRemote();
-    deferRouterPush('/onboarding/palm-scan');
-  };
-
   return (
     <CosmicScreen>
       <View className="flex-1 overflow-hidden">
@@ -99,7 +93,7 @@ export default function GoalsScreen() {
             <OnboardingHeader step={ONBOARDING_STEPS.goals} total={ONBOARDING_TOTAL_STEPS} />
 
             <View>
-              <Text className="font-headline text-[30px] leading-[34px] tracking-tight text-on-surface">
+              <Text className="font-headline text-[30px] leading-9 tracking-tight text-on-surface">
                 What do you want help with?
               </Text>
               <Text className="mt-4 max-w-md font-body text-[15px] leading-6 text-on-surface-variant">
@@ -111,7 +105,7 @@ export default function GoalsScreen() {
               {FOCUS_TOPIC_OPTIONS.map((opt) => {
                 const picked = topics.includes(opt.id);
                 return (
-                  <Pressable key={opt.id} onPress={() => toggle(opt.id)} className="active:opacity-95">
+                  <Pressable key={opt.id} onPress={() => toggle(opt.id)} className="active:opacity-95" style={({ pressed }) => ({ transform: [{ scale: pressed ? 0.985 : 1 }] })}>
                     <View
                       className={`flex-row items-start rounded-3xl border p-[18px] ${
                         picked ? 'bg-white/12' : 'bg-white/[0.06]'
@@ -167,11 +161,6 @@ export default function GoalsScreen() {
           <Text className="text-center font-body text-[13px] leading-5 text-on-surface-variant">
             You can change these focus areas later in your profile.
           </Text>
-          <Pressable accessibilityRole="button" onPress={() => void skipFlow()} className="items-center py-1.5">
-            <Text className="font-label text-[12px] uppercase tracking-[0.12em] text-on-surface-variant">
-              Skip for now
-            </Text>
-          </Pressable>
           <CosmicButton gradient="nebulaMd3" label="Continue" onPress={() => void continueFlow()} />
         </StickyActionBar>
       </View>

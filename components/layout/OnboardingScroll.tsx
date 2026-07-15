@@ -31,9 +31,8 @@ export function OnboardingScroll({
         paddingHorizontal: pad,
         paddingTop: 8,
         paddingBottom: insets.bottom + bottomInset,
-        gap: SECTION_GAP,
       }}>
-      <ScreenBody>{children}</ScreenBody>
+      <ScreenBody style={{ gap: SECTION_GAP }}>{children}</ScreenBody>
     </ScrollView>
   );
 }

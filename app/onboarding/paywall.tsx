@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams, usePathname, useSegments } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { MotiView } from 'moti';
@@ -76,14 +76,9 @@ export default function PaywallScreen() {
       if (cancelled) return;
       if (result.ok) {
         track('paywall_unlock_success', { source: result.source });
-        Alert.alert('Welcome to full access', 'Your subscription is active. Sign in to enter the app.', [
-          { text: 'Sign in', onPress: goToAccountSync },
-        ]);
-      } else {
-        Alert.alert(
-          'Verifying subscription',
-          'Payment received. Premium may take a moment to activate. Try again shortly.',
-        );
+        goToAccountSync();
+      } else if (__DEV__) {
+        console.warn('[Agastya] Stripe checkout verify pending');
       }
       setBusy(false);
     })();
@@ -108,13 +103,8 @@ export default function PaywallScreen() {
       const result = await unlockPremiumFromStore({ mode: 'purchase', seed: mergedSeed });
 
       if (!result.ok) {
-        if (result.reason === 'unavailable') {
-          Alert.alert(
-            'Subscriptions unavailable',
-            "Purchases aren't available right now. Sign in to save your preview, or tap Restore if you already subscribed.",
-          );
-        } else if (result.reason === 'not_entitled') {
-          Alert.alert('Purchase incomplete', 'We could not verify your subscription. Try Restore purchases or contact support.');
+        if (__DEV__) {
+          console.warn('[Agastya] purchase failed', result.reason);
         }
         return;
       }
@@ -124,16 +114,7 @@ export default function PaywallScreen() {
       }
 
       track('paywall_unlock_success', { source: result.source });
-      Alert.alert(
-        'Welcome to full access',
-        'Your full reading is unlocked. Sign in to save it across devices and enter the app.',
-        [
-          {
-            text: 'Sign in',
-            onPress: goToAccountSync,
-          },
-        ],
-      );
+      goToAccountSync();
     } finally {
       setBusy(false);
     }
@@ -145,11 +126,9 @@ export default function PaywallScreen() {
     try {
       const result = await unlockPremiumFromStore({ mode: 'restore', seed: mergedSeed });
       if (result.ok) {
-        Alert.alert('Restored', 'Your subscription is active again. Sign in to enter the app.', [
-          { text: 'Sign in', onPress: goToAccountSync },
-        ]);
-      } else {
-        Alert.alert('No subscription found', 'We could not find an active plan for this store account.');
+        goToAccountSync();
+      } else if (__DEV__) {
+        console.warn('[Agastya] restore found no subscription');
       }
     } finally {
       setBusy(false);
@@ -169,32 +148,32 @@ export default function PaywallScreen() {
           contentContainerStyle={{
             paddingHorizontal: 24,
             paddingTop: 8,
-            paddingBottom: 280 + insets.bottom,
+            paddingBottom: 320 + insets.bottom,
             gap: 22,
           }}>
           <OnboardingHeader step={ONBOARDING_STEPS.paywall} total={ONBOARDING_TOTAL_STEPS} />
 
           <View>
-            <Text className="font-headline text-[30px] leading-[34px] tracking-tight text-on-surface">
+            <Text className="font-headline text-[30px] leading-9 tracking-tight text-on-surface">
               Unlock your full reading
             </Text>
             <Text className="mt-4 font-body text-[15px] leading-6 text-on-surface-variant">
               Get your complete palm report, daily guidance, and unlimited conversations with Agastya.
             </Text>
             {premium ? (
-              <View className="mt-4 rounded-2xl border border-stitch-signal/35 bg-stitch-signal/10 px-4 py-3">
-                <Text className="font-inter text-[14px] text-stitch-signal">You already have full access on this device.</Text>
+              <View className="mt-4 rounded-2xl border border-cyan/35 bg-cyan/10 px-4 py-3">
+                <Text className="font-body text-[14px] text-cyan">You already have full access on this device.</Text>
               </View>
             ) : null}
             {isWebPremiumUnlockAvailable() ? (
-              <Text className="mt-3 font-inter text-[13px] leading-5 text-stitch-signal">
+              <Text className="mt-3 font-body text-[13px] leading-5 text-cyan">
                 {isStripeCheckoutEnabled()
                   ? 'Subscribe securely with Stripe. Billing happens on the web and syncs to your account.'
                   : 'Complete your purchase to unlock the full experience.'}
               </Text>
             ) : null}
             {Platform.OS !== 'web' && !isRevenueCatConfigured() ? (
-              <Text className="mt-3 font-inter text-[13px] leading-5 text-md-on-surface-variant">
+              <Text className="mt-3 font-body text-[13px] leading-5 text-on-surface-variant">
                 Subscriptions aren't available in this version yet. You can continue with the free preview from the previous
                 screen.
               </Text>
@@ -203,9 +182,9 @@ export default function PaywallScreen() {
 
           <View className="gap-2 rounded-3xl border border-white/10 bg-white/[0.04] px-4 py-4">
             {TRUST_HIGHLIGHTS.map((line) => (
-              <View key={line} className="flex-row gap-3 py-1">
-                <Ionicons name="checkmark-circle" size={18} color={stitchSignal} />
-                <Text className="flex-1 font-inter text-[14px] leading-5 text-mist/90">{line}</Text>
+              <View key={line} className="flex-row items-start gap-3 py-1">
+                <Ionicons name="checkmark-circle" size={18} color={stitchSignal} style={{ marginTop: 2 }} />
+                <Text className="flex-1 font-body text-[14px] leading-6 text-on-surface/90">{line}</Text>
               </View>
             ))}
           </View>
@@ -217,12 +196,12 @@ export default function PaywallScreen() {
             className="gap-5 rounded-3xl border border-white/14 p-5">
             {FEATURES.map((f) => (
               <View key={f.title} className="flex-row gap-4">
-                <View className="h-11 w-11 items-center justify-center rounded-full border border-white/12 bg-black/40">
+                <View className="h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/12 bg-black/40">
                   <Ionicons name={f.icon} size={20} color={stitchMd3.primary} />
                 </View>
                 <View className="min-w-0 flex-1">
-                  <Text className="font-space-grotesk text-[15px] font-semibold text-mist">{f.title}</Text>
-                  <Text className="mt-1 font-inter text-[13px] leading-5 text-md-on-surface-variant">{f.body}</Text>
+                  <Text className="font-label text-[15px] font-semibold leading-6 text-on-surface">{f.title}</Text>
+                  <Text className="mt-1 shrink font-body text-[13px] leading-5 text-on-surface-variant">{f.body}</Text>
                 </View>
               </View>
             ))}
@@ -247,12 +226,12 @@ export default function PaywallScreen() {
           </View>
 
           <View className="items-center gap-2 py-2">
-            <Text className="font-space-grotesk text-[20px] font-bold tracking-wide text-mist">7-Day FREE Trial</Text>
-            <Text className="font-inter text-[13px] text-md-on-surface-variant">Risk-free. Cancel anytime.</Text>
+            <Text className="font-label text-[20px] font-bold tracking-wide text-on-surface">7-Day FREE Trial</Text>
+            <Text className="font-body text-[13px] text-on-surface-variant">Risk-free. Cancel anytime.</Text>
           </View>
 
           <Pressable onPress={() => void handleRestore()} disabled={busy} className="items-center py-2 active:opacity-80">
-            <Text className="font-inter text-[14px] font-medium text-stitch-signal underline">Restore purchases</Text>
+            <Text className="font-body text-[14px] font-medium text-cyan underline">Restore purchases</Text>
           </Pressable>
         </ScrollView>
 
@@ -260,7 +239,7 @@ export default function PaywallScreen() {
           intensity={56}
           className="absolute bottom-0 left-0 right-0 z-20 rounded-none border-t border-white/14 bg-[#0f0e10]/94 px-6 pt-4"
           style={{ elevation: 24 }}>
-          <View style={{ paddingBottom: Math.max(insets.bottom, 16) }} className="gap-y-2.5">
+          <View style={{ paddingBottom: Math.max(insets.bottom, 16) }} className="gap-y-3.5">
             {premium ? (
               <CosmicButton gradient="nebulaMd3" label="Sign in to enter" onPress={goToAccountSync} />
             ) : (
@@ -285,7 +264,7 @@ export default function PaywallScreen() {
             <CosmicButton variant="ghost" label="Save & sign in" onPress={goToAccountSync} />
             <View className="mt-1 flex-row items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2.5">
               <Ionicons name="shield-checkmark" size={16} color="#4ade80" />
-              <Text className="font-inter text-[12px] text-mist/85">Cancel anytime. Restore from Profile.</Text>
+              <Text className="font-body text-[12px] text-on-surface/85">Cancel anytime. Restore from Profile.</Text>
             </View>
           </View>
         </BlurContainer>
@@ -316,35 +295,35 @@ function PlanRow({
       <View
         className={
           active
-            ? 'rounded-3xl border border-stitch-violet/55 bg-stitch-violet/10 px-5 py-4'
+            ? 'rounded-3xl border border-primary/55 bg-primary/10 px-5 py-4'
             : 'rounded-3xl border border-white/12 bg-black/35 px-5 py-4'
         }
         style={active ? { shadowColor: stitchSignal, shadowOpacity: 0.25, shadowRadius: 12 } : undefined}>
         {badge ? (
-          <View className="mb-3 self-start rounded-full border border-stitch-violet/40 bg-stitch-violet/20 px-3 py-1">
-            <Text className="font-space-grotesk text-[9px] font-bold uppercase tracking-[0.22em] text-stitch-signal">
+          <View className="mb-3 self-start rounded-full border border-primary/40 bg-primary/20 px-3 py-1">
+            <Text className="font-label text-[9px] font-bold uppercase tracking-[0.22em] text-cyan">
               {badge}
             </Text>
           </View>
         ) : null}
         <View className="flex-row items-center gap-3">
           <View
-            className={`h-5 w-5 rounded-full border-2 ${active ? 'border-stitch-signal bg-stitch-signal/30' : 'border-white/25'}`}
+            className={`h-5 w-5 rounded-full border-2 ${active ? 'border-cyan bg-cyan/30' : 'border-white/25'}`}
           />
           <View className="min-w-0 flex-1">
             <View className="flex-row flex-wrap items-center gap-2">
-              <Text className="font-space-grotesk text-[17px] font-semibold text-mist">{label}</Text>
+              <Text className="font-label text-[17px] font-semibold text-on-surface">{label}</Text>
               {tag ? (
-                <View className="rounded-md bg-stitch-violet/25 px-2 py-0.5">
-                  <Text className="font-space-grotesk text-[10px] font-bold uppercase tracking-wide text-stitch-signal">
+                <View className="rounded-md bg-primary/25 px-2 py-0.5">
+                  <Text className="font-label text-[10px] font-bold uppercase tracking-wide text-cyan">
                     {tag}
                   </Text>
                 </View>
               ) : null}
             </View>
-            <Text className="mt-1 font-inter text-[14px] text-md-on-surface-variant">
+            <Text className="mt-1 font-body text-[14px] text-on-surface-variant">
               {price}
-              {sub ? <Text className="text-md-on-primary-container"> ({sub})</Text> : null}
+              {sub ? <Text className="text-on-primary-container"> ({sub})</Text> : null}
             </Text>
           </View>
         </View>

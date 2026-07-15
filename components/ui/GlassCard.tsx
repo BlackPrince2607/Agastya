@@ -2,7 +2,7 @@ import type { PropsWithChildren } from 'react';
 import { View, type ViewProps } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import { gradients } from '@/constants/theme';
+import { elevation, gradients } from '@/constants/theme';
 
 type GlassCardProps = PropsWithChildren<
   ViewProps & {
@@ -16,17 +16,18 @@ type GlassCardProps = PropsWithChildren<
 >;
 
 /**
- * Stitch `.glass-container` — blur(20px), 5% white fill, 1px white border.
+ * Stitch `.glass-container` — translucent fill, soft white border, optional glow.
  * (RN has no live backdrop blur for arbitrary content, so we approximate with
  * a translucent fill that reads identically against the cosmic void.)
  */
-export function GlassCard({ muted, glow, className, innerClassName, children, ...rest }: GlassCardProps) {
-  const ring = muted ? 'border-white/10' : 'border-white/[0.12]';
+export function GlassCard({ muted, glow, className, innerClassName, children, style, ...rest }: GlassCardProps) {
+  const ring = muted ? 'border-white/10' : 'border-white/[0.14]';
   const aura = glow ? 'shadow-aura' : '';
 
   return (
     <View
-      className={`overflow-hidden rounded-glass border ${ring} bg-white/[0.05] ${aura} ${className ?? ''}`}
+      className={`overflow-hidden rounded-glass border ${ring} bg-white/[0.055] ${aura} ${className ?? ''}`}
+      style={[glow ? elevation.aura : undefined, style]}
       {...rest}>
       {!muted ? (
         <LinearGradient

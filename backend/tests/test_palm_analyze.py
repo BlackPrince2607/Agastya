@@ -1,7 +1,6 @@
 """Palm pipeline tests."""
 
 import uuid
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -10,7 +9,8 @@ from fastapi.testclient import TestClient
 from app.config import get_settings
 from app.main import create_app
 from app.schemas.palm import PalmAnalysis
-from app.services.palm_cv import extract_line_geometry
+from app.services.palm_cv import extract_line_geometry, merge_cv_into_analysis
+from tests.test_palm_crease import _synthetic_palm_jpeg_and_landmarks
 
 
 @pytest.fixture
@@ -33,6 +33,12 @@ def test_landmark_geometry_produces_three_lines():
     landmarks = [[0.5, 0.7], [0.4, 0.6], [0.42, 0.55], [0.44, 0.5], [0.46, 0.45]]
     while len(landmarks) < 21:
         landmarks.append([0.5, 0.5])
+    landmarks[5] = [0.3, 0.3]
+    landmarks[9] = [0.5, 0.28]
+    landmarks[13] = [0.65, 0.3]
+    landmarks[17] = [0.8, 0.35]
+    landmarks[0] = [0.5, 0.85]
+    landmarks[1] = [0.25, 0.65]
     geometry = extract_line_geometry(landmarks)
     assert len(geometry) == 3
     assert {g["name"] for g in geometry} == {"life_line", "heart_line", "head_line"}
@@ -92,16 +98,44 @@ def test_palm_analyze_vision_mode_requires_image(vision_client):
     assert res.status_code == 400
 
 
-@patch("app.services.palm_pipeline.palm_analysis_from_vision", new_callable=AsyncMock)
-def test_palm_analyze_vision_success(mock_vision, vision_client):
-    mock_vision.return_value = PalmAnalysis(
+def test_merge_cv_strips_null_geometry_points_without_inventing():
+    palm = PalmAnalysis(
         life_line="strong",
         heart_line="curved",
         head_line="long",
         personality="quiet visionary",
         traits=["thoughtful", "resilient"],
         analysis_source="openrouter_vision",
+        line_geometry=[
+            {"name": "life_line", "points": [{"x": None, "y": 0.5}, {"x": 0.2, "y": 0.3}]},
+            {"name": "heart_line", "points": [{"x": 0.1, "y": 0.2}, {"x": 0.3, "y": 0.4}]},
+            {"name": "head_line", "points": [{"x": 0.1, "y": 0.2}, {"x": 0.3, "y": 0.4}]},
+        ],
+    )
+    landmarks = [[0.5, 0.5] for _ in range(21)]
+    merged = merge_cv_into_analysis(palm, landmarks, image_base64=None, allow_landmark_heuristic=False)
+    assert merged.line_geometry is None
+    assert merged.geometry_source == "unavailable"
+
+
+@patch("app.services.palm_pipeline.palm_analysis_from_vision", new_callable=AsyncMock)
+@patch("app.services.palm_pipeline.detect_hand_landmarks_from_bytes")
+def test_palm_analyze_vision_success_with_creases(mock_landmarks, mock_vision, vision_client):
+    b64, landmarks = _synthetic_palm_jpeg_and_landmarks()
+    mock_landmarks.return_value = (landmarks, "mediapipe")
+    mock_vision.return_value = PalmAnalysis(
+        life_line="subtle",
+        heart_line="straight",
+        head_line="short",
+        personality="quiet visionary",
+        traits=["thoughtful", "resilient"],
+        analysis_source="openrouter_vision",
         image_quality="good",
+        line_geometry=[
+            {"name": "life_line", "points": [{"x": 0.01, "y": 0.01}, {"x": 0.02, "y": 0.02}]},
+            {"name": "heart_line", "points": [{"x": 0.9, "y": 0.9}, {"x": 0.8, "y": 0.8}]},
+            {"name": "head_line", "points": [{"x": 0.5, "y": 0.5}, {"x": 0.6, "y": 0.6}]},
+        ],
     )
     session_id = str(uuid.uuid4())
     vision_client.post(
@@ -114,15 +148,50 @@ def test_palm_analyze_vision_success(mock_vision, vision_client):
             "sessionId": session_id,
             "deviceInstallId": "device-test-1",
             "seed": "unit-test",
-            "imageBase64": "aGVsbG8=",
+            "imageBase64": b64,
+            "landmarks": landmarks,
+            "landmarksSource": "mediapipe",
         },
     )
     assert res.status_code == 200
-    assert res.json()["analysis_source"] == "openrouter_vision"
+    data = res.json()
+    assert data["analysis_source"] == "hybrid"
+    assert data["geometry_source"] == "opencv_creases"
+    assert data.get("line_geometry")
+    assert len(data["line_geometry"]) >= 2
 
 
 @patch("app.services.palm_pipeline.palm_analysis_from_vision", new_callable=AsyncMock)
-def test_palm_analyze_vision_fallback_when_llm_fails(mock_vision, vision_client):
+@patch("app.services.palm_pipeline.detect_hand_landmarks_from_bytes")
+def test_palm_analyze_cv_only_when_llm_fails(mock_landmarks, mock_vision, vision_client):
+    b64, landmarks = _synthetic_palm_jpeg_and_landmarks()
+    mock_landmarks.return_value = (landmarks, "mediapipe")
+    mock_vision.return_value = None
+    session_id = str(uuid.uuid4())
+    vision_client.post(
+        "/v1/sessions/register",
+        json={"sessionId": session_id, "deviceInstallId": "device-test-1"},
+    )
+    res = vision_client.post(
+        "/v1/palm/analyze",
+        json={
+            "sessionId": session_id,
+            "deviceInstallId": "device-test-1",
+            "seed": "unit-test",
+            "imageBase64": b64,
+            "landmarks": landmarks,
+            "landmarksSource": "mediapipe",
+        },
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["analysis_source"] == "opencv_creases"
+    assert data["geometry_source"] == "opencv_creases"
+    assert data.get("line_geometry")
+
+
+@patch("app.services.palm_pipeline.palm_analysis_from_vision", new_callable=AsyncMock)
+def test_palm_analyze_vision_fallback_when_llm_fails_without_usable_image(mock_vision, vision_client):
     mock_vision.return_value = None
     session_id = str(uuid.uuid4())
     vision_client.post(
@@ -139,4 +208,6 @@ def test_palm_analyze_vision_fallback_when_llm_fails(mock_vision, vision_client)
         },
     )
     assert res.status_code == 200
-    assert res.json()["analysis_source"] == "fallback"
+    data = res.json()
+    assert data["analysis_source"] == "fallback"
+    assert data.get("line_geometry") in (None, [])

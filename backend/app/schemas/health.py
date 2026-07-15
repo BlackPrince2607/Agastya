@@ -9,13 +9,19 @@ class HealthResponse(BaseModel):
     status: str = Field(examples=["ok"])
     service: str = Field(examples=["agastya-api"])
     supabase: bool = False
-    groq: bool = False
-    palm_groq: bool = Field(
+    llm: bool = Field(
         default=False,
-        description="Deprecated — use palm_vision",
+        description="True when OpenRouter chat completions are reachable",
     )
-    llm: bool = False
     palm_vision: bool = Field(
         default=False,
         description="True when palm vision path may run (OpenRouter key + palm_analysis_mode vision)",
+    )
+    chat_model: str | None = Field(
+        default=None,
+        description="OpenRouter chat model slug (e.g. openai/gpt-4o-mini)",
+    )
+    vision_model: str | None = Field(
+        default=None,
+        description="OpenRouter vision model slug for palm photos",
     )

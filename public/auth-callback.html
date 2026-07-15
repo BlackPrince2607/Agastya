@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Signing in — Agastya</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #0f0e10;
+        color: #e8e1e5;
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        text-align: center;
+        padding: 24px;
+      }
+      p {
+        margin: 0;
+        font-size: 15px;
+        line-height: 1.6;
+        opacity: 0.9;
+      }
+    </style>
+  </head>
+  <body>
+    <p id="msg">Opening Agastya…</p>
+    <script>
+      (function () {
+        var q = window.location.search || '';
+        var h = window.location.hash || '';
+        if (q.indexOf('error=') >= 0 || h.indexOf('error=') >= 0) {
+          document.getElementById('msg').textContent =
+            'Sign-in was rejected. Close this tab and try again in Agastya.';
+          return;
+        }
+
+        var host = window.location.host;
+        if (!host) {
+          document.getElementById('msg').textContent =
+            'Return to the Agastya app to finish sign-in.';
+          return;
+        }
+
+        var expTarget = 'exp://' + host + '/--/auth/callback' + q + h;
+        document.getElementById('msg').textContent = 'Opening Agastya…';
+        window.location.replace(expTarget);
+
+        setTimeout(function () {
+          document.getElementById('msg').textContent =
+            'If Agastya did not open, switch back to the app manually.';
+        }, 2500);
+      })();
+    </script>
+  </body>
+</html>

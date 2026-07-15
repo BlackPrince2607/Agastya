@@ -1,11 +1,12 @@
-/** Stitch export - MD3-ish tokens used on `/welcome` */
+/** Welcome-screen palette — aliased to Cosmic Essence tokens. */
+import { colors } from '@/constants/theme';
 
 export const stitchMd3 = {
-  background: '#0a0a14',
-  onBackground: '#e6e1e5',
-  onSurfaceVariant: '#cbc4ce',
-  onPrimaryContainer: '#88769f',
-  primary: '#d3beeb',
-  onPrimary: '#ffffff',
-  surfaceTint: '#d3beeb',
+  background: colors.surfaceLowest,
+  onBackground: colors.onSurface,
+  onSurfaceVariant: colors.onSurfaceVariant,
+  onPrimaryContainer: colors.onPrimaryContainer,
+  primary: colors.primary,
+  onPrimary: colors.onPrimary,
+  surfaceTint: colors.primary,
 } as const;

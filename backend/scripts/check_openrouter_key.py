@@ -35,9 +35,9 @@ def _diagnose_missing_key() -> None:
     print(f"  backend/.env exists: {backend_env.is_file()} ({backend_env})")
     print(f"  repo root .env exists: {root_env.is_file()} ({root_env})")
     if backend_env.is_file():
-        print(f"  backend/.env AI-related keys: {[n for n in _env_var_names(backend_env) if any(x in n for x in ('ROUTER', 'GROQ', 'OPENAI'))]}")
+        print(f"  backend/.env AI-related keys: {[n for n in _env_var_names(backend_env) if any(x in n for x in ('ROUTER', 'OPENAI'))]}")
     if root_env.is_file():
-        print(f"  root .env AI-related keys: {[n for n in _env_var_names(root_env) if any(x in n for x in ('ROUTER', 'GROQ', 'OPENAI'))]}")
+        print(f"  root .env AI-related keys: {[n for n in _env_var_names(root_env) if any(x in n for x in ('ROUTER', 'OPENAI'))]}")
     os_key = os.getenv("OPENROUTER_API_KEY")
     if os_key is not None:
         print(f"  OS OPENROUTER_API_KEY: {'set (empty)' if not os_key.strip() else 'set (non-empty)'}")

@@ -14,7 +14,7 @@ import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { OnboardingScroll } from '@/components/layout/OnboardingScroll';
 import { DecorativePalmArt } from '@/components/onboarding/DecorativePalmArt';
 import { OnboardingHeader } from '@/components/onboarding/OnboardingHeader';
-import { CosmicTextField, GlassCard, NebulaButton } from '@/components/ui';
+import { CosmicTextField, GlassCard, PrimaryButton } from '@/components/ui';
 import { colors } from '@/constants/theme';
 import {
   AUTH_ACCOUNT_EXISTS_HINT,
@@ -28,6 +28,7 @@ import {
 import { track } from '@/services/analytics';
 import { isMagicLinkEnabled } from '@/services/authConfig';
 import {
+  resendSignupConfirmation,
   sendMagicLink,
   sendPasswordReset,
   signInWithEmailPassword,
@@ -56,6 +57,7 @@ export default function AccountEmailScreen() {
   const [busy, setBusy] = useState(false);
   const [inlineMessage, setInlineMessage] = useState<string | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
+  const [awaitingEmailConfirm, setAwaitingEmailConfirm] = useState(false);
 
   const email = (emailParam ?? '').trim().toLowerCase();
   const redirectUri = getAuthRedirectUri();
@@ -117,6 +119,7 @@ export default function AccountEmailScreen() {
       }
 
       if (result.needsEmailConfirmation) {
+        setAwaitingEmailConfirm(true);
         setInlineMessage(EMAIL_CONFIRM_SENT);
         Alert.alert('Check your email', EMAIL_CONFIRM_SENT);
         track('auth_signup_confirm_email');
@@ -161,6 +164,29 @@ export default function AccountEmailScreen() {
       }
       track('auth_magic_link_dispatched');
       setInlineMessage(`${EMAIL_MAGIC_LINK_SENT} We sent a link to ${email}.`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const resendConfirmation = async () => {
+    setInlineMessage(null);
+    setLastError(null);
+    setBusy(true);
+    try {
+      const result = await resendSignupConfirmation(email, redirectUri);
+      if (!result.ok) {
+        if (result.reason === 'rate_limit') {
+          setLastError(AUTH_RATE_LIMIT_HINT);
+          Alert.alert('Try again later', AUTH_RATE_LIMIT_HINT);
+          return;
+        }
+        setLastError(result.message);
+        Alert.alert('Could not resend email', result.message);
+        return;
+      }
+      track('auth_signup_confirm_resend');
+      setInlineMessage(`${EMAIL_CONFIRM_SENT} We sent another link to ${email}.`);
     } finally {
       setBusy(false);
     }
@@ -261,11 +287,20 @@ export default function AccountEmailScreen() {
               />
             ) : null}
 
-            <NebulaButton
+            <PrimaryButton
               label={busy ? 'Please wait...' : mode === 'signin' ? 'Sign in' : 'Create account'}
               onPress={() => void passwordSubmit()}
               disabled={busy}
             />
+
+            {awaitingEmailConfirm ? (
+              <PrimaryButton
+                variant="ghost"
+                label={busy ? 'Sending...' : 'Resend confirmation email'}
+                onPress={() => void resendConfirmation()}
+                disabled={busy}
+              />
+            ) : null}
 
             {mode === 'signin' ? (
               <Pressable onPress={forgotPassword} disabled={busy} className="items-center py-2">
@@ -277,13 +312,13 @@ export default function AccountEmailScreen() {
               <>
                 <View className="flex-row items-center gap-4">
                   <View className="h-px flex-1 bg-white/10" />
-                  <Text className="font-label text-[10px] uppercase tracking-[0.1em] text-on-surface-variant">
+                  <Text className="font-label text-[10px] uppercase leading-4 tracking-[0.1em] text-on-surface-variant">
                     Or
                   </Text>
                   <View className="h-px flex-1 bg-white/10" />
                 </View>
 
-                <NebulaButton
+                <PrimaryButton
                   variant="ghost"
                   label={busy ? 'Sending...' : 'Email me a sign-in link'}
                   onPress={() => void magicLink()}

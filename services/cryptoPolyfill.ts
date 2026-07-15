@@ -11,17 +11,23 @@ function bytesToBinaryString(bytes: Uint8Array): string {
 /** PKCE + session IDs need Web Crypto APIs missing in some Expo Go / RN builds. */
 export function ensureWebCrypto(): void {
   const existing = globalThis.crypto;
+  const base = existing ?? ({} as Crypto);
+
+  if (typeof base.randomUUID !== 'function') {
+    Object.assign(base, {
+      randomUUID: () => ExpoCrypto.randomUUID(),
+    });
+  }
 
   // Node SSR (Vercel static export) and modern browsers already ship Web Crypto.
   if (
     existing &&
     typeof existing.getRandomValues === 'function' &&
-    typeof existing.subtle?.digest === 'function'
+    typeof existing.subtle?.digest === 'function' &&
+    typeof existing.randomUUID === 'function'
   ) {
     return;
   }
-
-  const base = existing ?? ({} as Crypto);
 
   if (typeof base.getRandomValues !== 'function') {
     Object.assign(base, {

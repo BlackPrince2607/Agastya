@@ -49,11 +49,11 @@ def _heuristic_chat(body: ChatRequest) -> str:
     last_user = next((m.content for m in reversed(body.messages) if m.role == "user"), "")
     if len(last_user.strip()) < 12:
         return (
-            "You hide uncertainty behind precision more often than you admit. "
+            "You hide uncertainty behind precision more often than you admit.\n\n"
             "Say the sentence you keep editing out — Agastya answers from there."
         )
     return (
-        "Quiet conviction arrives before language catches up. "
+        "Quiet conviction arrives before language catches up.\n\n"
         "Let one vulnerable detail surface; I'll mirror the pattern underneath."
     )
 
@@ -110,8 +110,8 @@ async def generate_chat_reply(
         settings,
         model=settings.openrouter_chat_model,
         messages=msgs,
-        temperature=0.9,
-        max_tokens=480,
+        temperature=0.75,
+        max_tokens=400,
     )
     if completion is None:
         if settings.llm_enabled:

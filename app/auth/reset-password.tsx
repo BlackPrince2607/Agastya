@@ -7,7 +7,7 @@ import { LoadingBlock } from '@/components/feedback';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { OnboardingScroll } from '@/components/layout/OnboardingScroll';
 import { OnboardingHeader } from '@/components/onboarding/OnboardingHeader';
-import { CosmicTextField, NebulaButton } from '@/components/ui';
+import { CosmicTextField, PrimaryButton } from '@/components/ui';
 import { PASSWORD_MISMATCH } from '@/constants/userCopy';
 import { createSessionFromUrlDetailed } from '@/services/authCallback';
 import { isAuthCallbackUrl } from '@/services/authRedirect';
@@ -89,7 +89,7 @@ export default function ResetPasswordScreen() {
     return (
       <CosmicScreen variant="stitch">
         <View className="flex-1 items-center justify-center px-8">
-          <NebulaButton label="Back to sign in" onPress={() => router.replace('/onboarding/account')} />
+          <PrimaryButton label="Back to sign in" onPress={() => router.replace('/onboarding/account')} />
         </View>
       </CosmicScreen>
     );
@@ -131,7 +131,7 @@ export default function ResetPasswordScreen() {
               onChangeText={setConfirm}
             />
 
-            <NebulaButton
+            <PrimaryButton
               label={busy ? 'Saving...' : 'Update password'}
               onPress={() => void submit()}
               disabled={busy}

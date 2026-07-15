@@ -13,7 +13,7 @@ export const EMAIL_MAGIC_LINK_SENT =
   'We sent a sign-in link. Open it on this device to finish signing in.';
 
 export const EMAIL_CONFIRM_SENT =
-  'We sent a confirmation link to your inbox. Open it on this same phone, then come back here and sign in with your password.';
+  'We sent a confirmation link to your inbox. Open it on this same phone, then come back here and sign in with your password. Check spam/promotions if you do not see it within a few minutes.';
 
 export const EMAIL_RESET_SENT =
   'We sent a password reset link. Open it on this device to choose a new password.';
@@ -48,16 +48,42 @@ export type HomeShortcutAction = 'guide' | 'compat' | 'report' | 'tasks' | 'payw
 export type HomeShortcut = {
   icon: ComponentProps<typeof FontAwesome>['name'];
   label: string;
+  /** Short tile subtitle under the title. */
+  subtitle: string;
   hint: string;
   action: HomeShortcutAction;
   highlight?: boolean;
 };
 
 export const HOME_SHORTCUTS: HomeShortcut[] = [
-  { icon: 'file-text-o', label: 'Palm report', hint: 'Your full reading and line scores', action: 'report' },
-  { icon: 'comments-o', label: 'Guide', hint: 'Ask questions about your reading', action: 'guide' },
-  { icon: 'check-circle-o', label: 'Daily tasks', hint: 'Daily actions based on your reading', action: 'tasks' },
-  { icon: 'heart-o', label: 'Compatibility', hint: 'Compare palm readings', action: 'compat' },
+  {
+    icon: 'file-text-o',
+    label: 'Palm Report',
+    subtitle: 'View your reading',
+    hint: 'Your full reading and line scores',
+    action: 'report',
+  },
+  {
+    icon: 'comments-o',
+    label: 'Guide',
+    subtitle: 'AI spiritual guide',
+    hint: 'Ask questions about your reading',
+    action: 'guide',
+  },
+  {
+    icon: 'check-circle-o',
+    label: 'Daily Tasks',
+    subtitle: "Complete today's rituals",
+    hint: 'Daily actions based on your reading',
+    action: 'tasks',
+  },
+  {
+    icon: 'heart-o',
+    label: 'Compatibility',
+    subtitle: 'Discover connections',
+    hint: 'Compare palm readings',
+    action: 'compat',
+  },
 ];
 
 export const FALLBACK_DAILY_TASKS = [
@@ -85,6 +111,33 @@ export const ANALYSIS_LOADING_CHIPS: readonly [string, string] = [
 
 export const PALM_CAPTURE_FAILED =
   "We couldn't capture your palm. Try again in better light with your hand steady.";
+
+export const PALM_CAPTURE_PREPARING = 'Preparing your photo…';
+
+export const PALM_REVIEW_TITLE = 'Check your palm photo';
+export const PALM_REVIEW_SUBTITLE =
+  'Confirm a clear open palm — major lines are traced on the server after you analyze.';
+export const PALM_REVIEW_RETAKE = 'Retake';
+export const PALM_REVIEW_ANALYZE = 'Analyze palm';
+export const PALM_REVIEW_ANALYZING = 'Preparing…';
+
+export const PALM_CAMERA_COACHING =
+  'Ask someone to hold the phone, or rest it and photograph your other hand.';
+export const PALM_CAMERA_CAPTURING = 'Capturing…';
+
+export const PALM_RETAKE_DEFAULT =
+  "We couldn't read that palm clearly. Try brighter light and an open palm.";
+
+export const PALM_RETAKE_BANNER_PREFIX = "Last photo wasn't clear enough —";
+
+export const PALM_SCAN_TIPS = [
+  { icon: 'sunny-outline' as const, label: 'Good light' },
+  { icon: 'hand-right-outline' as const, label: 'Open palm' },
+  { icon: 'expand-outline' as const, label: 'Fill frame' },
+] as const;
+
+export const PARTNER_PALM_REVIEW_TITLE = "Check your partner's palm";
+export const PARTNER_PALM_REVIEW_ANALYZE = 'Analyze match';
 
 export const AI_VOICE_HINTS = [
   'You often think things through before you speak. That patience is a strength.',
@@ -134,12 +187,32 @@ export function palmReadingChips(p: PalmAnalysisDto): [string, string] {
   return [life, second];
 }
 
-export function buildDailyInsight(palm: PalmAnalysisDto | null): InsightSection {
+export type DailyInsight = InsightSection & {
+  /** Short mystical quote for the home hero. */
+  quote: string;
+};
+
+const ENERGY_QUOTES = [
+  'Independent minds create extraordinary paths.',
+  'Quiet courage often opens the next door.',
+  'Steady attention turns possibility into path.',
+  'Your depth is not a burden — it is a compass.',
+  'What you notice today can rewrite tomorrow.',
+] as const;
+
+function quoteForEnergy(seed: string): string {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) hash = (hash + seed.charCodeAt(i) * (i + 1)) % ENERGY_QUOTES.length;
+  return ENERGY_QUOTES[hash] ?? ENERGY_QUOTES[0];
+}
+
+export function buildDailyInsight(palm: PalmAnalysisDto | null): DailyInsight {
   if (!palm) {
     return {
       id: 'daily',
-      title: "Today's insight",
+      title: 'Awakening',
       body: 'Take one small step toward what already matters to you. You do not need a perfect moment to start.',
+      quote: ENERGY_QUOTES[0],
     };
   }
 
@@ -147,11 +220,13 @@ export function buildDailyInsight(palm: PalmAnalysisDto | null): InsightSection 
     palm.traits.length > 0
       ? palm.traits.slice(0, 2).map((t) => capitalize(t.replace(/_/g, ' '))).join(' and ')
       : 'curiosity and depth';
+  const title = capitalize(palm.personality) || 'Visionary';
 
   return {
     id: 'daily',
-    title: capitalize(palm.personality),
+    title,
     body: `Your reading points to ${traits}. Today is a good day for honest conversations and steady steps.`,
+    quote: quoteForEnergy(title),
   };
 }
 

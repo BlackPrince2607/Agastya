@@ -1,68 +1,126 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { useLocalSearchParams } from 'expo-router';
 import { useRef, useState } from 'react';
 import { Alert, Pressable, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HandToggleRow } from '@/components/onboarding/HandToggle';
 import { OnboardingHeader } from '@/components/onboarding/OnboardingHeader';
-import { PalmCaptureProcessingOverlay } from '@/components/onboarding/PalmCaptureProcessingOverlay';
+import { PalmCaptureReview } from '@/components/onboarding/PalmCaptureReview';
 import { PalmScanBriefing } from '@/components/onboarding/PalmScanBriefing';
+import { PalmScanCoachingTips } from '@/components/onboarding/PalmScanCoachingTips';
 import { PalmScanFrame } from '@/components/onboarding/PalmScanFrame';
 import { CosmicButton, GradientText } from '@/components/primitives';
-import { ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS, PALM_SCAN_PROCESSING_MS } from '@/constants/onboarding';
+import { ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS } from '@/constants/onboarding';
 import { PAGE_PADDING } from '@/constants/layout';
 import { colors } from '@/constants/theme';
-import { PALM_CAPTURE_FAILED } from '@/constants/userCopy';
+import {
+  PALM_CAMERA_CAPTURING,
+  PALM_CAMERA_COACHING,
+  PALM_CAPTURE_FAILED,
+  PALM_RETAKE_BANNER_PREFIX,
+} from '@/constants/userCopy';
+import { triggerLightTap } from '@/hooks/useHapticTap';
 import type { PalmScanHand } from '@/store/sessionStore';
 import { useSessionStore } from '@/store/sessionStore';
+import { isPalmHandLockedByGender, palmHandForGender, palmHandGuidanceLabel } from '@/utils/palmHand';
 import { pickPalmImage } from '@/utils/pickPalmImage';
-import { delay } from '@/utils/analysisTiming';
 import { deferRouterPush } from '@/utils/routerDefer';
 
-async function continueWithCapture(
-  base64: string,
-  hand: PalmScanHand,
-  setPalmScanHand: (hand: PalmScanHand) => void,
-  setPalmCaptureBase64: (value: string) => void,
-  setProcessing: (value: boolean) => void,
-) {
-  const seed = `${hand}-${Date.now()}`;
-  setPalmScanHand(hand);
-  setPalmCaptureBase64(base64);
-  setProcessing(true);
-  await delay(PALM_SCAN_PROCESSING_MS);
-  deferRouterPush({
-    pathname: '/onboarding/analysis',
-    params: { seed },
-  });
+type ScanStep = 'briefing' | 'camera' | 'review';
+
+function decodeRetakeReason(raw?: string): string | null {
+  if (!raw || typeof raw !== 'string') return null;
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
 }
 
 export default function PalmScanScreen() {
-  const [permission, requestPermission] = useCameraPermissions();
-  const [pastBriefing, setPastBriefing] = useState(false);
-  const [uploadBusy, setUploadBusy] = useState(false);
-  const [processing, setProcessing] = useState(false);
-  const [selectedHand, setSelectedHand] = useState<PalmScanHand>('right');
+  const { retakeReason: retakeReasonParam } = useLocalSearchParams<{ retakeReason?: string }>();
+  const retakeNotice = decodeRetakeReason(retakeReasonParam);
+
+  const userGender = useSessionStore((s) => s.userGender);
   const palmScanHand = useSessionStore((s) => s.palmScanHand);
   const setPalmScanHand = useSessionStore((s) => s.setPalmScanHand);
   const setPalmCaptureBase64 = useSessionStore((s) => s.setPalmCaptureBase64);
+  const setPalmCaptureLandmarks = useSessionStore((s) => s.setPalmCaptureLandmarks);
+
+  const handLocked = isPalmHandLockedByGender(userGender);
+  const recommendedHand = palmHandForGender(userGender);
+
+  const [permission, requestPermission] = useCameraPermissions();
+  const [step, setStep] = useState<ScanStep>('briefing');
+  const [uploadBusy, setUploadBusy] = useState(false);
+  const [capturing, setCapturing] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [previewBase64, setPreviewBase64] = useState<string | null>(null);
+  const [selectedHand, setSelectedHand] = useState<PalmScanHand>(
+    () => (handLocked ? recommendedHand : palmScanHand ?? recommendedHand),
+  );
   const camRef = useRef<CameraView>(null);
   const insets = useSafeAreaInsets();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
 
   const frameSize = Math.min(windowWidth - PAGE_PADDING * 2 - 8, Math.round(windowHeight * 0.42), 320);
+  const hand = handLocked ? recommendedHand : selectedHand;
 
-  const uploadFromGallery = async (hand: PalmScanHand) => {
-    if (uploadBusy) return;
+  const chooseHand = (next: PalmScanHand) => {
+    if (handLocked) return;
+    setSelectedHand(next);
+  };
+
+  const goToReview = (base64: string) => {
+    setPreviewBase64(base64);
+    setStep('review');
+  };
+
+  const uploadFromGallery = async (scanHand: PalmScanHand) => {
+    if (uploadBusy || capturing) return;
     setUploadBusy(true);
     try {
       const base64 = await pickPalmImage();
       if (!base64) return;
-      await continueWithCapture(base64, hand, setPalmScanHand, setPalmCaptureBase64, setProcessing);
+      setSelectedHand(handLocked ? recommendedHand : scanHand);
+      goToReview(base64);
     } finally {
       setUploadBusy(false);
     }
   };
+
+  const confirmReview = (
+    landmarks: Array<[number, number]>,
+    source: 'mediapipe' | 'roi_estimate',
+  ) => {
+    if (!previewBase64 || confirming) return;
+    setConfirming(true);
+    const seed = `${hand}-${Date.now()}`;
+    setPalmScanHand(hand);
+    setPalmCaptureBase64(previewBase64);
+    setPalmCaptureLandmarks(landmarks, source);
+    deferRouterPush({
+      pathname: '/onboarding/analysis',
+      params: { seed },
+    });
+  };
+
+  if (step === 'review' && previewBase64) {
+    return (
+      <PalmCaptureReview
+        base64={previewBase64}
+        hand={hand}
+        confirming={confirming}
+        onRetake={() => {
+          setPreviewBase64(null);
+          setConfirming(false);
+          setStep('camera');
+        }}
+        onConfirm={confirmReview}
+      />
+    );
+  }
 
   if (!permission) {
     return (
@@ -72,51 +130,55 @@ export default function PalmScanScreen() {
     );
   }
 
-  if (processing) {
-    return (
-      <View className="flex-1 bg-black">
-        <PalmCaptureProcessingOverlay frameSize={Math.min(272, Math.round(windowHeight * 0.32))} />
-      </View>
-    );
-  }
-
-  const requestAndContinue = async (hand: PalmScanHand) => {
-    setSelectedHand(hand);
-    setPastBriefing(true);
+  const requestAndContinue = async (scanHand: PalmScanHand) => {
+    setSelectedHand(handLocked ? recommendedHand : scanHand);
+    setStep('camera');
     await requestPermission();
   };
 
-  if (!pastBriefing) {
+  if (step === 'briefing') {
     return (
-      <PalmScanBriefing
-        hand={palmScanHand ?? selectedHand}
-        onHandChange={setSelectedHand}
-        primaryLabel="Scan palm"
-        primaryIcon="camera"
-        onPrimaryPress={(hand) => void requestAndContinue(hand)}
-        beforePrimary={
-          <CosmicButton
-            variant="ghost"
-            label={uploadBusy ? 'Opening gallery...' : 'Upload from gallery'}
-            disabled={uploadBusy}
-            onPress={() => void uploadFromGallery(selectedHand)}
-          />
-        }
-      />
+      <View className="flex-1">
+        {retakeNotice ? (
+          <View
+            className="border-b border-amber-500/25 bg-amber-500/10 px-5 py-3"
+            style={{ paddingTop: Math.max(insets.top, 8) }}>
+            <Text className="font-body text-[14px] leading-5 text-amber-100/95">
+              {PALM_RETAKE_BANNER_PREFIX} {retakeNotice}
+            </Text>
+          </View>
+        ) : null}
+        <PalmScanBriefing
+          hand={hand}
+          gender={userGender}
+          onHandChange={chooseHand}
+          primaryLabel="Scan palm"
+          primaryIcon="camera"
+          onPrimaryPress={(scanHand) => void requestAndContinue(scanHand)}
+          beforePrimary={
+            <CosmicButton
+              variant="ghost"
+              label={uploadBusy ? 'Opening gallery...' : 'Upload from gallery'}
+              disabled={uploadBusy}
+              onPress={() => void uploadFromGallery(hand)}
+            />
+          }
+        />
+      </View>
     );
   }
 
   if (!permission.granted) {
     return (
-      <View className="flex-1 bg-[#0f0e10]">
+      <View className="flex-1 bg-surface-container-lowest">
         <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={{ flex: 1 }}>
           <View className="flex-1 justify-center gap-8" style={{ paddingHorizontal: PAGE_PADDING }}>
             <OnboardingHeader step={ONBOARDING_STEPS.palmScan} total={ONBOARDING_TOTAL_STEPS} />
             <View className="gap-3">
-              <GradientText className="font-space-grotesk text-[12px] uppercase tracking-[0.4em] text-stitch-signal">
+              <GradientText className="font-label text-[12px] uppercase tracking-[0.4em] text-cyan">
                 Camera access
               </GradientText>
-              <Text className="font-noto-serif text-[26px] leading-8 text-on-surface">We need your camera for the palm scan</Text>
+              <Text className="font-headline text-[26px] leading-8 text-on-surface">We need your camera for the palm scan</Text>
               <Text className="font-body text-[15px] leading-7 text-on-surface-variant">
                 Use a well-lit space and hold your palm steady. We only capture your hand, not your face.
               </Text>
@@ -128,7 +190,7 @@ export default function PalmScanScreen() {
                 label="Upload from gallery instead"
                 onPress={() => void uploadFromGallery(selectedHand)}
               />
-              <CosmicButton variant="ghost" label="Back to checklist" onPress={() => setPastBriefing(false)} />
+              <CosmicButton variant="ghost" label="Back to checklist" onPress={() => setStep('briefing')} />
             </View>
           </View>
         </SafeAreaView>
@@ -137,18 +199,23 @@ export default function PalmScanScreen() {
   }
 
   const startScan = async () => {
+    if (capturing) return;
+    setCapturing(true);
     try {
       const photo = await camRef.current?.takePictureAsync({
         base64: true,
-        quality: 0.55,
+        quality: 0.72,
       });
       if (!photo?.base64) {
         Alert.alert("Couldn't capture palm", PALM_CAPTURE_FAILED);
         return;
       }
-      await continueWithCapture(photo.base64, selectedHand, setPalmScanHand, setPalmCaptureBase64, setProcessing);
+      void triggerLightTap();
+      goToReview(photo.base64);
     } catch {
       Alert.alert("Couldn't capture palm", PALM_CAPTURE_FAILED);
+    } finally {
+      setCapturing(false);
     }
   };
 
@@ -161,13 +228,28 @@ export default function PalmScanScreen() {
             <OnboardingHeader
               step={ONBOARDING_STEPS.palmScan}
               total={ONBOARDING_TOTAL_STEPS}
-              onBack={() => setPastBriefing(false)}
+              onBack={() => setStep('briefing')}
             />
+            {retakeNotice ? (
+              <View className="mb-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5">
+                <Text className="font-body text-[13px] leading-5 text-amber-100/95">
+                  {PALM_RETAKE_BANNER_PREFIX} {retakeNotice}
+                </Text>
+              </View>
+            ) : null}
             <Text className="font-headline text-[22px] text-on-surface">
-              {selectedHand === 'left' ? 'Left' : 'Right'} palm
+              {hand === 'left' ? 'Left' : 'Right'} palm
             </Text>
             <Text className="mt-1 font-body text-[14px] text-on-surface-variant">
               Center your hand inside the frame
+            </Text>
+            {handLocked ? (
+              <Text className="mt-1 font-body text-[12px] leading-5 text-on-surface-variant/90">
+                {palmHandGuidanceLabel(hand, userGender)}
+              </Text>
+            ) : null}
+            <Text className="mt-1 font-body text-[12px] leading-5 text-on-surface-variant/80">
+              {PALM_CAMERA_COACHING}
             </Text>
           </View>
         </SafeAreaView>
@@ -175,7 +257,7 @@ export default function PalmScanScreen() {
         <View className="flex-1 items-center justify-center px-4" pointerEvents="none">
           <PalmScanFrame
             size={frameSize}
-            hand={selectedHand}
+            hand={hand}
             showInnerGuide
             showScanLine
             cornerColor={colors.primary}
@@ -186,14 +268,20 @@ export default function PalmScanScreen() {
           <View
             className="gap-3 border-t border-white/10 bg-black/75 pt-4"
             style={{ paddingBottom: Math.max(insets.bottom, 14), paddingHorizontal: PAGE_PADDING }}>
-            <HandToggleRow hand={selectedHand} onSelect={setSelectedHand} compact />
+            <PalmScanCoachingTips compact />
+            {handLocked ? null : <HandToggleRow hand={hand} onSelect={chooseHand} compact />}
 
-            <CosmicButton gradient="nebulaMd3" label="Capture palm" onPress={() => void startScan()} />
+            <CosmicButton
+              gradient="nebulaMd3"
+              label={capturing ? PALM_CAMERA_CAPTURING : 'Capture palm'}
+              disabled={capturing}
+              onPress={() => void startScan()}
+            />
 
             <Pressable
               accessibilityRole="button"
-              disabled={uploadBusy}
-              onPress={() => void uploadFromGallery(selectedHand)}
+              disabled={uploadBusy || capturing}
+              onPress={() => void uploadFromGallery(hand)}
               className="items-center py-2 active:opacity-75">
               <Text className="font-label text-[13px] uppercase tracking-[0.08em] text-on-surface-variant">
                 {uploadBusy ? 'Opening gallery...' : 'Upload from gallery'}
@@ -202,7 +290,6 @@ export default function PalmScanScreen() {
           </View>
         </SafeAreaView>
       </View>
-      {processing ? <PalmCaptureProcessingOverlay frameSize={frameSize} /> : null}
     </View>
   );
 }

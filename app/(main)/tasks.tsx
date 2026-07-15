@@ -1,8 +1,9 @@
 import { router, usePathname } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
+import { colors } from '@/constants/theme';
 
-import { EmptyState, PageTitle } from '@/components/feedback';
+import { EmptyState, LoadingBlock, PageTitle, PremiumLockGate } from '@/components/feedback';
 import { MainTabScroll } from '@/components/layout/MainTabScroll';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { MainCosmicHeader } from '@/components/layout/MainCosmicHeader';
@@ -88,6 +89,15 @@ export default function TasksScreen() {
     }
   }, [allDone, list.length]);
 
+  if (!premium) {
+    return (
+      <PremiumLockGate
+        title="Daily tasks are a Pro feature"
+        body="Unlock full access for personalized daily guidance tied to your palm reading."
+      />
+    );
+  }
+
   if (!palmAnalysis) {
     return (
       <CosmicScreen variant="stitch">
@@ -110,20 +120,26 @@ export default function TasksScreen() {
       <MainTabScroll>
         <MainCosmicHeader displayName={displayName} />
 
-        <PageTitle title="Today’s Tasks" subtitle={formatToday()} />
+        <PageTitle title="Today’s Rituals" subtitle={formatToday()} />
 
         <View className="items-center overflow-visible py-4" style={{ minHeight: 168 }}>
           <ProgressRing done={doneCount} total={list.length} />
           <Text className="mt-4 font-body text-[14px] text-on-surface-variant">
-            {loading ? 'Loading your tasks…' : allDone ? 'All tasks complete' : 'Use the checkbox on each task to mark it done.'}
+            {loading
+              ? 'Loading your tasks…'
+              : allDone
+                ? 'All rituals complete'
+                : 'Use the checkbox on each task to mark it done.'}
           </Text>
         </View>
 
+        {loading && list.length === 0 ? <LoadingBlock variant="skeleton" message="Preparing today’s rituals…" /> : null}
+
         {allDone ? (
-          <GlassCard glow className="w-full p-4" innerClassName="flex-row items-center gap-3">
-            <Icon name="auto_awesome" size={24} color="#d3beeb" />
-            <Text className="flex-1 font-body-medium text-[15px] text-on-surface">
-              Nice work today. Come back tomorrow for your next tasks.
+          <GlassCard glow className="w-full p-5" innerClassName="flex-row items-center gap-3">
+            <Icon name="auto_awesome" size={24} color={colors.primary} />
+            <Text className="flex-1 font-body-medium text-[15px] leading-6 text-on-surface">
+              Nice work today. Come back tomorrow for your next rituals.
             </Text>
           </GlassCard>
         ) : null}

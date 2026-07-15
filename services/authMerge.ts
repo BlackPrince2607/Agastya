@@ -32,7 +32,7 @@ async function tryMergeSession(supabaseUserId: string) {
     }
 
     try {
-      await syncProfileRemote();
+      await syncProfileRemote().catch(() => {});
       const res = await mergeSessions({
         anonymousSessionId,
         supabaseUserId,
@@ -101,8 +101,13 @@ export function subscribeSupabaseSessionMerge(): () => void {
 
     syncAuthUserToStore(userId);
 
-    if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+    if (event === 'SIGNED_IN') {
       void tryMergeSession(userId);
+      return;
+    }
+
+    if (event === 'INITIAL_SESSION') {
+      setTimeout(() => void tryMergeSession(userId), 3_000);
     }
   });
 

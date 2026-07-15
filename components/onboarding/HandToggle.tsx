@@ -64,14 +64,14 @@ export function HandToggleRow({ hand, onSelect, compact }: HandToggleProps) {
     <View style={styles.row}>
       <ToggleOption
         label={compact ? 'Left' : 'Left hand'}
-        sub="Non-dominant hand"
+        sub="Traditional for women"
         selected={resolved === 'left'}
         onPress={() => onSelect('left')}
         compact={compact}
       />
       <ToggleOption
         label={compact ? 'Right' : 'Right hand'}
-        sub="Dominant hand"
+        sub="Traditional for men"
         selected={resolved === 'right'}
         onPress={() => onSelect('right')}
         compact={compact}

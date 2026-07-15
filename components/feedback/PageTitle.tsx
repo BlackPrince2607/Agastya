@@ -12,15 +12,15 @@ export function PageTitle({ title, subtitle, align = 'left', className = '' }: P
   const alignClass = align === 'center' ? 'items-center' : 'items-start';
 
   return (
-    <View className={`w-full gap-1 ${alignClass} ${className}`}>
+    <View className={`w-full gap-1.5 ${alignClass} ${className}`}>
       <Text
-        className={`font-headline text-[26px] leading-8 text-on-surface ${align === 'center' ? 'text-center' : ''}`}
+        className={`font-headline text-[28px] leading-9 text-on-surface ${align === 'center' ? 'text-center' : ''}`}
         accessibilityRole="header">
         {title}
       </Text>
       {subtitle ? (
         <Text
-          className={`font-body text-[14px] leading-5 text-on-surface-variant ${align === 'center' ? 'text-center' : ''}`}>
+          className={`font-body text-[15px] leading-6 text-on-surface-variant ${align === 'center' ? 'text-center' : ''}`}>
           {subtitle}
         </Text>
       ) : null}

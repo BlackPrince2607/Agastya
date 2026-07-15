@@ -1,5 +1,6 @@
 import { MotiView } from 'moti';
 import { ActivityIndicator, Text, View } from 'react-native';
+import { colors } from '@/constants/theme';
 
 import { Icon } from '@/components/ui';
 
@@ -22,9 +23,9 @@ export function ReadingChecklist({ items }: { items: ChecklistItem[] }) {
           className="flex-row items-center gap-3">
           <View className="h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-white/[0.05]">
             {item.state === 'done' ? (
-              <Icon name="check" size={16} color="#4ade80" />
+              <Icon name="check" size={16} color={colors.health} />
             ) : item.state === 'active' ? (
-              <ActivityIndicator size="small" color="#22d3ee" />
+              <ActivityIndicator size="small" color={colors.cyan} />
             ) : (
               <Icon name="radio_button_unchecked" size={14} color="rgba(232,225,229,0.4)" />
             )}

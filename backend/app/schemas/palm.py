@@ -9,7 +9,8 @@ LineCurve = Literal["straight", "curved", "broken"]
 HeadLength = Literal["short", "medium", "long"]
 HandShape = Literal["earth", "air", "fire", "water", "mixed"]
 ImageQuality = Literal["good", "acceptable", "poor", "no_hand"]
-AnalysisSource = Literal["openrouter_vision", "groq_vision", "hybrid", "dummy", "fallback"]
+AnalysisSource = Literal["openrouter_vision", "hybrid", "dummy", "fallback", "opencv_creases"]
+GeometrySource = Literal["opencv_creases", "landmark_heuristic", "unavailable"]
 DominantHand = Literal["left", "right", "unknown"]
 MountLevel = Literal["prominent", "moderate", "flat"]
 FateLine = Literal["present", "absent", "partial"]
@@ -56,5 +57,7 @@ class PalmAnalysis(BaseModel):
     mounts: dict[str, Any] | None = None
     fate_line: FateLine | str | None = None
     line_geometry: list[dict[str, Any]] | None = None
+    line_features: dict[str, Any] | None = None
+    geometry_source: GeometrySource | str | None = None
 
     model_config = {"extra": "ignore"}

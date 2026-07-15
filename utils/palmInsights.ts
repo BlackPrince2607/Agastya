@@ -6,6 +6,16 @@ export type PalmLineInsight = {
   descriptor: string;
   interpretation: string;
   score: number;
+  length?: string;
+  depth?: string;
+  breaks?: number;
+  notes?: string;
+};
+
+const LINE_DETAIL_KEYS: Record<string, string> = {
+  'Life Line': 'life_line',
+  'Heart Line': 'heart_line',
+  'Head Line': 'head_line',
 };
 
 const LIFE: Record<string, { descriptor: string; text: string }> = {
@@ -30,33 +40,53 @@ function pick<T>(map: Record<string, T>, key: string, fallback: T): T {
   return map[String(key).toLowerCase()] ?? fallback;
 }
 
+function lineDetailFields(
+  palm: PalmAnalysisDto,
+  lineName: string,
+): Pick<PalmLineInsight, 'length' | 'depth' | 'breaks' | 'notes'> {
+  const key = LINE_DETAIL_KEYS[lineName];
+  const detail = key ? palm.line_details?.[key] : undefined;
+  if (!detail) return {};
+  return {
+    length: detail.length,
+    depth: detail.depth,
+    breaks: detail.breaks,
+    notes: detail.notes,
+  };
+}
+
+function enrichInterpretation(base: string, detail: Pick<PalmLineInsight, 'notes' | 'length' | 'depth'>): string {
+  const extra = detail.notes?.trim();
+  if (extra) return `${base} ${extra}`;
+  const parts = [detail.length, detail.depth].filter(Boolean);
+  if (parts.length) return `${base} (${parts.join(', ')})`;
+  return base;
+}
+
 export function palmLineInsights(palm: PalmAnalysisDto, seed: string): PalmLineInsight[] {
   const digs = seedDigits(seed || 'lines', 3);
-  const conf = palm.confidence ?? 0.55;
   const life = pick(LIFE, palm.life_line, LIFE.moderate);
   const heart = pick(HEART, palm.heart_line, HEART.curved);
   const head = pick(HEAD, palm.head_line, HEAD.medium);
 
-  return [
-    {
-      lineName: 'Life Line',
-      descriptor: life.descriptor,
-      interpretation: life.text,
-      score: inRange((digs[0] ?? 0.7) * conf, 74, 92),
-    },
-    {
-      lineName: 'Heart Line',
-      descriptor: heart.descriptor,
-      interpretation: heart.text,
-      score: inRange((digs[1] ?? 0.6) * conf, 70, 90),
-    },
-    {
-      lineName: 'Head Line',
-      descriptor: head.descriptor,
-      interpretation: head.text,
-      score: inRange((digs[2] ?? 0.65) * conf, 72, 88),
-    },
+  const rows: Array<{ lineName: string; base: typeof life; dig: number; min: number; max: number }> = [
+    { lineName: 'Life Line', base: life, dig: digs[0] ?? 0.7, min: 74, max: 92 },
+    { lineName: 'Heart Line', base: heart, dig: digs[1] ?? 0.6, min: 70, max: 90 },
+    { lineName: 'Head Line', base: head, dig: digs[2] ?? 0.65, min: 72, max: 88 },
   ];
+
+  return rows.map(({ lineName, base, dig, min, max }) => {
+    const fields = lineDetailFields(palm, lineName);
+    const geometryBoost = palm.line_geometry?.some((g) => g.name === LINE_DETAIL_KEYS[lineName]) ? 0.06 : 0;
+    const conf = Math.min(0.98, (palm.confidence ?? 0.55) + geometryBoost);
+    return {
+      lineName,
+      descriptor: base.descriptor,
+      interpretation: enrichInterpretation(base.text, fields),
+      score: inRange(dig * conf, min, max),
+      ...fields,
+    };
+  });
 }
 
 export type PersonalityProfile = {
@@ -70,6 +100,94 @@ const SHADOW_POOL = ['Overthinking', 'Perfectionist', 'Restless', 'Guarded', 'Im
 
 function capitalize(s: string): string {
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}
+
+const PERSONALITY_MOTIFS: Record<string, string> = {
+  visionary: 'visionary clarity',
+  seeker: 'quiet seeking',
+  guardian: 'steady protection',
+  empath: 'warm intuition',
+  strategist: 'measured insight',
+  healer: 'gentle resilience',
+  builder: 'grounded ambition',
+};
+
+const LINE_MOTIFS: Record<string, string> = {
+  strong: 'steady resilience',
+  moderate: 'quiet balance',
+  subtle: 'gentle adaptability',
+  curved: 'warm intuition',
+  straight: 'clear conviction',
+  broken: 'layered depth',
+  long: 'thoughtful vision',
+  medium: 'balanced insight',
+  short: 'decisive focus',
+};
+
+const VISIONARY_SUBTITLES: Record<string, string> = {
+  visionary: 'Architect of Quiet Intensity',
+  seeker: 'Reader of Hidden Signs',
+  guardian: 'Keeper of Steady Ground',
+  empath: 'Voice of Warm Conviction',
+  strategist: 'Mind That Maps the Quiet Path',
+  healer: 'Gentle Force Behind the Surface',
+  builder: 'Builder of Lasting Momentum',
+};
+
+export function palmMotifPhrase(palm: PalmAnalysisDto): string {
+  const persona = String(palm.personality ?? '').toLowerCase().trim();
+  if (PERSONALITY_MOTIFS[persona]) return PERSONALITY_MOTIFS[persona];
+
+  const heart = String(palm.heart_line ?? '').toLowerCase();
+  const life = String(palm.life_line ?? '').toLowerCase();
+  const head = String(palm.head_line ?? '').toLowerCase();
+  return LINE_MOTIFS[heart] ?? LINE_MOTIFS[life] ?? LINE_MOTIFS[head] ?? 'quiet purpose';
+}
+
+export function palmHeadline(palm: PalmAnalysisDto): string {
+  const motif = palmMotifPhrase(palm);
+  return `The pattern “${motif}” runs quietly through the way you move.`;
+}
+
+export function palmVisionaryTitle(palm: PalmAnalysisDto): string {
+  const persona = capitalize(String(palm.personality ?? 'seeker').trim() || 'seeker');
+  return `The ${persona}`;
+}
+
+export function palmVisionarySubtitle(palm: PalmAnalysisDto): string {
+  const persona = String(palm.personality ?? '').toLowerCase().trim();
+  return VISIONARY_SUBTITLES[persona] ?? 'Reader of Your Inner Lines';
+}
+
+export function palmArchetypeLine(palm: PalmAnalysisDto): string {
+  const life = pick(LIFE, palm.life_line, LIFE.moderate);
+  const heart = pick(HEART, palm.heart_line, HEART.curved);
+  const traits =
+    palm.traits.length > 0
+      ? palm.traits
+          .slice(0, 2)
+          .map((t) => t.replace(/_/g, ' '))
+          .join(' and ')
+      : 'depth and intuition';
+  return `Your ${life.descriptor.toLowerCase()} life line and ${heart.descriptor.toLowerCase()} heart line suggest someone ${traits} — you take things in quietly and speak up only when it truly matters.`;
+}
+
+export function palmSelfSectionBody(palm: PalmAnalysisDto): string {
+  const motif = palmMotifPhrase(palm);
+  const head = pick(HEAD, palm.head_line, HEAD.medium);
+  return `You turn overwhelm into plans. Sometimes that protects you; sometimes it keeps people at arm's length. Your ${head.descriptor.toLowerCase()} mind and the pattern of ${motif} keep surfacing whenever you put off being direct.`;
+}
+
+/** Detects internal scan seeds like `right-1783693762016` leaking into user-facing copy. */
+export function looksLikeTechnicalSeed(text: string): boolean {
+  const trimmed = text.trim();
+  return /^(right|left|partner|trace)-\d{8,}$/i.test(trimmed) || /^\w+-\d{10,}$/.test(trimmed);
+}
+
+export function headlineNeedsPalmFix(headline: string): boolean {
+  const match = headline.match(/[“"]([^”"]+)[”"]/);
+  if (!match?.[1]) return false;
+  return looksLikeTechnicalSeed(match[1]);
 }
 
 export function personalityProfile(palm: PalmAnalysisDto, seed: string): PersonalityProfile {

@@ -4,7 +4,7 @@ export const ERRORS = {
   network: "We couldn't reach Agastya right now. Check your connection and try again.",
   guideNeedsPalm: 'Complete your palm reading first. Then the Guide can answer questions about your report.',
   guideLlmUnavailable:
-    'The Guide is temporarily unavailable. Check that OPENROUTER_API_KEY is valid in backend/.env and restart the API.',
+    'The Guide is temporarily unavailable. Check that OPENROUTER_API_KEY is valid in backend/.env and that your OpenAI model slug is correct.',
   missingSession: 'Something went wrong starting your session. Please restart the app.',
   mergeMismatch: "This sign-in doesn't match your current reading. Try signing in with the account you used before.",
   authRequired: 'Please sign in to continue.',
@@ -49,4 +49,18 @@ export function mapApiError(detail: string): string {
     return 'The Guide took too long to respond. Check your connection and try again.';
   }
   return ERRORS.generic;
+}
+
+/** True when the API rejected the photo quality (not generic report/session errors). */
+export function isPalmRetakeError(message: string): boolean {
+  const d = message.toLowerCase();
+  if (d.includes('palm analysis before') || d.includes('run palm analysis')) {
+    return false;
+  }
+  return (
+    d.includes('retake') ||
+    d.includes('no clear palm') ||
+    d.includes('no_hand') ||
+    d.includes('palm image required')
+  );
 }

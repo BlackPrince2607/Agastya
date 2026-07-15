@@ -4,6 +4,9 @@
  * EXPO_PUBLIC_AGASTYA_API_URL: backend root for all platforms; required for production web/export
  * builds pointing at a hosted API. Dev: optional — services/env.ts falls back to localhost
  * simulators or set LAN IP for physical devices. Do not put secrets here.
+ *
+ * Native MediaPipe (EAS/dev builds): add react-native-vision-camera + expo-vision-camera-v4-mediapipe
+ * plugins and hand_landmarker.task — Expo Go uses ROI landmark fallback (utils/handLandmarks.ts).
  */
 const appJson = require('./app.json');
 
@@ -13,11 +16,16 @@ const updatesConfigured =
 
 /** Dev machine LAN IP for physical phones (Metro tunnel does not expose port 8000). */
 function getDevLanApiUrl() {
+  const api = process.env.EXPO_PUBLIC_AGASTYA_API_URL?.trim() ?? '';
+  const targetsLocalApi =
+    !api ||
+    api.includes('localhost') ||
+    api.includes('127.0.0.1');
+  // Hosted API (Railway, Fly, etc.) — phones reach it over HTTPS; ignore stale LAN/ngrok overrides.
+  if (!targetsLocalApi) return undefined;
+
   const explicit = process.env.EXPO_PUBLIC_AGASTYA_API_LAN_URL?.trim();
   if (explicit) return explicit.replace(/\/$/, '');
-
-  const api = process.env.EXPO_PUBLIC_AGASTYA_API_URL?.trim() ?? '';
-  if (!api.includes('localhost') && !api.includes('127.0.0.1')) return undefined;
 
   const os = require('os');
   const nets = os.networkInterfaces();

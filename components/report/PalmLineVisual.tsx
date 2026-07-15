@@ -1,12 +1,14 @@
 import Svg, { Path } from 'react-native-svg';
 import { View } from 'react-native';
 
+import { colors } from '@/constants/theme';
+
 type LineKind = 'life' | 'heart' | 'head';
 
 const LINE_COLORS: Record<LineKind, string> = {
-  life: '#a855f7',
-  heart: '#f472b6',
-  head: '#22d3ee',
+  life: colors.purple,
+  heart: colors.love,
+  head: colors.cyan,
 };
 
 const LINE_PATHS: Record<LineKind, string> = {

@@ -1,18 +1,18 @@
 import type { PropsWithChildren } from 'react';
-import { View, type ViewProps } from 'react-native';
+import { type ViewProps } from 'react-native';
+
+import { GlassCard } from '@/components/ui/GlassCard';
 
 type GlowCardProps = PropsWithChildren<ViewProps & { muted?: boolean }>;
 
+/**
+ * Legacy glow card — delegates to GlassCard so every surface shares one language.
+ * Prefer importing GlassCard directly in new code.
+ */
 export function GlowCard({ muted, className, children, ...rest }: GlowCardProps) {
-  const ring = muted
-    ? 'border-white/10 shadow-none'
-    : 'border-white/15 shadow-glow-sm';
-
   return (
-    <View
-      className={`rounded-glass border bg-white/[0.05] p-5 ${ring} ${className ?? ''}`}
-      {...rest}>
+    <GlassCard muted={muted} glow={!muted} className={className ?? 'p-5'} {...rest}>
       {children}
-    </View>
+    </GlassCard>
   );
 }

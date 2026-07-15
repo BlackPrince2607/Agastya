@@ -1,12 +1,19 @@
-import { ANALYSIS_MIN_DURATION_MS, ANALYSIS_PHRASE_MS } from '@/constants/onboarding';
+import { ANALYSIS_MIN_DURATION_MS } from '@/constants/onboarding';
 import type { PalmAnalysisDto } from '@/types/palmAnalysis';
 
 export function delay(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
-export function analysisPresentationMs(phraseCount: number) {
-  return Math.max(ANALYSIS_MIN_DURATION_MS, ANALYSIS_PHRASE_MS * phraseCount + 600);
+/** Fixed presentation window for the analysis progress UI (0 → 100%). */
+export function analysisPresentationMs(_phraseCount?: number) {
+  return ANALYSIS_MIN_DURATION_MS;
+}
+
+/** Smooth 0–100 progress over the fixed analysis window. */
+export function analysisProgressPct(elapsedMs: number, durationMs = ANALYSIS_MIN_DURATION_MS): number {
+  if (durationMs <= 0) return 100;
+  return Math.min(100, Math.round((elapsedMs / durationMs) * 100));
 }
 
 /** Reveal palm fields gradually so the checklist does not complete instantly. */

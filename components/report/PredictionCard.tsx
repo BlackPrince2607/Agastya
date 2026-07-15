@@ -2,6 +2,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Text, View } from 'react-native';
 
 import { GlassCard, Icon, type IconName } from '@/components/ui';
+import { colors } from '@/constants/theme';
 import type { PredictionCategory } from '@/types/predictions';
 
 const CATEGORY_META: Record<
@@ -11,25 +12,25 @@ const CATEGORY_META: Record<
   career: {
     label: 'Career',
     icon: 'work',
-    tint: '#60a5fa',
+    tint: colors.career,
     gradient: ['rgba(96,165,250,0.18)', 'rgba(96,165,250,0.06)', 'rgba(15,14,16,0)'],
   },
   love: {
     label: 'Love',
     icon: 'favorite',
-    tint: '#f472b6',
+    tint: colors.love,
     gradient: ['rgba(244,114,182,0.20)', 'rgba(232,121,249,0.08)', 'rgba(15,14,16,0)'],
   },
   money: {
     label: 'Money',
     icon: 'payments',
-    tint: '#fbbf24',
+    tint: colors.money,
     gradient: ['rgba(251,191,36,0.18)', 'rgba(251,191,36,0.06)', 'rgba(15,14,16,0)'],
   },
   growth: {
     label: 'Personal Growth',
     icon: 'eco',
-    tint: '#c084fc',
+    tint: colors.growth,
     gradient: ['rgba(192,132,252,0.20)', 'rgba(168,85,247,0.08)', 'rgba(15,14,16,0)'],
   },
 };

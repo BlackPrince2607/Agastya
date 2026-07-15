@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 
+import { splitIntoTextBubbles } from '@/utils/splitChatBubbles';
+
 export type ChatRole = 'you' | 'guide';
 
 export type ChatMessage = {
@@ -54,8 +56,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       const role: ChatRole = turn.role === 'user' || turn.role === 'you' ? 'you' : 'guide';
       const text = turn.content?.trim();
       if (!text) continue;
-      messages.push({ id: nextId(), role, text });
-      if (role === 'you') messageCount += 1;
+      if (role === 'guide') {
+        for (const part of splitIntoTextBubbles(text)) {
+          messages.push({ id: nextId(), role, text: part });
+        }
+      } else {
+        messages.push({ id: nextId(), role, text });
+        messageCount += 1;
+      }
     }
     if (!messages.length) return;
     set({ messages, messageCount, suggestions: DEFAULT_SUGGESTIONS, isTyping: false });

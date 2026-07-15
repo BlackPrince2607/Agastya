@@ -3,7 +3,7 @@ import { MotiPressable } from 'moti/interactions';
 import type { ReactNode } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { colors, gradients } from '@/constants/theme';
+import { colors, elevation, gradients } from '@/constants/theme';
 import { triggerLightTap } from '@/hooks/useHapticTap';
 
 type NebulaButtonProps = {
@@ -108,11 +108,7 @@ export function NebulaButton({
 const styles = StyleSheet.create({
   primaryShell: {
     borderRadius: 999,
-    shadowColor: '#a855f7',
-    shadowOpacity: 0.42,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 14 },
-    elevation: 14,
+    ...elevation.cta,
   },
   primaryGradient: {
     minHeight: 58,

@@ -91,7 +91,7 @@ function resolveApiRoot(): string {
   if (__DEV__) {
     if (Platform.OS !== 'web') {
       const nativeDev = resolveNativeDevApi();
-      if (nativeDev) {
+      if (nativeDev && (!configured || isLocalDevUrl(normalizeConfiguredUrl(configured)))) {
         console.log(`[Agastya API] ${nativeDev}`);
         return nativeDev;
       }
@@ -116,6 +116,10 @@ function resolveApiRoot(): string {
 }
 
 export const AGASTYA_API_ROOT = resolveApiRoot();
+
+if (__DEV__ && AGASTYA_API_ROOT) {
+  console.log(`[Agastya API] resolved → ${AGASTYA_API_ROOT}`);
+}
 
 export function getApiHostLabel(): string {
   if (!AGASTYA_API_ROOT) return 'not configured';

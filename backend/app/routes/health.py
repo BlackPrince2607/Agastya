@@ -23,13 +23,14 @@ async def health(settings: Annotated[Settings, Depends(get_settings)]) -> Health
     """Liveness: process running and settings loaded."""
     if settings.debug:
         llm_live = await llm_is_live(settings) if settings.openrouter_api_key else False
+        palm_vision = llm_live and settings.palm_analysis_mode in {"vision", "hybrid"}
         return HealthResponse(
             status="ok",
             service=settings.app_name,
             supabase=session_repository.is_enabled(settings),
-            groq=llm_live,
-            palm_groq=llm_live and settings.palm_analysis_mode in {"vision", "hybrid"},
             llm=llm_live,
-            palm_vision=llm_live and settings.palm_analysis_mode in {"vision", "hybrid"},
+            palm_vision=palm_vision,
+            chat_model=settings.openrouter_chat_model if settings.openrouter_api_key else None,
+            vision_model=settings.openrouter_vision_model if settings.openrouter_api_key else None,
         )
     return HealthResponse(status="ok", service=settings.app_name)

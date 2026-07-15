@@ -5,8 +5,8 @@ import { Platform, Pressable, Text, TextInput, View } from 'react-native';
 
 import { MetricBar } from '@/components/match/MetricBar';
 import { PartnerPalmAddSheet } from '@/components/match/PartnerPalmAddSheet';
-import { CosmicButton, GlowCard, GradientText } from '@/components/primitives';
-import { Icon } from '@/components/ui';
+import { CosmicButton, GradientText } from '@/components/primitives';
+import { GlassCard, Icon } from '@/components/ui';
 import { colors } from '@/constants/theme';
 import { useSessionStore } from '@/store/sessionStore';
 import { matchStrengthLabel } from '@/utils/compatibilityScore';
@@ -190,10 +190,10 @@ export function CosmicMatchPanel({ onOpenGuide }: CosmicMatchPanelProps) {
       </View>
 
       {summary ? (
-        <GlowCard className="p-4">
+        <GlassCard className="p-4">
           <Text className="font-label text-[11px] uppercase tracking-[0.1em] text-on-surface-variant">Summary</Text>
           <Text className="mt-2 font-body text-[14px] leading-6 text-on-surface">{summary}</Text>
-        </GlowCard>
+        </GlassCard>
       ) : null}
 
       {dimensions ? (

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
+import type { AvatarId } from '@/constants/avatars';
 import { persistentStorage } from '@/services/persistentStorage';
 import type { PalmAnalysisDto } from '@/types/palmAnalysis';
 import type { PredictionPeriod, PredictionsByPeriod, PredictionsResponse } from '@/types/predictions';
@@ -25,6 +26,8 @@ type SessionStore = {
 
   userDisplayName?: string;
   userGender?: Gender;
+  /** Selected fixed astrology avatar id, or undefined for initials fallback. */
+  avatarId?: AvatarId;
 
   readingSeed: string;
   focusTopics: FocusTopic[];
@@ -32,9 +35,13 @@ type SessionStore = {
   palmScanHand: PalmScanHand | null;
 
   palmCaptureBase64: string | null;
+  palmCaptureLandmarks: Array<[number, number]> | null;
+  palmLandmarksSource: 'mediapipe' | 'roi_estimate' | null;
   palmAnalysis: PalmAnalysisDto | null;
 
   partnerPalmCaptureBase64: string | null;
+  partnerPalmCaptureLandmarks: Array<[number, number]> | null;
+  partnerPalmLandmarksSource: 'mediapipe' | 'roi_estimate' | null;
   partnerPalmAnalysis: PalmAnalysisDto | null;
   partnerPalmScanHand: PalmScanHand | null;
   partnerDisplayName?: string;
@@ -54,15 +61,24 @@ type SessionStore = {
 
   setPremium: (v: boolean) => void;
   setEnteredMain: (v: boolean) => void;
-  setProfileBasics: (payload: { displayName?: string; gender?: Gender }) => void;
+  setProfileBasics: (payload: { displayName?: string; gender?: Gender; avatarId?: AvatarId | null }) => void;
+  setAvatarId: (avatarId: AvatarId | null) => void;
   setReadingSeed: (seed: string) => void;
   setFocusTopics: (topics: FocusTopic[]) => void;
   setBillingPeriod: (period: BillingPeriod) => void;
   setPalmScanHand: (hand: PalmScanHand | null) => void;
 
   setPalmCaptureBase64: (payload: string | null) => void;
+  setPalmCaptureLandmarks: (
+    landmarks: Array<[number, number]> | null,
+    source?: 'mediapipe' | 'roi_estimate' | null,
+  ) => void;
   setPalmAnalysis: (payload: PalmAnalysisDto | null) => void;
   setPartnerPalmCaptureBase64: (payload: string | null) => void;
+  setPartnerPalmCaptureLandmarks: (
+    landmarks: Array<[number, number]> | null,
+    source?: 'mediapipe' | 'roi_estimate' | null,
+  ) => void;
   setPartnerPalmAnalysis: (payload: PalmAnalysisDto | null) => void;
   setPartnerPalmScanHand: (hand: PalmScanHand | null) => void;
   setPartnerDisplayName: (name: string | undefined) => void;
@@ -79,8 +95,12 @@ type SessionStore = {
 
 const emptyReadingState = {
   palmCaptureBase64: null as string | null,
+  palmCaptureLandmarks: null as Array<[number, number]> | null,
+  palmLandmarksSource: null as 'mediapipe' | 'roi_estimate' | null,
   palmAnalysis: null as PalmAnalysisDto | null,
   partnerPalmCaptureBase64: null as string | null,
+  partnerPalmCaptureLandmarks: null as Array<[number, number]> | null,
+  partnerPalmLandmarksSource: null as 'mediapipe' | 'roi_estimate' | null,
   partnerPalmAnalysis: null as PalmAnalysisDto | null,
   partnerPalmScanHand: null as PalmScanHand | null,
   partnerDisplayName: undefined as string | undefined,
@@ -102,6 +122,7 @@ export const useSessionStore = create<SessionStore>()(
 
       userDisplayName: undefined,
       userGender: undefined,
+      avatarId: undefined,
 
       readingSeed: 'stillness',
       focusTopics: [],
@@ -116,19 +137,27 @@ export const useSessionStore = create<SessionStore>()(
 
       setPremium: (hasUnlockedPremium) => set({ hasUnlockedPremium }),
       setEnteredMain: (hasEnteredMain) => set({ hasEnteredMain }),
-      setProfileBasics: ({ displayName, gender }) =>
+      setProfileBasics: ({ displayName, gender, avatarId }) =>
         set({
           userDisplayName: displayName ?? _get().userDisplayName,
           userGender: gender ?? _get().userGender,
+          ...(avatarId !== undefined
+            ? { avatarId: avatarId ?? undefined }
+            : {}),
         }),
+      setAvatarId: (avatarId) => set({ avatarId: avatarId ?? undefined }),
       setReadingSeed: (readingSeed) => set({ readingSeed }),
       setFocusTopics: (topics) => set({ focusTopics: topics }),
       setBillingPeriod: (billingPeriod) => set({ billingPeriod }),
       setPalmScanHand: (palmScanHand) => set({ palmScanHand }),
 
       setPalmCaptureBase64: (payload) => set({ palmCaptureBase64: payload }),
+      setPalmCaptureLandmarks: (landmarks, source = null) =>
+        set({ palmCaptureLandmarks: landmarks, palmLandmarksSource: source }),
       setPalmAnalysis: (payload) => set({ palmAnalysis: payload }),
       setPartnerPalmCaptureBase64: (payload) => set({ partnerPalmCaptureBase64: payload }),
+      setPartnerPalmCaptureLandmarks: (landmarks, source = null) =>
+        set({ partnerPalmCaptureLandmarks: landmarks, partnerPalmLandmarksSource: source }),
       setPartnerPalmAnalysis: (payload) => set({ partnerPalmAnalysis: payload }),
       setPartnerPalmScanHand: (partnerPalmScanHand) => set({ partnerPalmScanHand }),
       setPartnerDisplayName: (partnerDisplayName) => set({ partnerDisplayName }),
@@ -153,6 +182,7 @@ export const useSessionStore = create<SessionStore>()(
           hasEnteredMain: false,
           userDisplayName: undefined,
           userGender: undefined,
+          avatarId: undefined,
           readingSeed: 'stillness',
           focusTopics: [],
           billingPeriod: 'annual',
@@ -173,7 +203,7 @@ export const useSessionStore = create<SessionStore>()(
       skipHydration: true,
       storage: createJSONStorage(() => persistentStorage),
       merge: (persisted, current) => {
-        const saved = persisted as Partial<SessionStore>;
+        const saved = (persisted ?? {}) as Partial<SessionStore>;
         return {
           ...current,
           ...saved,
@@ -199,6 +229,7 @@ export const useSessionStore = create<SessionStore>()(
         hasEnteredMain: state.hasEnteredMain,
         userDisplayName: state.userDisplayName,
         userGender: state.userGender,
+        avatarId: state.avatarId,
         readingSeed: state.readingSeed,
         focusTopics: state.focusTopics,
         billingPeriod: state.billingPeriod,

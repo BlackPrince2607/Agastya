@@ -12,22 +12,30 @@ import { restoreSessionFromServer } from '@/services/sessionRestore';
 import { bootstrapIdentity } from '@/services/identity';
 import { requestNotificationPermission } from '@/services/notifications';
 import { isApiConfigured } from '@/services/env';
+import { getSupabase } from '@/services/supabase';
 import { useSessionStore } from '@/store/sessionStore';
 import { deferRouterReplace, resetAppNavigation } from '@/utils/routerDefer';
+import { hasPremiumAccess, previewReportHref } from '@/utils/premiumAccess';
 
 export function hasRitualReading(): boolean {
   const s = useSessionStore.getState();
   return Boolean(s.previewReading || s.fullReading || s.palmAnalysis);
 }
 
-export type EnterMainResult = 'ok' | 'need_sign_in' | 'need_ritual';
+export type EnterMainResult = 'ok' | 'need_sign_in' | 'need_ritual' | 'need_premium';
 
 /** Sync gate from persisted local state — safe on cold start (no Supabase storage read). */
 export function canEnterMainAppSync(): EnterMainResult {
-  if (requiresSupabaseSignIn()) {
-    return useSessionStore.getState().supabaseUserId ? 'ok' : 'need_sign_in';
+  if (requiresSupabaseSignIn() && !useSessionStore.getState().supabaseUserId) {
+    return 'need_sign_in';
   }
-  return hasRitualReading() ? 'ok' : 'need_ritual';
+  if (!hasRitualReading()) {
+    return 'need_ritual';
+  }
+  if (!hasPremiumAccess()) {
+    return 'need_premium';
+  }
+  return 'ok';
 }
 
 /** Whether the user has met requirements to access the main app. */
@@ -61,12 +69,8 @@ export function resolveOnboardingHref(): Href {
   return '/onboarding/palm-scan';
 }
 
-/** @deprecated Use resolveOnboardingHref — kept for call sites being migrated. */
+/** @deprecated Use resolveOnboardingHref */
 export function resolveResumeHref(): Href {
-  const s = useSessionStore.getState();
-  if (s.hasEnteredMain) {
-    return '/(main)/home';
-  }
   return resolveOnboardingHref();
 }
 
@@ -75,34 +79,32 @@ export function resolveResumeHref(): Href {
  * (account is the hub when profile is done but reading is missing).
  */
 export function resolveSignedInHrefSync(): Href {
-  const gate = canEnterMainAppSync();
-  if (gate === 'ok') {
-    useSessionStore.getState().setEnteredMain(true);
-    void requestNotificationPermission();
-    return '/(main)/home';
-  }
-
   const s = useSessionStore.getState();
-  if (s.supabaseUserId) {
-    useSessionStore.getState().setEnteredMain(true);
-    void requestNotificationPermission();
-    return '/(main)/home';
+
+  if (!hasRitualReading()) {
+    if (!s.userDisplayName) {
+      return '/onboarding';
+    }
+    if (!s.userGender) {
+      return '/onboarding/profile';
+    }
+    if (s.focusTopics.length === 0) {
+      return '/onboarding/goals';
+    }
+    return '/onboarding/account';
   }
 
-  if (hasRitualReading()) {
-    return '/onboarding/report-preview';
-  }
-  if (!s.userDisplayName) {
-    return '/onboarding';
-  }
-  if (!s.userGender) {
-    return '/onboarding/profile';
-  }
-  if (s.focusTopics.length === 0) {
-    return '/onboarding/goals';
+  if (!hasPremiumAccess()) {
+    return previewReportHref();
   }
 
-  return '/onboarding/account';
+  if (requiresSupabaseSignIn() && !s.supabaseUserId) {
+    return '/onboarding/account';
+  }
+
+  useSessionStore.getState().setEnteredMain(true);
+  void requestNotificationPermission();
+  return '/(main)/home';
 }
 
 /** When main/report gates block access, pick a safe onboarding target. */
@@ -111,7 +113,7 @@ export function resolveBlockedAppHref(isSignedIn: boolean): Href {
     return resolveSignedInHrefSync();
   }
   if (hasRitualReading()) {
-    return '/onboarding/report-preview';
+    return hasPremiumAccess() ? '/(main)/home' : previewReportHref();
   }
   return resolveOnboardingHref();
 }
@@ -149,7 +151,22 @@ export function syncCloudSessionInBackground(): void {
 /** Sync Supabase session into the store before routing decisions. */
 async function syncAuthFromSupabase(): Promise<boolean> {
   if (!requiresSupabaseSignIn()) return false;
-  const auth = await readAuthSession();
+
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      const { data } = await supabase.auth.getSession();
+      const userId = data.session?.user?.id;
+      if (userId) {
+        syncAuthUserToStore(userId);
+        return true;
+      }
+    } catch {
+      /* fall through to listener probe */
+    }
+  }
+
+  const auth = await readAuthSession(2_000);
   if (auth.isSignedIn && auth.userId) {
     syncAuthUserToStore(auth.userId);
     return true;
@@ -159,28 +176,46 @@ async function syncAuthFromSupabase(): Promise<boolean> {
 }
 
 /** Sync auth + cloud, then return destination for a signed-in user. */
-export async function resolveAuthenticatedHref(): Promise<Href> {
+function isPremiumBlockedReturnHref(href: Href): boolean {
+  const path = typeof href === 'string' ? href : href.pathname ?? '';
+  return (
+    isMainTabDeepLink(path) ||
+    path === '/report' ||
+    path.startsWith('/report/') ||
+    path === '/(main)/edit-profile'
+  );
+}
+
+export function resolveAuthenticatedHref(knownUserId?: string | null): Href {
   const returnHref = consumePostSignInReturn();
   if (returnHref) {
+    if (!hasPremiumAccess() && isPremiumBlockedReturnHref(returnHref)) {
+      return previewReportHref();
+    }
     return returnHref;
   }
 
-  await bootstrapIdentity();
-  const auth = await readAuthSession();
-  if (auth.userId) {
-    syncAuthUserToStore(auth.userId);
+  void bootstrapIdentity().catch(() => {});
+
+  const userId = knownUserId ?? useSessionStore.getState().supabaseUserId;
+  if (userId) {
+    syncAuthUserToStore(userId);
   }
 
-  if (auth.isSignedIn) {
-    // Signing in is an explicit intent to load this user's cloud data — force restore
-    // even if `skipCloudRestore` was left true by a prior "Start fresh" / "Replay setup".
+  void readAuthSession(1500)
+    .then((auth) => {
+      if (auth.userId) syncAuthUserToStore(auth.userId);
+    })
+    .catch(() => {});
+
+  if (userId || useSessionStore.getState().supabaseUserId) {
     if (useSessionStore.getState().skipCloudRestore) {
       useSessionStore.getState().setSkipCloudRestore(false);
     }
-    await ensureCloudStateSynced(true);
-    if (auth.userId) {
-      syncAuthUserToStore(auth.userId);
-    }
+    void ensureCloudStateSynced(true);
+    void import('@/services/authMerge').then(({ ensureSessionMerged }) => {
+      void ensureSessionMerged().catch(() => {});
+    });
   }
 
   const href = resolveSignedInHrefSync();
@@ -191,8 +226,8 @@ export async function resolveAuthenticatedHref(): Promise<Href> {
 }
 
 /** Sync auth + return the correct destination after sign-in (no navigation). */
-export async function resolvePostSignInHref(): Promise<Href> {
-  return resolveAuthenticatedHref();
+export function resolvePostSignInHref(knownUserId?: string | null): Href {
+  return resolveAuthenticatedHref(knownUserId);
 }
 
 export async function tryEnterMainApp(): Promise<EnterMainResult> {
@@ -210,6 +245,8 @@ export function enterMainApp() {
   void tryEnterMainApp().then((result) => {
     if (result === 'need_sign_in') {
       deferRouterReplace('/onboarding/account');
+    } else if (result === 'need_premium') {
+      deferRouterReplace(previewReportHref());
     } else if (result === 'need_ritual') {
       const href =
         useSessionStore.getState().supabaseUserId
@@ -270,7 +307,10 @@ export async function prepareReturningUser(forceRestore = false): Promise<Href> 
     if (gate === 'need_sign_in') {
       return '/onboarding/account';
     }
-    return hasRitualReading() ? '/onboarding/report-preview' : resolveOnboardingHref();
+    if (gate === 'need_premium' && hasRitualReading()) {
+      return previewReportHref();
+    }
+    return hasRitualReading() ? previewReportHref() : resolveOnboardingHref();
   }
 
   if (hasRitualReading()) {
@@ -283,24 +323,16 @@ export async function prepareReturningUser(forceRestore = false): Promise<Href> 
     if (gate === 'need_sign_in') {
       return '/onboarding/account';
     }
-    return '/onboarding/report-preview';
+    return previewReportHref();
   }
 
   return resolveOnboardingHref();
 }
 
 /** Route after OAuth, email, or magic-link sign-in. */
-export async function routeAfterSignInIntent(): Promise<void> {
-  const href = await resolvePostSignInHref();
-  if (__DEV__) {
-    console.log('[Agastya auth] post-sign-in route →', href);
-  }
-  if (href === '/(main)/home') {
-    useSessionStore.getState().setEnteredMain(true);
-    resetAppNavigation(href);
-    return;
-  }
-  deferRouterReplace(href);
+export async function routeAfterSignInIntent(knownUserId?: string | null): Promise<void> {
+  const { completeSignIn } = await import('@/services/authCoordinator');
+  await completeSignIn({ userId: knownUserId });
 }
 
 type AccountBackParams = {
@@ -354,6 +386,10 @@ export async function navigateFromNotification(link: string): Promise<void> {
     const gate = await tryEnterMainApp();
     if (gate === 'need_sign_in') {
       deferRouterReplace('/onboarding/account');
+      return;
+    }
+    if (gate === 'need_premium') {
+      deferRouterReplace(previewReportHref());
       return;
     }
     if (gate === 'need_ritual') {

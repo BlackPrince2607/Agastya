@@ -40,14 +40,20 @@ module.exports = {
         success: '#22d3ee',
         'success-muted': 'rgba(34,211,238,0.12)',
         'on-error': '#690005',
-        // Brand signal accents (purple-led)
+        // Brand signal accents (purple-led) — keep in sync with constants/theme.ts
         signal: '#c084fc',
+        cyan: '#22d3ee',
         nebula: '#68577e',
         magenta: '#e879f9',
         purple: '#a855f7',
         'line-life': '#a855f7',
         'line-heart': '#f472b6',
         'line-head': '#22d3ee',
+        love: '#f472b6',
+        career: '#60a5fa',
+        money: '#fbbf24',
+        growth: '#c084fc',
+        health: '#86efac',
 
         // ---- Legacy namespaces (retuned to Cosmic Essence) ----
         md: {

@@ -3,12 +3,10 @@
 export type ApiHealthSnapshot = {
   ok: boolean;
   supabase: boolean;
-  /** @deprecated use llm */
-  groq: boolean;
-  /** @deprecated use palmVision */
-  palmGroq: boolean;
   llm: boolean;
   palmVision: boolean;
+  chatModel?: string | null;
+  visionModel?: string | null;
   checkedAt: number;
 };
 
@@ -16,20 +14,18 @@ let snapshot: ApiHealthSnapshot | null = null;
 
 export function setApiHealth(data: {
   supabase?: boolean;
-  groq?: boolean;
-  palm_groq?: boolean;
   llm?: boolean;
   palm_vision?: boolean;
+  chat_model?: string | null;
+  vision_model?: string | null;
 }) {
-  const llm = Boolean(data.llm ?? data.groq);
-  const palmVision = Boolean(data.palm_vision ?? data.palm_groq);
   snapshot = {
     ok: true,
     supabase: Boolean(data.supabase),
-    groq: llm,
-    palmGroq: palmVision,
-    llm,
-    palmVision,
+    llm: Boolean(data.llm),
+    palmVision: Boolean(data.palm_vision),
+    chatModel: data.chat_model ?? null,
+    visionModel: data.vision_model ?? null,
     checkedAt: Date.now(),
   };
 }
@@ -38,8 +34,6 @@ export function setApiHealthFailed() {
   snapshot = {
     ok: false,
     supabase: false,
-    groq: false,
-    palmGroq: false,
     llm: false,
     palmVision: false,
     checkedAt: Date.now(),

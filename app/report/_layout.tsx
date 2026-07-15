@@ -1,6 +1,7 @@
 import { Redirect, Stack } from 'expo-router';
 import { useEffect } from 'react';
 import { View } from 'react-native';
+import { colors } from '@/constants/theme';
 
 import { LoadingBlock } from '@/components/feedback';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
@@ -10,6 +11,7 @@ import { requiresSupabaseSignIn } from '@/services/authConfig';
 import { leaveMainAppForOnboarding, syncAuthUserToStore } from '@/services/authSession';
 import { useSessionStore } from '@/store/sessionStore';
 import { resolveBlockedAppHref } from '@/utils/navigationFlow';
+import { hasPremiumAccess, previewReportHref } from '@/utils/premiumAccess';
 
 /** Pushed report stack: detailed report (tabbed) + compatibility. */
 export default function ReportLayout() {
@@ -33,6 +35,10 @@ export default function ReportLayout() {
         </View>
       </CosmicScreen>
     );
+  }
+
+  if (!hasPremiumAccess()) {
+    return <Redirect href={previewReportHref()} />;
   }
 
   if (!entered) {
@@ -59,7 +65,7 @@ export default function ReportLayout() {
       screenOptions={{
         headerShown: false,
         animation: 'slide_from_right',
-        contentStyle: { backgroundColor: '#0f0e10' },
+        contentStyle: { backgroundColor: colors.surfaceLowest },
       }}
     />
   );

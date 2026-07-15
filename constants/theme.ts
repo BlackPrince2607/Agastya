@@ -59,8 +59,13 @@ export const colors = {
 
 /** Typography scale — sizes in px; pair with font-headline / font-body / font-label. */
 export const typography = {
-  hero: 28,
+  /** Home greeting / brand heroes */
+  hero: 34,
   title: 26,
+  /** Focal card titles */
+  cardTitle: 24,
+  /** Section titles */
+  section: 20,
   headline: 22,
   subhead: 18,
   body: 15,
@@ -84,6 +89,41 @@ export const iconSize = {
   md: 20,
   lg: 24,
   xl: 28,
+} as const;
+
+/**
+ * Soft elevation / aura glow — prefer these over ad-hoc shadowStyle objects.
+ * Pair with `shadow-aura` / NativeWind utility classes where possible.
+ */
+export const elevation = {
+  none: {
+    shadowColor: 'transparent',
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 0,
+  },
+  card: {
+    shadowColor: '#000000',
+    shadowOpacity: 0.22,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+  },
+  aura: {
+    shadowColor: colors.purple,
+    shadowOpacity: 0.28,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
+  },
+  cta: {
+    shadowColor: colors.purple,
+    shadowOpacity: 0.42,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 14 },
+    elevation: 14,
+  },
 } as const;
 
 /** LinearGradient palettes (arrays consumed by expo-linear-gradient). */
