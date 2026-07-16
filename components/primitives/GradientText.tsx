@@ -34,10 +34,13 @@ export function GradientText({
           textStyle,
           {
             backgroundImage: gradientCss(gradient),
-            // RN Web passes these through to the DOM for gradient-filled text.
             backgroundClip: 'text',
             WebkitBackgroundClip: 'text',
             color: 'transparent',
+            // Letter-spacing + background-clip often crops uppercase glyph tops on web.
+            paddingTop: 3,
+            paddingBottom: 1,
+            overflow: 'visible',
           } as TextStyle,
         ]}>
         {children}

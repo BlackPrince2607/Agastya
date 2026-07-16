@@ -24,7 +24,13 @@ async def _hydrate(session_id: str, settings: Settings) -> None:
     validate_session_id(session_id)
     if has_bucket(session_id):
         return
-    loaded = await session_repository.load(session_id, settings)
+    try:
+        loaded = await session_repository.load(session_id, settings)
+    except session_repository.SupabaseUnavailableError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Session storage temporarily unavailable. Please try again.",
+        ) from exc
     if loaded:
         set_bucket(session_id, loaded)
     else:
@@ -55,6 +61,7 @@ async def create_checkout_session(
         session_id=body.session_id,
         device_install_id=body.device_install_id,
         stored_device_id=bkt.meta.get("deviceInstallId"),
+        allow_rebind=False,
     )
     if not bkt.meta.get("deviceInstallId"):
         bkt.meta["deviceInstallId"] = body.device_install_id

@@ -1,10 +1,10 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Image, Pressable, Text, View, useWindowDimensions } from 'react-native';
+import { Image, Text, View, useWindowDimensions } from 'react-native';
 import { colors } from '@/constants/theme';
 
 import { DevPremiumPanel } from '@/components/dev/DevPremiumPanel';
-import { EmptyState } from '@/components/feedback';
+import { EmptyState, LoadingBlock } from '@/components/feedback';
 import { BackButton } from '@/components/layout/BackButton';
 import { StackScroll } from '@/components/layout/StackScroll';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
@@ -12,6 +12,8 @@ import { AuraNebulaCard, GradientText, InsightCard, MetricDonut } from '@/compon
 import { PalmLineCard, PredictionCard, StrengthDots } from '@/components/report';
 import { PalmLineOverlay, palmLineLegend } from '@/components/report/PalmLineOverlay';
 import { AuraChip, GlassCard, Icon, PrimaryButton } from '@/components/ui';
+import { PressableScale } from '@/components/ui/PressableScale';
+import { REPORT_EMPTY, REPORT_PREDICTIONS_LOADING } from '@/constants/userCopy';
 import { fetchPredictions } from '@/services/agastyaApi';
 import { buildSimulatedReading } from '@/services/simulatedReading';
 import { useSessionStore } from '@/store/sessionStore';
@@ -58,6 +60,7 @@ export default function ReportScreen() {
   const initialTab = (TABS.find((t) => t.id === tab)?.id ?? 'overview') as ReportTab;
   const [active, setActive] = useState<ReportTab>(initialTab);
   const [period, setPeriod] = useState<PredictionPeriod>('month');
+  const [predictionsLoading, setPredictionsLoading] = useState(false);
   const { width: windowWidth } = useWindowDimensions();
   const overlayWidth = Math.min(windowWidth - 48, 320);
   const overlayHeight = Math.round(overlayWidth * 0.7);
@@ -118,6 +121,7 @@ export default function ReportScreen() {
     if (active !== 'predictions' || !periodUnlocked) return;
     if (predictionsCache?.[period] || !sessionId || !palmAnalysis) return;
     let alive = true;
+    setPredictionsLoading(true);
     void (async () => {
       try {
         const result = await withApiRetry(() =>
@@ -132,6 +136,8 @@ export default function ReportScreen() {
         if (alive) setPredictions(period, result);
       } catch {
         // Local fallback already renders; ignore network errors silently.
+      } finally {
+        if (alive) setPredictionsLoading(false);
       }
     })();
     return () => {
@@ -147,9 +153,9 @@ export default function ReportScreen() {
             <ReportHeader />
             <EmptyState
               icon="description"
-              title="Your palm report isn’t ready yet"
-              body="Complete your palm scan to unlock your report and scores."
-              actionLabel="Start palm scan"
+              title={REPORT_EMPTY.title}
+              body={REPORT_EMPTY.body}
+              actionLabel={REPORT_EMPTY.action}
               onAction={() => router.push('/onboarding/palm-scan')}
             />
           </View>
@@ -166,12 +172,12 @@ export default function ReportScreen() {
         <View className="w-full gap-5">
           <ReportHeader />
 
-          {__DEV__ ? <DevPremiumPanel /> : null}
+          <DevPremiumPanel />
 
           {/* Pill tab bar */}
           <View className="w-full flex-row flex-wrap gap-2">
             {TABS.map((t) => (
-              <Pressable key={t.id} onPress={() => setActive(t.id)} className="active:opacity-80">
+              <PressableScale key={t.id} onPress={() => setActive(t.id)} scaleTo={0.97} accessibilityLabel={t.label}>
                 <View
                   className={`rounded-pill border px-5 py-2 ${
                     active === t.id ? 'border-transparent bg-primary/15' : 'border-white/12 bg-white/[0.04]'
@@ -182,7 +188,7 @@ export default function ReportScreen() {
                     {t.label}
                   </Text>
                 </View>
-              </Pressable>
+              </PressableScale>
             ))}
           </View>
 
@@ -270,7 +276,7 @@ export default function ReportScreen() {
                           key={item.key}
                           className="flex-row items-center gap-1 rounded-full border border-white/15 bg-black/55 px-2 py-1">
                           <View className="h-2 w-2 rounded-full" style={{ backgroundColor: item.color }} />
-                          <Text className="font-label text-[8px] uppercase tracking-[0.18em] text-white/80">
+                          <Text className="font-label text-[10px] uppercase tracking-[0.14em] text-white/85">
                             {item.label}
                           </Text>
                         </View>
@@ -313,7 +319,10 @@ export default function ReportScreen() {
               </GlassCard>
 
               <GlassCard muted className="w-full p-5" innerClassName="gap-3">
-                <Text className="font-headline-md text-[18px] text-on-surface">Shadow Traits</Text>
+                <Text className="font-headline-md text-[18px] text-on-surface">Growth edges</Text>
+                <Text className="font-body text-[13px] leading-5 text-on-surface-variant">
+                  Patterns worth watching with care — not flaws, invitations.
+                </Text>
                 <View className="flex-row flex-wrap gap-2">
                   {persona.shadowTraits.map((t) => (
                     <AuraChip key={t} label={t} tint={colors.love} />
@@ -322,7 +331,7 @@ export default function ReportScreen() {
               </GlassCard>
 
               <GlassCard muted className="w-full p-5" innerClassName="gap-4">
-                <Text className="font-headline-md text-[18px] text-on-surface">Your Strengths</Text>
+                <Text className="font-headline-md text-[18px] text-on-surface">Your strengths</Text>
                 {persona.strengths.map((s) => (
                   <StrengthDots key={s.label} label={s.label} value={s.value} />
                 ))}
@@ -334,7 +343,7 @@ export default function ReportScreen() {
             <View className="w-full gap-4">
               <View className="w-full flex-row gap-2">
                 {PREDICTION_PERIODS.map((p) => (
-                  <Pressable key={p.id} onPress={() => setPeriod(p.id)} className="active:opacity-80">
+                  <PressableScale key={p.id} onPress={() => setPeriod(p.id)} scaleTo={0.97} accessibilityLabel={p.label}>
                     <View
                       className={`rounded-pill border px-4 py-2 ${
                         period === p.id ? 'border-transparent bg-primary/15' : 'border-white/12 bg-white/[0.04]'
@@ -345,9 +354,13 @@ export default function ReportScreen() {
                         {p.label}
                       </Text>
                     </View>
-                  </Pressable>
+                  </PressableScale>
                 ))}
               </View>
+
+              {predictionsLoading && !predictionsCache?.[period] ? (
+                <LoadingBlock variant="skeleton" compact message={REPORT_PREDICTIONS_LOADING} />
+              ) : null}
 
               {predictions.items.map((item) => (
                 <PredictionCard
@@ -362,10 +375,10 @@ export default function ReportScreen() {
               {!periodUnlocked ? (
                 <GlassCard glow className="w-full p-5" innerClassName="items-center gap-3">
                   <Text className="text-center font-headline-md text-[18px] text-on-surface">
-                    Unlock longer-range predictions
+                    Unlock longer-range forecasts
                   </Text>
                   <Text className="text-center font-body text-[14px] text-on-surface-variant">
-                    Go premium to reveal your 3-month and 1-year forecasts.
+                    Go Pro to reveal your 3-month and 1-year outlook.
                   </Text>
                   <PrimaryButton
                     variant="cta"
@@ -400,7 +413,7 @@ function UpgradeBanner() {
     <GlassCard glow className="w-full p-5" innerClassName="items-center gap-3">
       <Text className="text-center font-headline-md text-[18px] text-on-surface">Preview mode</Text>
       <Text className="text-center font-body text-[14px] text-on-surface-variant">
-        Upgrade for full scores, every chapter, and deeper predictions.
+        Upgrade for full scores, every chapter, and deeper forecasts.
       </Text>
       <PrimaryButton
         variant="cta"

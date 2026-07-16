@@ -155,7 +155,7 @@ async def palm_analysis_from_vision(
             messages=messages,
             response_format={"type": "json_object"},
             temperature=0.35,
-            max_tokens=1200,
+            max_tokens=600,
             timeout_seconds=settings.openrouter_vision_timeout_seconds,
         )
         if completion is None:

@@ -4,7 +4,8 @@ import type { HandLandmark } from '@/utils/palmLandmarks';
 import type { PalmAnalysisDto } from '@/types/palmAnalysis';
 import type { PredictionPeriod, PredictionsResponse } from '@/types/predictions';
 
-import { ERRORS, mapApiError } from '@/services/apiErrors';
+import { ERRORS, ApiHttpError, mapApiError } from '@/services/apiErrors';
+import { AnalyticsEvent, trackOncePerDay } from '@/services/analytics';
 import { withApiRetry } from '@/utils/apiRetry';
 import { AGASTYA_API_ROOT, apiUrl, getApiHostLabel, isApiConfigured, isMisconfiguredProductionApi } from '@/services/env';
 import { getSupabaseAccessToken } from '@/services/supabase';
@@ -115,7 +116,10 @@ async function getJson<T>(path: string, signal?: AbortSignal, auth = false): Pro
   });
   if (!res.ok) {
     const detail = await res.text();
-    throw new Error(mapApiError(detail));
+    if (__DEV__) {
+      console.warn(`[Agastya API] ${path} → ${res.status}`, detail.slice(0, 400));
+    }
+    throw new ApiHttpError(mapApiError(detail), res.status, detail);
   }
   return res.json() as Promise<T>;
 }
@@ -133,12 +137,23 @@ export type SessionBootstrapDto = {
   fullReport?: Record<string, unknown> | null;
   isPremium?: boolean;
   chatTail?: Array<{ role: string; content: string }>;
+  dailyContext?: {
+    date?: string;
+    title?: string;
+    body?: string;
+    focusTheme?: string | null;
+  } | null;
+  weeklyContext?: {
+    weekKey?: string;
+    title?: string;
+    body?: string;
+    topTheme?: string | null;
+    consistencyNote?: string | null;
+  } | null;
 };
 
-export async function fetchSessionBootstrap(sessionId: string, deviceInstallId?: string | null) {
-  const deviceQuery = deviceInstallId
-    ? `&deviceInstallId=${encodeURIComponent(deviceInstallId)}`
-    : '';
+export async function fetchSessionBootstrap(sessionId: string, deviceInstallId: string) {
+  const deviceQuery = `&deviceInstallId=${encodeURIComponent(deviceInstallId)}`;
   return getJson<SessionBootstrapDto>(
     `/v1/sessions/bootstrap?sessionId=${encodeURIComponent(sessionId)}${deviceQuery}`,
   );
@@ -175,7 +190,10 @@ async function postJson<T>(
   });
   if (!res.ok) {
     const detail = await res.text();
-    throw new Error(mapApiError(detail));
+    if (__DEV__) {
+      console.warn(`[Agastya API] ${path} → ${res.status}`, detail.slice(0, 400));
+    }
+    throw new ApiHttpError(mapApiError(detail), res.status, detail);
   }
   return res.json() as Promise<T>;
 }
@@ -191,7 +209,10 @@ async function patchJson<T>(path: string, body: unknown, signal?: AbortSignal): 
   });
   if (!res.ok) {
     const detail = await res.text();
-    throw new Error(mapApiError(detail));
+    if (__DEV__) {
+      console.warn(`[Agastya API] ${path} → ${res.status}`, detail.slice(0, 400));
+    }
+    throw new ApiHttpError(mapApiError(detail), res.status, detail);
   }
   return res.json() as Promise<T>;
 }
@@ -238,7 +259,7 @@ export async function patchSessionProfile(body: {
 export async function mergeSessions(body: {
   anonymousSessionId: string;
   supabaseUserId: string;
-  deviceInstallId?: string;
+  deviceInstallId: string;
 }) {
   return postJson<{ ok: boolean; linked: boolean }>(
     '/v1/sessions/merge',
@@ -344,7 +365,7 @@ export async function chatWithGuide(body: {
   if (!deviceInstallId) {
     throw new Error('Device identity is not ready yet. Please try again.');
   }
-  return postJson<{ reply: string; suggestions?: string[] }>(
+  return postJson<{ reply: string; suggestions?: string[]; memoryChanged?: boolean }>(
     '/v1/chat',
     {
       ...body,
@@ -355,19 +376,135 @@ export async function chatWithGuide(body: {
   );
 }
 
-export async function fetchDailyTasks(body: {
+export async function fetchDailyGuidance(body: {
   sessionId: string;
   deviceInstallId?: string;
   palmAnalysis: PalmAnalysisDto;
+  focusTopics?: string[];
+  streak?: number;
 }) {
   const deviceInstallId = body.deviceInstallId ?? useSessionStore.getState().deviceInstallId;
   if (!deviceInstallId) {
     throw new Error('Device identity is not ready yet. Please try again.');
   }
-  return postJson<{ tasks: unknown[]; variant: string }>('/v1/tasks/daily', {
-    ...body,
+  // LLM-backed; default 8s abort is too short vs OpenRouter (up to ~60s server-side).
+  return postJson<{
+    title: string;
+    body: string;
+    focusTheme?: string | null;
+    cached?: boolean;
+    date?: string | null;
+    continueHint?: string | null;
+    consistencyNote?: string | null;
+  }>(
+    '/v1/insights/daily',
+    {
+      sessionId: body.sessionId,
+      deviceInstallId,
+      palmAnalysis: body.palmAnalysis,
+      focusTopics: body.focusTopics ?? [],
+      streak: body.streak,
+    },
+    false,
+    { timeoutMs: 45_000 },
+  );
+}
+
+export async function submitDailyReflection(body: {
+  sessionId: string;
+  deviceInstallId?: string;
+  note?: string;
+}) {
+  const deviceInstallId = body.deviceInstallId ?? useSessionStore.getState().deviceInstallId;
+  if (!deviceInstallId) {
+    throw new Error('Device identity is not ready yet. Please try again.');
+  }
+  const result = await postJson<{ ok: boolean; persisted?: boolean }>('/v1/insights/reflect', {
+    sessionId: body.sessionId,
     deviceInstallId,
+    note: body.note,
   });
+  trackOncePerDay(AnalyticsEvent.REFLECTION_SUBMITTED, {
+    persisted: Boolean(result.persisted),
+  });
+  return result;
+}
+
+export async function fetchWeeklySummary(body: {
+  sessionId: string;
+  deviceInstallId?: string;
+  palmAnalysis: PalmAnalysisDto;
+  focusTopics?: string[];
+  streak?: number;
+  ritualsCompletedTotal?: number;
+}) {
+  const deviceInstallId = body.deviceInstallId ?? useSessionStore.getState().deviceInstallId;
+  if (!deviceInstallId) {
+    throw new Error('Device identity is not ready yet. Please try again.');
+  }
+  return postJson<{
+    title: string;
+    body: string;
+    weekKey: string;
+    cached?: boolean;
+    topTheme?: string | null;
+    consistencyNote?: string | null;
+    currentChapter?: string | null;
+  }>(
+    '/v1/insights/weekly',
+    {
+      sessionId: body.sessionId,
+      deviceInstallId,
+      palmAnalysis: body.palmAnalysis,
+      focusTopics: body.focusTopics ?? [],
+      streak: body.streak,
+      ritualsCompletedTotal: body.ritualsCompletedTotal,
+    },
+    false,
+    { timeoutMs: 45_000 },
+  );
+}
+
+export async function fetchJourneyTimeline(body: {
+  sessionId: string;
+  deviceInstallId?: string;
+  streak?: number;
+  ritualsCompletedTotal?: number;
+}) {
+  const deviceInstallId = body.deviceInstallId ?? useSessionStore.getState().deviceInstallId;
+  if (!deviceInstallId) {
+    throw new Error('Device identity is not ready yet. Please try again.');
+  }
+  return postJson<{
+    items: Array<{ id: string; label: string; detail: string; at?: string | null }>;
+  }>('/v1/insights/journey', {
+    sessionId: body.sessionId,
+    deviceInstallId,
+    streak: body.streak,
+    ritualsCompletedTotal: body.ritualsCompletedTotal,
+  });
+}
+
+export async function fetchDailyTasks(body: {
+  sessionId: string;
+  deviceInstallId?: string;
+  palmAnalysis: PalmAnalysisDto;
+  focusTopics?: string[];
+  streak?: number;
+}) {
+  const deviceInstallId = body.deviceInstallId ?? useSessionStore.getState().deviceInstallId;
+  if (!deviceInstallId) {
+    throw new Error('Device identity is not ready yet. Please try again.');
+  }
+  return postJson<{ tasks: unknown[]; variant: string; focusTheme?: string | null }>(
+    '/v1/tasks/daily',
+    {
+      ...body,
+      deviceInstallId,
+    },
+    false,
+    { timeoutMs: 45_000 },
+  );
 }
 
 export async function fetchPredictions(body: {
@@ -389,7 +526,7 @@ export async function fetchPredictions(body: {
 }
 
 export type GuideReplyResult =
-  | { ok: true; text: string; suggestions: string[] }
+  | { ok: true; text: string; suggestions: string[]; memoryChanged?: boolean }
   | { ok: false; error: string; needsPalm?: boolean; offline?: boolean };
 
 export async function requestGuideReply(
@@ -445,7 +582,7 @@ export async function requestGuideReply(
     .join('\n');
 
   try {
-    const { reply, suggestions } = await withApiRetry(() =>
+    const { reply, suggestions, memoryChanged } = await withApiRetry(() =>
       chatWithGuide({
         sessionId,
         deviceInstallId,
@@ -461,7 +598,7 @@ export async function requestGuideReply(
         reply.slice(0, 80),
       );
     }
-    return { ok: true, text: reply, suggestions: suggestions ?? [] };
+    return { ok: true, text: reply, suggestions: suggestions ?? [], memoryChanged: Boolean(memoryChanged) };
   } catch (e) {
     const msg = e instanceof Error ? e.message : ERRORS.network;
     const friendly = mapApiError(msg);

@@ -119,9 +119,20 @@ class Settings(BaseSettings):
     stripe_price_monthly: str | None = None
     stripe_price_annual: str | None = None
 
+    # Comma-separated emails that always receive is_premium (founder / testers).
+    premium_email_allowlist: str = ""
+
     # --- Sentry (optional — error tracking) ---
     sentry_dsn: str | None = None
     sentry_environment: str = "production"
+
+    @property
+    def premium_email_allowlist_set(self) -> set[str]:
+        return {
+            e.strip().lower()
+            for e in self.premium_email_allowlist.split(",")
+            if e.strip()
+        }
 
     @property
     def llm_enabled(self) -> bool:

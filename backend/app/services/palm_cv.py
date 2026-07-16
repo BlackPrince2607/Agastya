@@ -211,8 +211,9 @@ def merge_cv_into_analysis(
     """
     Attach line geometry from OpenCV crease extraction.
 
-    LLM/vision geometry is ignored. Landmark heuristics are only used when
-    allow_landmark_heuristic=True (debug).
+    LLM/vision geometry is ignored. When crease scan fails, fall back to
+    landmark-derived major-line polylines (MediaPipe anatomy), or when
+    allow_landmark_heuristic=True for any landmark set.
     """
     try:
         # Never keep model-invented geometry
@@ -223,15 +224,15 @@ def merge_cv_into_analysis(
             if crease.geometry_source == "opencv_creases" and crease.line_geometry:
                 return apply_crease_result(stripped, crease, prefer_cv_motifs=True)
 
-        if allow_landmark_heuristic:
-            geometry = extract_line_geometry(landmarks)
-            if geometry:
-                data = stripped.model_dump()
-                data["line_geometry"] = geometry
-                data["geometry_source"] = "landmark_heuristic"
-                if analysis.analysis_source in {"openrouter_vision", "dummy"}:
-                    data["analysis_source"] = "hybrid"
-                return PalmAnalysis.model_validate(data)
+        # Prefer anatomy-based overlays over an empty geometry field on real captures.
+        geometry = extract_line_geometry(landmarks)
+        if geometry and (allow_landmark_heuristic or image_base64):
+            data = stripped.model_dump()
+            data["line_geometry"] = geometry
+            data["geometry_source"] = "landmark_heuristic"
+            if analysis.analysis_source in {"openrouter_vision", "dummy"}:
+                data["analysis_source"] = "hybrid"
+            return PalmAnalysis.model_validate(data)
 
         # Failed crease scan — no overlay invention
         data = stripped.model_dump()

@@ -38,7 +38,8 @@ export const SYNC_NOTICE_FAILED =
 export const SYNC_NOTICE_MERGE_FAILED =
   "Sign-in succeeded but we couldn't link your reading to your account. Try again from Profile.";
 
-export const SAMPLE_READING_BADGE = 'Sample reading';
+export const SAMPLE_READING_BADGE =
+  'Provisional reading — analysis was unavailable, so this uses a sample pattern until you rescan';
 
 export const GUIDE_FINISH_PALM_FIRST =
   'Complete your palm reading first. Then the Guide can answer questions about your report.';
@@ -72,8 +73,8 @@ export const HOME_SHORTCUTS: HomeShortcut[] = [
   },
   {
     icon: 'check-circle-o',
-    label: 'Daily Tasks',
-    subtitle: "Complete today's rituals",
+    label: 'Daily Rituals',
+    subtitle: "Complete today’s focus",
     hint: 'Daily actions based on your reading',
     action: 'tasks',
   },
@@ -93,10 +94,23 @@ export const FALLBACK_DAILY_TASKS = [
 ];
 
 export const TASKS_EMPTY_NO_PALM = {
-  title: 'Tasks unlock after your reading',
-  body: 'Finish your palm scan to get daily actions matched to your focus areas.',
+  title: 'Rituals unlock after your reading',
+  body: 'Finish your palm scan to receive daily actions matched to your focus areas.',
   action: 'Continue setup',
 } as const;
+
+export const TASKS_LOADING = 'Preparing today’s rituals…';
+export const TASKS_ALL_DONE = 'All rituals complete';
+export const TASKS_PROGRESS_HINT = 'Open a ritual to begin, or mark it done when you finish.';
+export const TASK_DETAIL_COMPLETE = 'Mark as complete';
+export const TASK_DETAIL_COMPLETED = 'Completed';
+export const TASK_DETAIL_MISSING = {
+  title: 'Ritual not found',
+  body: 'This ritual may have refreshed for a new day. Return to today’s list to continue.',
+  action: 'Back to rituals',
+} as const;
+export const REFLECTION_COMPLETE = 'Complete reflection';
+export const REFLECTION_COMPLETED = 'Reflection saved';
 
 export const ANALYSIS_LOADING_PHRASES = [
   'Reading your palm lines',
@@ -108,6 +122,41 @@ export const ANALYSIS_LOADING_CHIPS: readonly [string, string] = [
   'Reading your palm',
   'Building your profile',
 ];
+
+export const ANALYSIS_SEAL_STATUS = 'reading';
+export const ANALYSIS_STATUS_ALMOST = 'Almost ready…';
+export const ANALYSIS_STATUS_READY = 'Your reading is ready';
+
+export const CAMERA_PERMISSION_LOADING = 'Preparing camera…';
+export const GALLERY_OPENING = 'Opening gallery…';
+
+export const HOME_GUIDANCE_LOADING = "Gathering today’s guidance…";
+export const HOME_WEEKLY_LOADING = 'Writing your week…';
+export const HOME_CTA_READING = 'Open your reading';
+export const HOME_CTA_BEGIN = 'Begin your reading';
+
+export const REPORT_HYDRATING = 'Restoring your reading…';
+export const REPORT_PREDICTIONS_LOADING = 'Shaping your forecast…';
+export const REPORT_EMPTY = {
+  title: 'Your palm report isn’t ready yet',
+  body: 'Complete your palm scan to unlock your report and scores.',
+  action: 'Start palm scan',
+} as const;
+
+export const PROFILE_JOURNEY_LOADING = 'Gathering your journey…';
+export const PROFILE_TIMELINE_EMPTY = {
+  title: 'Your journey begins here',
+  body: 'Complete rituals and return each day — moments from your path will collect here.',
+} as const;
+export const PROFILE_WEEKLY_EMPTY = {
+  title: 'Your week is still forming',
+  body: 'Keep a few rituals going. A short summary appears when there is enough to reflect on.',
+} as const;
+
+export const CHAT_PLACEHOLDER_EMPTY = 'Ask about your reading…';
+export const CHAT_PLACEHOLDER_FOLLOW = 'Ask a follow-up…';
+export const GUIDE_INTRO =
+  'Ask me about your palm reading, your focus areas, or what today might hold. What is on your mind?';
 
 export const PALM_CAPTURE_FAILED =
   "We couldn't capture your palm. Try again in better light with your hand steady.";
@@ -124,6 +173,7 @@ export const PALM_REVIEW_ANALYZING = 'Preparing…';
 export const PALM_CAMERA_COACHING =
   'Ask someone to hold the phone, or rest it and photograph your other hand.';
 export const PALM_CAMERA_CAPTURING = 'Capturing…';
+export const PALM_CAMERA_CENTER = 'Center your hand inside the frame';
 
 export const PALM_RETAKE_DEFAULT =
   "We couldn't read that palm clearly. Try brighter light and an open palm.";

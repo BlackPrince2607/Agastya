@@ -5,6 +5,7 @@ import { colors } from '@/constants/theme';
 
 import { LoadingBlock } from '@/components/feedback';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
+import { REPORT_HYDRATING } from '@/constants/userCopy';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { usePersistHydration } from '@/hooks/usePersistHydration';
 import { requiresSupabaseSignIn } from '@/services/authConfig';
@@ -31,7 +32,7 @@ export default function ReportLayout() {
     return (
       <CosmicScreen variant="stitch">
         <View className="flex-1 items-center justify-center px-8">
-          <LoadingBlock message="Loading…" />
+          <LoadingBlock message={REPORT_HYDRATING} />
         </View>
       </CosmicScreen>
     );
@@ -50,7 +51,7 @@ export default function ReportLayout() {
     return (
       <CosmicScreen variant="stitch">
         <View className="flex-1 items-center justify-center px-8">
-          <LoadingBlock message="Loading…" />
+          <LoadingBlock message={REPORT_HYDRATING} />
         </View>
       </CosmicScreen>
     );

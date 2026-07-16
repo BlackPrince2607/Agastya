@@ -454,7 +454,7 @@ def extract_creases_from_image(
         if feat["depth_score"] < 5.0 or feat["length"] < 0.12:
             warnings.append(f"{name} too faint to lock")
             continue
-        full_pts = _roi_to_full(pts, M_inv, img_w, img_h)
+        full_pts = _roi_to_full(_downsample(pts, max_pts=8), M_inv, img_w, img_h)
         if len(full_pts) < 2:
             continue
         geometry.append({"name": name, "points": full_pts})

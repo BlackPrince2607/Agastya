@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import type { PropsWithChildren } from 'react';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import { ContinueConversationCard } from '@/components/home/ContinueConversationCard';
@@ -10,7 +10,7 @@ import { MainTabScroll } from '@/components/layout/MainTabScroll';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { MainCosmicHeader } from '@/components/layout/MainCosmicHeader';
 import { MotiView } from '@/components/moti/MotiView';
-import { SectionHeader } from '@/components/feedback';
+import { LoadingBlock, SectionHeader } from '@/components/feedback';
 import {
   GlassCard,
   Icon,
@@ -25,14 +25,30 @@ import { useLayoutMetrics } from '@/hooks/useLayoutMetrics';
 import {
   buildDailyInsight,
   displayNameOrDefault,
+  HOME_CTA_BEGIN,
+  HOME_CTA_READING,
+  HOME_GUIDANCE_LOADING,
   HOME_SHORTCUTS,
+  HOME_WEEKLY_LOADING,
   JOURNEY_DAY_FOOTNOTE,
   PROFILE_DEFAULT_NAME,
   type HomeShortcutAction,
 } from '@/constants/userCopy';
+import { fetchDailyGuidance, fetchWeeklySummary } from '@/services/agastyaApi';
+import { ApiHttpError } from '@/services/apiErrors';
+import { AnalyticsEvent, trackOnce, trackOncePerDay } from '@/services/analytics';
+import {
+  readThisWeeksLocalSummary,
+  readTodaysLocalGuidance,
+  writeLocalGuidance,
+  writeLocalWeekly,
+} from '@/services/guidanceCache';
 import { useChatStore } from '@/store/chatStore';
 import { useSessionStore } from '@/store/sessionStore';
 import { useTaskStore } from '@/store/taskStore';
+import { withApiRetry } from '@/utils/apiRetry';
+import { utcTodayIso } from '@/utils/calendarDay';
+import { shouldShowWeeklyOnHome } from '@/utils/calendarWeek';
 import { paywallRouteParams } from '@/utils/paywallNavigation';
 import { LOCAL_TASKS } from '@/utils/localTasks';
 
@@ -70,46 +86,207 @@ function HomeSection({ children }: PropsWithChildren) {
   return <View className="w-full">{children}</View>;
 }
 
-function lastUserTopic(messages: { role: string; text: string }[]): string | null {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const msg = messages[i];
-    if (msg.role === 'you' && msg.text.trim()) {
-      const trimmed = msg.text.trim();
-      return trimmed.length > 72 ? `${trimmed.slice(0, 69)}…` : trimmed;
-    }
-  }
-  return null;
-}
-
 export default function HomeDashboardScreen() {
   const palmAnalysis = useSessionStore((s) => s.palmAnalysis);
   const displayName = useSessionStore((s) => s.userDisplayName);
+  const sessionId = useSessionStore((s) => s.sessionId);
   const premium = useSessionStore((s) => s.hasUnlockedPremium);
   const dismissedUpgrade = useSessionStore((s) => s.dismissedUpgradeCard);
   const setDismissedUpgrade = useSessionStore((s) => s.setDismissedUpgradeCard);
 
   const streak = useTaskStore((s) => s.streak);
-  const tasks = useTaskStore((s) => s.tasks);
-  const completedIds = useTaskStore((s) => s.completedIds);
-  const chatMessages = useChatStore((s) => s.messages);
+  const doneCount = useTaskStore((s) => {
+    const list = s.tasks.length ? s.tasks : LOCAL_TASKS;
+    return list.filter((t) => s.completedIds.includes(t.id)).length;
+  });
+  const storeTaskTotal = useTaskStore((s) => (s.tasks.length ? s.tasks.length : LOCAL_TASKS.length));
+  const setFocusTheme = useTaskStore((s) => s.setFocusTheme);
+  const lastChatTopic = useChatStore((s) => s.lastUserTopic);
 
-  const quickInsight = useMemo(() => buildDailyInsight(palmAnalysis), [palmAnalysis]);
-  const continueTopic = useMemo(() => lastUserTopic(chatMessages), [chatMessages]);
+  const fallbackInsight = useMemo(() => buildDailyInsight(palmAnalysis), [palmAnalysis]);
+  const [guidance, setGuidance] = useState<{ title: string; body: string } | null>(null);
+  const [weekly, setWeekly] = useState<{
+    title: string;
+    body: string;
+    currentChapter?: string | null;
+  } | null>(null);
+  const [guidanceLoading, setGuidanceLoading] = useState(false);
+  const [weeklyLoading, setWeeklyLoading] = useState(false);
+  const [guidanceError, setGuidanceError] = useState(false);
+  const [continueHint, setContinueHint] = useState<string | null>(null);
+  const [consistencyNote, setConsistencyNote] = useState<string | null>(null);
+  const hasLocalGuidance = useRef(false);
+  const continueTopic = continueHint || lastChatTopic;
+
+  // Single pass: local hydrate then network only on miss (guidance memo dedupes storage reads).
+  useEffect(() => {
+    let active = true;
+
+    const load = async () => {
+      const today = utcTodayIso();
+      const local = await readTodaysLocalGuidance();
+      if (!active) return;
+
+      if (local) {
+        hasLocalGuidance.current = true;
+        setGuidance({ title: local.title, body: local.body });
+        trackOncePerDay(AnalyticsEvent.TODAYS_GUIDANCE_VIEWED, { source: 'local_cache' });
+        if (local.focusTheme) setFocusTheme(local.focusTheme);
+        if (local.continueHint) setContinueHint(local.continueHint);
+        if (local.consistencyNote) setConsistencyNote(local.consistencyNote);
+        setGuidanceLoading(false);
+        return;
+      }
+
+      if (!palmAnalysis || !sessionId) {
+        if (!hasLocalGuidance.current) setGuidance(null);
+        setGuidanceLoading(false);
+        return;
+      }
+
+      setGuidanceLoading(true);
+      setGuidanceError(false);
+      try {
+        const session = useSessionStore.getState();
+        const result = await withApiRetry(() =>
+          fetchDailyGuidance({
+            sessionId,
+            palmAnalysis,
+            focusTopics: session.focusTopics ?? [],
+            streak: useTaskStore.getState().streak > 0 ? useTaskStore.getState().streak : undefined,
+          }),
+        );
+        if (!active || !result.title || !result.body) return;
+        setGuidance({ title: result.title, body: result.body });
+        setGuidanceError(false);
+        if (result.continueHint) setContinueHint(result.continueHint);
+        if (result.consistencyNote) setConsistencyNote(result.consistencyNote);
+        hasLocalGuidance.current = true;
+        trackOncePerDay(AnalyticsEvent.TODAYS_GUIDANCE_VIEWED, {
+          source: result.cached ? 'remote_cache' : 'generated',
+        });
+        if (!result.cached) {
+          trackOnce(`guidance_refreshed:${result.date || today}`, AnalyticsEvent.GUIDANCE_REFRESHED, {
+            date: result.date || today,
+          });
+        }
+        await writeLocalGuidance({
+          date: result.date || today,
+          title: result.title,
+          body: result.body,
+          focusTheme: result.focusTheme ?? null,
+          continueHint: result.continueHint ?? null,
+          consistencyNote: result.consistencyNote ?? null,
+        });
+        if (result.focusTheme) setFocusTheme(result.focusTheme);
+      } catch (err) {
+        if (__DEV__) {
+          console.warn('[Agastya] daily guidance refresh failed', err);
+        }
+        // Production may lag behind app: missing /insights/daily → soft palm fallback, no banner.
+        const missingRoute =
+          err instanceof ApiHttpError &&
+          (err.status === 404 || /"detail"\s*:\s*"not found"/i.test(err.rawDetail));
+        if (active && !missingRoute) setGuidanceError(true);
+      } finally {
+        if (active) setGuidanceLoading(false);
+      }
+    };
+
+    void load();
+    return () => {
+      active = false;
+    };
+    // Intentionally omit streak/focusTopics — they must not re-trigger guidance fetches.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- identity-only refresh
+  }, [palmAnalysis, sessionId, setFocusTheme]);
+
+  useEffect(() => {
+    if (!palmAnalysis || !sessionId || !shouldShowWeeklyOnHome()) {
+      setWeeklyLoading(false);
+      return;
+    }
+    let active = true;
+    setWeeklyLoading(true);
+    void (async () => {
+      const local = await readThisWeeksLocalSummary();
+      if (!active) return;
+      if (local) {
+        setWeekly({
+          title: local.title,
+          body: local.body,
+          currentChapter: local.currentChapter ?? null,
+        });
+        trackOnce(`weekly_summary_viewed:${local.weekKey}`, AnalyticsEvent.WEEKLY_SUMMARY_VIEWED, {
+          source: 'home',
+          week_key: local.weekKey,
+        });
+        setWeeklyLoading(false);
+        return;
+      }
+      try {
+        const res = await withApiRetry(() =>
+          fetchWeeklySummary({
+            sessionId,
+            palmAnalysis,
+            focusTopics: useSessionStore.getState().focusTopics ?? [],
+            streak: useTaskStore.getState().streak > 0 ? useTaskStore.getState().streak : undefined,
+          }),
+        );
+        if (!active || !res.title || !res.body) return;
+        setWeekly({
+          title: res.title,
+          body: res.body,
+          currentChapter: res.currentChapter ?? null,
+        });
+        trackOnce(`weekly_summary_viewed:${res.weekKey}`, AnalyticsEvent.WEEKLY_SUMMARY_VIEWED, {
+          source: 'home',
+          week_key: res.weekKey,
+        });
+        await writeLocalWeekly({
+          weekKey: res.weekKey,
+          title: res.title,
+          body: res.body,
+          topTheme: res.topTheme ?? null,
+          consistencyNote: res.consistencyNote ?? null,
+          currentChapter: res.currentChapter ?? null,
+        });
+      } catch {
+        /* keep Home usable without weekly card */
+      } finally {
+        if (active) setWeeklyLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [palmAnalysis, sessionId]);
+
+  // Palm-fallback insight still counts as viewing Today's Guidance.
+  useEffect(() => {
+    if (!palmAnalysis || guidanceLoading) return;
+    if (guidance) return; // already tracked in load path
+    trackOncePerDay(AnalyticsEvent.TODAYS_GUIDANCE_VIEWED, { source: 'palm_fallback' });
+  }, [palmAnalysis, guidance, guidanceLoading]);
+
+  const quickInsight = guidance ?? fallbackInsight;
 
   const name = displayNameOrDefault(displayName);
   const hasCustomName = name !== PROFILE_DEFAULT_NAME;
   const greeting = hasCustomName ? `${timeGreeting()}, ${name}` : timeGreeting();
 
-  const taskList = palmAnalysis ? (tasks.length ? tasks : LOCAL_TASKS) : [];
-  const doneCount = taskList.filter((t) => completedIds.includes(t.id)).length;
-  const taskTotal = taskList.length;
-  const allDoneToday = taskTotal > 0 && doneCount === taskTotal;
+  const allDoneToday = Boolean(palmAnalysis && storeTaskTotal > 0 && doneCount === storeTaskTotal);
+  const taskTotal = palmAnalysis ? storeTaskTotal : 0;
 
   const progressFootnote =
     palmAnalysis && taskTotal > 0
       ? allDoneToday
         ? "All rituals complete. Today's wisdom is yours — come back tomorrow."
-        : "Complete all rituals to unlock today's wisdom."
+        : consistencyNote
+          ? consistencyNote
+          : streak > 1
+            ? `You've stayed consistent for ${streak} days.`
+            : "Complete all rituals to unlock today's wisdom."
       : JOURNEY_DAY_FOOTNOTE;
 
   const { tileMinHeight, gridGap } = useLayoutMetrics();
@@ -152,7 +329,7 @@ export default function HomeDashboardScreen() {
                   <View className="min-w-0 flex-1 gap-1.5">
                     <Text className="font-headline-md text-[20px] text-on-surface">Start your palm reading</Text>
                     <Text className="font-body text-[15px] leading-6 text-on-surface-variant">
-                      Scan or upload your palm to unlock your report, daily guidance, and AI Guide.
+                      Scan your palm to unlock your report, today’s guidance, and your AI Guide.
                     </Text>
                   </View>
                 </View>
@@ -169,14 +346,57 @@ export default function HomeDashboardScreen() {
             from={{ opacity: 0, translateY: 14 }}
             animate={{ opacity: 1, translateY: 0 }}
             transition={{ type: 'timing', duration: 500, delay: 60 }}>
-            <InsightCard
-              title={quickInsight.title}
-              body={quickInsight.body}
-              ctaLabel={palmAnalysis ? 'Read Full Reading' : 'Begin Your Reading'}
-              onPress={() => router.push(palmAnalysis ? '/report' : '/onboarding/palm-scan')}
-            />
+            {guidanceLoading && !guidance && palmAnalysis ? (
+              <GlassCard glow className="w-full p-5">
+                <LoadingBlock variant="skeleton" compact message={HOME_GUIDANCE_LOADING} />
+              </GlassCard>
+            ) : (
+              <View className="gap-2">
+                {guidanceError && !guidance ? (
+                  <Text className="px-1 font-body text-[13px] text-on-surface-variant">
+                    Couldn&apos;t refresh today&apos;s guidance — showing a palm-based fallback. Pull away and return to
+                    retry.
+                  </Text>
+                ) : null}
+                <InsightCard
+                  eyebrow="Today's Guidance"
+                  title={quickInsight.title}
+                  body={quickInsight.body}
+                  ctaLabel={palmAnalysis ? HOME_CTA_READING : HOME_CTA_BEGIN}
+                  onPress={() => router.push(palmAnalysis ? '/report' : '/onboarding/palm-scan')}
+                />
+              </View>
+            )}
           </MotiView>
         </HomeSection>
+
+        {weekly && palmAnalysis && shouldShowWeeklyOnHome() ? (
+          <HomeSection>
+            <MotiView
+              from={{ opacity: 0, translateY: 12 }}
+              animate={{ opacity: 1, translateY: 0 }}
+              transition={{ type: 'timing', duration: 480, delay: 90 }}>
+              <InsightCard
+                eyebrow="Current Chapter"
+                title={weekly.currentChapter?.trim() || weekly.title}
+                body={weekly.body}
+                ctaLabel="See your journey"
+                onPress={() => router.push('/profile')}
+              />
+            </MotiView>
+          </HomeSection>
+        ) : weeklyLoading && palmAnalysis && shouldShowWeeklyOnHome() ? (
+          <HomeSection>
+            <MotiView
+              from={{ opacity: 0, translateY: 12 }}
+              animate={{ opacity: 1, translateY: 0 }}
+              transition={{ type: 'timing', duration: 480, delay: 90 }}>
+              <GlassCard muted className="w-full p-5">
+                <LoadingBlock variant="skeleton" compact message={HOME_WEEKLY_LOADING} />
+              </GlassCard>
+            </MotiView>
+          </HomeSection>
+        ) : null}
 
         {continueTopic ? (
           <HomeSection>
@@ -217,7 +437,7 @@ export default function HomeDashboardScreen() {
             animate={{ opacity: 1, translateY: 0 }}
             transition={{ type: 'timing', duration: 480, delay: 180 }}>
             <ProgressCard
-              completed={doneCount}
+              completed={palmAnalysis ? doneCount : 0}
               total={taskTotal > 0 ? taskTotal : 3}
               footnote={progressFootnote}
               streak={streak > 0 ? streak : undefined}

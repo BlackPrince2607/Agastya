@@ -22,8 +22,23 @@ from app.schemas.session import (
     SessionRegisterBody,
     SessionRegisterResponse,
 )
+from app.schemas.guidance import (
+    DailyGuidanceBody,
+    DailyGuidanceResponse,
+    DailyReflectBody,
+    DailyReflectResponse,
+    JourneyTimelineBody,
+    JourneyTimelineResponse,
+    WeeklySummaryBody,
+    WeeklySummaryResponse,
+)
 from app.schemas.tasks import DailyTasksBody, DailyTasksResponse
 from app.services.ai_interactions import GuideLlmUnavailableError, generate_chat_reply, generate_daily_tasks
+from app.services.daily_insight import generate_daily_guidance
+from app.services.day_context import is_complete_daily_context, utc_today_iso
+from app.services.journey_timeline import build_journey_timeline
+from app.services.user_memory import maybe_extract_and_merge_memory, stamp_reflection_completed
+from app.services.weekly_insight import generate_weekly_summary, cached_weekly_if_current
 from app.services.bucket_store import SessionBucket, bucket, has_bucket, link_supabase_user, merge_bucket_data, set_bucket
 from app.services.palm_pipeline import analyze_palm
 from app.services.palm_landmarks import detect_hand_landmarks_from_bytes
@@ -38,11 +53,44 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["agastya"], dependencies=[Depends(check_rate_limit)])
 
 
+def _claims_email(claims: dict[str, Any]) -> str:
+    email = claims.get("email")
+    return email.strip().lower() if isinstance(email, str) else ""
+
+
+def _email_is_premium_allowlisted(email: str, settings: Settings) -> bool:
+    return bool(email) and email in settings.premium_email_allowlist_set
+
+
+async def _grant_allowlist_premium(
+    *,
+    session_id: str,
+    bkt: SessionBucket,
+    user_id: str,
+    email: str,
+    settings: Settings,
+) -> bool:
+    """Stamp is_premium for founder/tester emails from PREMIUM_EMAIL_ALLOWLIST."""
+    if not _email_is_premium_allowlisted(email, settings):
+        return False
+    bkt.is_premium = True
+    if session_repository.is_enabled(settings):
+        await session_repository.set_premium_by_user(user_id, True, settings)
+        await session_repository.set_premium_by_session(session_id, True, settings)
+    return True
+
+
 async def _hydrate(session_id: str, settings: Settings) -> None:
     validate_session_id(session_id)
     if has_bucket(session_id):
         return
-    loaded = await session_repository.load(session_id, settings)
+    try:
+        loaded = await session_repository.load(session_id, settings)
+    except session_repository.SupabaseUnavailableError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Session storage temporarily unavailable. Please try again.",
+        ) from exc
     if loaded:
         set_bucket(session_id, loaded)
     else:
@@ -50,7 +98,14 @@ async def _hydrate(session_id: str, settings: Settings) -> None:
 
 
 async def _persist(session_id: str, settings: Settings) -> None:
-    await session_repository.save(session_id, bucket(session_id), settings)
+    if not session_repository.is_enabled(settings):
+        return
+    ok = await session_repository.save(session_id, bucket(session_id), settings)
+    if not ok:
+        raise HTTPException(
+            status_code=503,
+            detail="Failed to save session. Please try again.",
+        )
 
 
 async def _hydrate_from_user_sessions(
@@ -58,18 +113,41 @@ async def _hydrate_from_user_sessions(
     bkt: SessionBucket,
     settings: Settings,
 ) -> None:
-    """When the current bucket has no reading, copy the richest prior session for this Supabase user."""
-    if bkt.palm or bkt.preview or bkt.full:
-        return
+    """Merge prior user sessions: always inherit premium; copy readings when current is empty."""
     user_id = bkt.meta.get("supabaseUserId")
     if not user_id or not session_repository.is_enabled(settings):
         return
 
-    best_row = await _richest_session_for_user(str(user_id), settings, exclude_session_id=session_id)
+    prior_rows = await session_repository.list_sessions_for_user(str(user_id), settings)
+    best_row: dict[str, Any] | None = None
+    best_score = -1
+    inherited_premium = False
+    for row in prior_rows:
+        if row.get("session_id") == session_id:
+            continue
+        if row.get("is_premium"):
+            inherited_premium = True
+        score = _restore_score(row)
+        if score > best_score:
+            best_score = score
+            best_row = row
+
+    if inherited_premium:
+        bkt.is_premium = True
+
+    if bkt.palm or bkt.preview or bkt.full:
+        if inherited_premium:
+            await _persist(session_id, settings)
+        return
+
     if best_row is None:
+        if inherited_premium:
+            await _persist(session_id, settings)
         return
     source = session_repository.row_to_bucket(best_row)
     merge_bucket_data(bkt, source)
+    # Persist merge so cold workers do not re-list all user sessions on every bootstrap.
+    await _persist(session_id, settings)
 
 
 def _restore_score(row: dict[str, Any]) -> int:
@@ -121,9 +199,13 @@ def _bind_device(bkt: SessionBucket, session_id: str, device_install_id: str) ->
 
 
 async def _sync_premium(session_id: str, settings: Settings) -> SessionBucket:
+    """Hydrate if needed; refresh premium only when the bucket was already warm in-memory."""
+    was_cached = has_bucket(session_id)
     await _hydrate(session_id, settings)
     bkt = bucket(session_id)
-    await session_repository.refresh_premium_from_db(session_id, bkt, settings)
+    # Fresh DB hydrate already includes is_premium — skip the extra select.
+    if was_cached:
+        await session_repository.refresh_premium_from_db(session_id, bkt, settings)
     return bkt
 
 
@@ -134,6 +216,9 @@ async def register_session(
 ) -> SessionRegisterResponse:
     await _hydrate(body.session_id, settings)
     bkt = bucket(body.session_id)
+    stored = bkt.meta.get("deviceInstallId")
+    if stored and stored != body.device_install_id:
+        raise HTTPException(status_code=403, detail="deviceInstallId does not match session owner")
     bkt.meta["deviceInstallId"] = body.device_install_id
     if body.display_name:
         bkt.meta["displayName"] = body.display_name
@@ -143,6 +228,56 @@ async def register_session(
         bkt.meta["focusTopics"] = body.focus_topics
     await _persist(body.session_id, settings)
     return SessionRegisterResponse()
+
+
+def _slim_daily_context(bkt: SessionBucket) -> dict[str, Any] | None:
+    ctx = bkt.daily_context
+    if not is_complete_daily_context(ctx, utc_today_iso()):
+        return None
+    assert isinstance(ctx, dict)
+    guidance = ctx.get("guidance") or {}
+    return {
+        "date": ctx.get("date"),
+        "title": guidance.get("title"),
+        "body": guidance.get("body"),
+        "focusTheme": ctx.get("focusTheme"),
+    }
+
+
+def _slim_weekly_context(bkt: SessionBucket) -> dict[str, Any] | None:
+    cached = cached_weekly_if_current(bkt)
+    if cached is None:
+        return None
+    return {
+        "weekKey": cached.week_key,
+        "title": cached.title,
+        "body": cached.body,
+        "topTheme": cached.top_theme,
+        "consistencyNote": cached.consistency_note,
+        "currentChapter": cached.current_chapter,
+    }
+
+
+def _bootstrap_light_from_bucket(session_id: str, bkt: SessionBucket) -> SessionBootstrapResponse:
+    """Anonymous restore: profile + premium + slim guidance only (no reading/chat)."""
+    meta = bkt.meta
+    topics = meta.get("focusTopics") or []
+    return SessionBootstrapResponse(
+        session_id=session_id,
+        device_install_id=meta.get("deviceInstallId"),
+        display_name=meta.get("displayName"),
+        gender=meta.get("gender"),
+        focus_topics=topics if isinstance(topics, list) else [],
+        supabase_user_id=meta.get("supabaseUserId"),
+        palm_storage_path=None,
+        palm_analysis=None,
+        preview_report=None,
+        full_report=None,
+        is_premium=bkt.is_premium,
+        chat_tail=[],
+        daily_context=_slim_daily_context(bkt),
+        weekly_context=_slim_weekly_context(bkt),
+    )
 
 
 def _bootstrap_from_bucket(session_id: str, bkt: SessionBucket) -> SessionBootstrapResponse:
@@ -161,6 +296,8 @@ def _bootstrap_from_bucket(session_id: str, bkt: SessionBucket) -> SessionBootst
         full_report=bkt.full.model_dump(by_alias=True) if bkt.full else None,
         is_premium=bkt.is_premium,
         chat_tail=bkt.chat_tail[-40:] if bkt.chat_tail else [],
+        daily_context=_slim_daily_context(bkt),
+        weekly_context=_slim_weekly_context(bkt),
     )
 
 
@@ -172,15 +309,13 @@ def _bootstrap_from_bucket(session_id: str, bkt: SessionBucket) -> SessionBootst
 async def session_bootstrap(
     settings: Annotated[Settings, Depends(get_settings)],
     session_id: str = Query(..., alias="sessionId"),
-    device_install_id: str | None = Query(default=None, alias="deviceInstallId"),
+    device_install_id: str = Query(..., alias="deviceInstallId"),
 ) -> SessionBootstrapResponse:
     validate_session_id(session_id)
-    await _hydrate(session_id, settings)
     bkt = await _sync_premium(session_id, settings)
-    await _hydrate_from_user_sessions(session_id, bkt, settings)
-    if device_install_id:
-        _bind_device(bkt, session_id, device_install_id)
-    return _bootstrap_from_bucket(session_id, bkt)
+    _bind_device(bkt, session_id, device_install_id)
+    # Do not hydrate from other user sessions on anonymous bootstrap (keeps response light).
+    return _bootstrap_light_from_bucket(session_id, bkt)
 
 
 @router.get(
@@ -203,12 +338,28 @@ async def authenticated_session_bootstrap(
     if not user_id:
         raise HTTPException(status_code=401, detail="Token missing subject")
 
-    best_row = await _richest_session_for_user(user_id, settings)
+    try:
+        best_row = await _richest_session_for_user(user_id, settings)
+    except session_repository.SupabaseUnavailableError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Session storage temporarily unavailable. Please try again.",
+        ) from exc
     if best_row is None:
         raise HTTPException(status_code=404, detail="No saved session found")
 
     session_id = str(best_row["session_id"])
-    return _bootstrap_from_bucket(session_id, session_repository.row_to_bucket(best_row))
+    bkt = session_repository.row_to_bucket(best_row)
+    if await _grant_allowlist_premium(
+        session_id=session_id,
+        bkt=bkt,
+        user_id=user_id,
+        email=_claims_email(claims),
+        settings=settings,
+    ):
+        set_bucket(session_id, bkt)
+        await _persist(session_id, settings)
+    return _bootstrap_from_bucket(session_id, bkt)
 
 
 @router.get(
@@ -270,6 +421,7 @@ async def merge_session(
     settings: Annotated[Settings, Depends(get_settings)],
     authorization: Annotated[str | None, Header()] = None,
 ) -> SessionMergeResponse:
+    claims: dict[str, Any] = {}
     if settings.supabase_enabled:
         token = _bearer_token(authorization)
         if not token:
@@ -284,11 +436,19 @@ async def merge_session(
     existing_user = bkt.meta.get("supabaseUserId")
     if existing_user and str(existing_user) != body.supabase_user_id:
         raise HTTPException(status_code=403, detail="Session already linked to another account")
-    if body.device_install_id:
-        _bind_device(bkt, body.anonymous_session_id, body.device_install_id)
+    if not body.device_install_id:
+        raise HTTPException(status_code=403, detail="deviceInstallId required")
+    _bind_device(bkt, body.anonymous_session_id, body.device_install_id)
 
     bkt.meta["supabaseUserId"] = body.supabase_user_id
     await _hydrate_from_user_sessions(body.anonymous_session_id, bkt, settings)
+    await _grant_allowlist_premium(
+        session_id=body.anonymous_session_id,
+        bkt=bkt,
+        user_id=body.supabase_user_id,
+        email=_claims_email(claims),
+        settings=settings,
+    )
 
     linked = link_supabase_user(body.anonymous_session_id, body.supabase_user_id)
     if session_repository.is_enabled(settings):
@@ -309,8 +469,7 @@ async def palm_analyze(
     try:
         await _hydrate(body.session_id, settings)
         bkt = bucket(body.session_id)
-        if body.device_install_id:
-            _bind_device(bkt, body.session_id, body.device_install_id)
+        _bind_device(bkt, body.session_id, body.device_install_id)
         palm = await analyze_palm(settings, body)
         bkt.palm = palm
         storage_path = await upload_palm_capture_if_configured(
@@ -373,7 +532,7 @@ async def reports_generate(
     return report.model_dump(by_alias=True)
 
 
-@router.post("/chat", response_model=ChatResponse)
+@router.post("/chat", response_model=ChatResponse, response_model_by_alias=True)
 async def cosmic_chat(body: ChatRequest, settings: Annotated[Settings, Depends(get_settings)]) -> ChatResponse:
     await _hydrate(body.session_id, settings)
     bkt = bucket(body.session_id)
@@ -381,7 +540,11 @@ async def cosmic_chat(body: ChatRequest, settings: Annotated[Settings, Depends(g
     bkt = await _sync_premium(body.session_id, settings)
     try:
         reply, suggestions = await generate_chat_reply(
-            settings, body, server_is_premium=bkt.is_premium, prior_chat_tail=bkt.chat_tail
+            settings,
+            body,
+            server_is_premium=bkt.is_premium,
+            prior_chat_tail=bkt.chat_tail,
+            bkt=bkt,
         )
     except GuideLlmUnavailableError as exc:
         raise HTTPException(
@@ -391,8 +554,86 @@ async def cosmic_chat(body: ChatRequest, settings: Annotated[Settings, Depends(g
     tail = [{"role": m.role, "content": m.content} for m in body.messages]
     tail.append({"role": "guide", "content": reply})
     bkt.chat_tail = tail[-40:]
+
+    memory_changed = False
+    last_user = next(
+        (m.content for m in reversed(body.messages) if m.role in {"user", "you"}),
+        "",
+    )
+    if last_user.strip():
+        memory_changed = await maybe_extract_and_merge_memory(settings, bkt, last_user)
+
     await _persist(body.session_id, settings)
-    return ChatResponse(reply=reply, suggestions=suggestions)
+    if memory_changed:
+        logger.info("user_memory_updated session=%s", body.session_id)
+    return ChatResponse(reply=reply, suggestions=suggestions, memory_changed=memory_changed)
+
+
+@router.post("/insights/daily", response_model=DailyGuidanceResponse, response_model_by_alias=True)
+async def daily_guidance(
+    body: DailyGuidanceBody, settings: Annotated[Settings, Depends(get_settings)]
+) -> DailyGuidanceResponse:
+    """Today's Guidance — cached once per calendar day on the session."""
+    await _hydrate(body.session_id, settings)
+    bkt = bucket(body.session_id)
+    _bind_device(bkt, body.session_id, body.device_install_id)
+    try:
+        result, changed = await generate_daily_guidance(settings, body, bkt)
+    except ValueError as exc:
+        if str(exc) == "palm_required":
+            raise HTTPException(status_code=400, detail="Run palm analysis before requesting guidance.") from exc
+        raise
+    if changed:
+        await _persist(body.session_id, settings)
+    return result
+
+
+@router.post("/insights/reflect", response_model=DailyReflectResponse, response_model_by_alias=True)
+async def daily_reflect(
+    body: DailyReflectBody, settings: Annotated[Settings, Depends(get_settings)]
+) -> DailyReflectResponse:
+    """Stamp evening reflection onto today's daily_context (creates a same-day shell if needed)."""
+    await _hydrate(body.session_id, settings)
+    bkt = bucket(body.session_id)
+    _bind_device(bkt, body.session_id, body.device_install_id)
+    persisted = stamp_reflection_completed(bkt, body.note)
+    if persisted:
+        await _persist(body.session_id, settings)
+    return DailyReflectResponse(ok=True, persisted=persisted)
+
+
+@router.post("/insights/weekly", response_model=WeeklySummaryResponse, response_model_by_alias=True)
+async def weekly_summary(
+    body: WeeklySummaryBody, settings: Annotated[Settings, Depends(get_settings)]
+) -> WeeklySummaryResponse:
+    """Weekly Journey Summary — cached once per ISO week."""
+    await _hydrate(body.session_id, settings)
+    bkt = bucket(body.session_id)
+    _bind_device(bkt, body.session_id, body.device_install_id)
+    try:
+        result, changed = await generate_weekly_summary(settings, body, bkt)
+    except ValueError as exc:
+        if str(exc) == "palm_required":
+            raise HTTPException(status_code=400, detail="Run palm analysis before requesting weekly summary.") from exc
+        raise
+    if changed:
+        await _persist(body.session_id, settings)
+    return result
+
+
+@router.post("/insights/journey", response_model=JourneyTimelineResponse, response_model_by_alias=True)
+async def journey_timeline(
+    body: JourneyTimelineBody, settings: Annotated[Settings, Depends(get_settings)]
+) -> JourneyTimelineResponse:
+    """Lightweight journey timeline derived from existing session + client consistency stats."""
+    await _hydrate(body.session_id, settings)
+    bkt = bucket(body.session_id)
+    _bind_device(bkt, body.session_id, body.device_install_id)
+    return build_journey_timeline(
+        bkt,
+        streak=body.streak,
+        rituals_completed_total=body.rituals_completed_total,
+    )
 
 
 @router.post("/tasks/daily", response_model=DailyTasksResponse, response_model_by_alias=True)
@@ -402,8 +643,11 @@ async def daily_tasks(body: DailyTasksBody, settings: Annotated[Settings, Depend
     _bind_device(bkt, body.session_id, body.device_install_id)
     bkt = await _sync_premium(body.session_id, settings)
     body = body.model_copy(update={"is_premium": bkt.is_premium})
-    tasks, variant = await generate_daily_tasks(settings, body)
-    return DailyTasksResponse(tasks=tasks, variant=variant)
+    tasks, variant, focus_theme, changed = await generate_daily_tasks(settings, body, bkt)
+    # tasksCache lives under daily_context but never overwrites Today's Focus / guidance.
+    if changed:
+        await _persist(body.session_id, settings)
+    return DailyTasksResponse(tasks=tasks, variant=variant, focus_theme=focus_theme)
 
 
 @router.post(

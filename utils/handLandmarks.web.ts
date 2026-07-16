@@ -27,7 +27,10 @@ async function getHandLandmarker(): Promise<HandLandmarker | null> {
       return HandLandmarker.createFromOptions(vision, {
         baseOptions: { modelAssetPath: MODEL_URL },
         runningMode: 'IMAGE',
-        numHands: 1,
+        numHands: 2,
+        minHandDetectionConfidence: 0.3,
+        minHandPresenceConfidence: 0.3,
+        minTrackingConfidence: 0.3,
       });
     } catch (err) {
       if (__DEV__) console.warn('[Agastya palm] MediaPipe init failed', err);
@@ -55,6 +58,34 @@ function mediapipeToLandmarks(
   return points.slice(0, 21).map((p) => [p.x, p.y] as HandLandmark);
 }
 
+function pickHandIndex(
+  result: { landmarks: unknown[]; handedness?: Array<Array<{ categoryName?: string }> | undefined> },
+  hand: 'left' | 'right',
+): number {
+  if (!result.landmarks?.length) return 0;
+  if (result.landmarks.length > 1 && result.handedness?.length) {
+    const targetHand = hand.toLowerCase();
+    const matchIdx = result.handedness.findIndex((entries) => {
+      const label = entries?.[0]?.categoryName?.toLowerCase() ?? '';
+      return targetHand === 'left' ? label.includes('left') : label.includes('right');
+    });
+    if (matchIdx >= 0) return matchIdx;
+  }
+  return 0;
+}
+
+function flipImageHorizontal(image: HTMLImageElement): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.width = image.naturalWidth || image.width;
+  canvas.height = image.naturalHeight || image.height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return canvas;
+  ctx.translate(canvas.width, 0);
+  ctx.scale(-1, 1);
+  ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
 export async function detectHandLandmarksFromBase64(
   base64: string,
   hand: 'left' | 'right' = 'right',
@@ -69,26 +100,35 @@ export async function detectHandLandmarksFromBase64(
     if (!landmarker) return fallback();
 
     const image = await base64ToImage(base64);
-    const result = landmarker.detect(image);
-    if (!result.landmarks?.length) return fallback();
+    let result = landmarker.detect(image);
+    let mirrored = false;
 
-    const targetHand = hand.toLowerCase();
-    let handIdx = 0;
-    if (result.landmarks.length > 1 && result.handedness?.length) {
-      const matchIdx = result.handedness.findIndex((entries) => {
-        const label = entries?.[0]?.categoryName?.toLowerCase() ?? '';
-        return targetHand === 'left' ? label.includes('left') : label.includes('right');
-      });
-      if (matchIdx >= 0) handIdx = matchIdx;
+    if (!result.landmarks?.length) {
+      const flipped = flipImageHorizontal(image);
+      result = landmarker.detect(flipped);
+      mirrored = Boolean(result.landmarks?.length);
     }
 
+    if (!result.landmarks?.length) return fallback();
+
+    const handIdx = pickHandIndex(result, hand);
     const detected = mediapipeToLandmarks(result.landmarks[handIdx]);
     if (!detected) return fallback();
 
+    const landmarks = mirrored
+      ? (detected.map(([x, y]) => [1 - x, y] as HandLandmark))
+      : detected;
+
     if (__DEV__) {
-      console.log('[Agastya palm] MediaPipe landmarks detected', detected.length, 'hand=', hand);
+      console.log(
+        '[Agastya palm] MediaPipe landmarks detected',
+        landmarks.length,
+        'hand=',
+        hand,
+        mirrored ? '(mirrored retry)' : '',
+      );
     }
-    return { landmarks: detected, source: 'mediapipe' };
+    return { landmarks, source: 'mediapipe' };
   } catch (err) {
     if (__DEV__) console.warn('[Agastya palm] MediaPipe detect failed, using ROI estimate', err);
     return fallback();

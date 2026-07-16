@@ -34,7 +34,11 @@ def test_merge_requires_bearer_when_supabase_configured(client):
     user_id = str(uuid.uuid4())
     res = client.post(
         "/v1/sessions/merge",
-        json={"anonymousSessionId": session_id, "supabaseUserId": user_id},
+        json={
+            "anonymousSessionId": session_id,
+            "supabaseUserId": user_id,
+            "deviceInstallId": "dev-1",
+        },
     )
     assert res.status_code == 401
 
@@ -46,7 +50,11 @@ def test_merge_rejects_subject_mismatch(client):
     token = client.test_keys.token(other_user)  # type: ignore[attr-defined]
     res = client.post(
         "/v1/sessions/merge",
-        json={"anonymousSessionId": session_id, "supabaseUserId": user_id},
+        json={
+            "anonymousSessionId": session_id,
+            "supabaseUserId": user_id,
+            "deviceInstallId": "dev-1",
+        },
         headers={"Authorization": f"Bearer {token}"},
     )
     assert res.status_code == 403
@@ -70,7 +78,11 @@ def test_merge_rejects_hs256_token(client, monkeypatch):
     )
     res = client.post(
         "/v1/sessions/merge",
-        json={"anonymousSessionId": session_id, "supabaseUserId": user_id},
+        json={
+            "anonymousSessionId": session_id,
+            "supabaseUserId": user_id,
+            "deviceInstallId": "dev-1",
+        },
         headers={"Authorization": f"Bearer {token}"},
     )
     assert res.status_code == 401

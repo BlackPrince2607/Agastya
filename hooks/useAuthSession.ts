@@ -25,7 +25,7 @@ export function useAuthSession(): AuthSessionSnapshot & { loading: boolean } {
     const apply = (next: AuthSessionSnapshot) => {
       if (!active) return;
       setSnap(next);
-      syncAuthUserToStore(next.userId);
+      syncAuthUserToStore(next.userId, next.email);
       setLoading(false);
     };
 

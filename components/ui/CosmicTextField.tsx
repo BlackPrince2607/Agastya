@@ -31,6 +31,7 @@ export function CosmicTextField({
   editable = true,
   onFocus,
   onBlur,
+  style,
   ...rest
 }: CosmicTextFieldProps) {
   const [revealed, setRevealed] = useState(false);
@@ -75,9 +76,8 @@ export function CosmicTextField({
           backgroundColor: 'rgba(15,14,16,0.55)',
           shadowColor: colors.purple,
           shadowOffset: { width: 0, height: 4 },
-          overflow: 'hidden',
         }}>
-        <View className="relative w-full flex-row items-center">
+        <View className="relative w-full flex-row items-center overflow-hidden rounded-full">
           {leadingIcon ? (
             <View className="absolute left-4 z-10 h-full justify-center" pointerEvents="none">
               <Ionicons
@@ -100,9 +100,10 @@ export function CosmicTextField({
               setFocused(false);
               onBlur?.(e);
             }}
-            className={`min-h-[56px] flex-1 py-4 font-body text-[16px] leading-6 text-on-surface ${
+            className={`min-h-[60px] flex-1 py-[18px] font-body text-[16px] leading-[22px] text-on-surface ${
               leadingIcon ? 'pl-12' : 'pl-6'
             } ${showPasswordToggle ? 'pr-14' : 'pr-6'} ${className ?? ''}`}
+            style={[{ includeFontPadding: false }, style]}
             accessibilityState={{ disabled: !editable }}
             maxFontSizeMultiplier={1.35}
           />

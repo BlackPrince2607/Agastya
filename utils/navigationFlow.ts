@@ -32,9 +32,7 @@ export function canEnterMainAppSync(): EnterMainResult {
   if (!hasRitualReading()) {
     return 'need_ritual';
   }
-  if (!hasPremiumAccess()) {
-    return 'need_premium';
-  }
+  // Premium gates Pro features inside the app (chat, full report) — not entry to Home.
   return 'ok';
 }
 
@@ -94,10 +92,6 @@ export function resolveSignedInHrefSync(): Href {
     return '/onboarding/account';
   }
 
-  if (!hasPremiumAccess()) {
-    return previewReportHref();
-  }
-
   if (requiresSupabaseSignIn() && !s.supabaseUserId) {
     return '/onboarding/account';
   }
@@ -113,7 +107,7 @@ export function resolveBlockedAppHref(isSignedIn: boolean): Href {
     return resolveSignedInHrefSync();
   }
   if (hasRitualReading()) {
-    return hasPremiumAccess() ? '/(main)/home' : previewReportHref();
+    return '/(main)/home';
   }
   return resolveOnboardingHref();
 }
@@ -131,7 +125,7 @@ export async function ensureCloudStateSynced(force = false): Promise<void> {
     if (requiresSupabaseSignIn()) {
       const auth = await readAuthSession();
       if (auth.isSignedIn && auth.userId) {
-        syncAuthUserToStore(auth.userId);
+        syncAuthUserToStore(auth.userId, auth.email);
       }
     }
     await ensureSessionMerged();
@@ -168,7 +162,7 @@ async function syncAuthFromSupabase(): Promise<boolean> {
 
   const auth = await readAuthSession(2_000);
   if (auth.isSignedIn && auth.userId) {
-    syncAuthUserToStore(auth.userId);
+    syncAuthUserToStore(auth.userId, auth.email);
     return true;
   }
   syncAuthUserToStore(null);
@@ -186,36 +180,58 @@ function isPremiumBlockedReturnHref(href: Href): boolean {
   );
 }
 
-export function resolveAuthenticatedHref(knownUserId?: string | null): Href {
+/**
+ * Resolve where a signed-in user should land.
+ * Awaits merge + cloud restore first so returning Google/email users
+ * resume their reading instead of being sent through onboarding again.
+ */
+export async function resolveAuthenticatedHref(knownUserId?: string | null): Promise<Href> {
   const returnHref = consumePostSignInReturn();
-  if (returnHref) {
-    if (!hasPremiumAccess() && isPremiumBlockedReturnHref(returnHref)) {
-      return previewReportHref();
-    }
-    return returnHref;
-  }
-
-  void bootstrapIdentity().catch(() => {});
 
   const userId = knownUserId ?? useSessionStore.getState().supabaseUserId;
   if (userId) {
     syncAuthUserToStore(userId);
   }
 
-  void readAuthSession(1500)
-    .then((auth) => {
-      if (auth.userId) syncAuthUserToStore(auth.userId);
-    })
-    .catch(() => {});
+  try {
+    await bootstrapIdentity();
+  } catch {
+    /* best-effort */
+  }
+
+  if (!userId && !useSessionStore.getState().supabaseUserId) {
+    try {
+      const auth = await readAuthSession(1_500);
+      if (auth.userId) syncAuthUserToStore(auth.userId, auth.email);
+    } catch {
+      /* best-effort */
+    }
+  } else {
+    try {
+      const auth = await readAuthSession(800);
+      if (auth.email) syncAuthUserToStore(auth.userId ?? userId ?? null, auth.email);
+    } catch {
+      /* best-effort */
+    }
+  }
 
   if (userId || useSessionStore.getState().supabaseUserId) {
     if (useSessionStore.getState().skipCloudRestore) {
       useSessionStore.getState().setSkipCloudRestore(false);
     }
-    void ensureCloudStateSynced(true);
-    void import('@/services/authMerge').then(({ ensureSessionMerged }) => {
-      void ensureSessionMerged().catch(() => {});
-    });
+    await ensureCloudStateSynced(true);
+  }
+
+  if (returnHref) {
+    // Soft-gate Pro deep links: signed-in users can still open Home; report stack enforces premium.
+    if (!hasPremiumAccess() && isPremiumBlockedReturnHref(returnHref)) {
+      if (isMainTabDeepLink(typeof returnHref === 'string' ? returnHref : returnHref.pathname ?? '')) {
+        useSessionStore.getState().setEnteredMain(true);
+        return '/(main)/home';
+      }
+      return previewReportHref();
+    }
+    return returnHref;
   }
 
   const href = resolveSignedInHrefSync();
@@ -226,7 +242,7 @@ export function resolveAuthenticatedHref(knownUserId?: string | null): Href {
 }
 
 /** Sync auth + return the correct destination after sign-in (no navigation). */
-export function resolvePostSignInHref(knownUserId?: string | null): Href {
+export async function resolvePostSignInHref(knownUserId?: string | null): Promise<Href> {
   return resolveAuthenticatedHref(knownUserId);
 }
 
@@ -245,8 +261,6 @@ export function enterMainApp() {
   void tryEnterMainApp().then((result) => {
     if (result === 'need_sign_in') {
       deferRouterReplace('/onboarding/account');
-    } else if (result === 'need_premium') {
-      deferRouterReplace(previewReportHref());
     } else if (result === 'need_ritual') {
       const href =
         useSessionStore.getState().supabaseUserId
@@ -307,10 +321,7 @@ export async function prepareReturningUser(forceRestore = false): Promise<Href> 
     if (gate === 'need_sign_in') {
       return '/onboarding/account';
     }
-    if (gate === 'need_premium' && hasRitualReading()) {
-      return previewReportHref();
-    }
-    return hasRitualReading() ? previewReportHref() : resolveOnboardingHref();
+    return hasRitualReading() ? '/(main)/home' : resolveOnboardingHref();
   }
 
   if (hasRitualReading()) {
@@ -323,7 +334,9 @@ export async function prepareReturningUser(forceRestore = false): Promise<Href> 
     if (gate === 'need_sign_in') {
       return '/onboarding/account';
     }
-    return previewReportHref();
+    useSessionStore.getState().setEnteredMain(true);
+    void requestNotificationPermission();
+    return '/(main)/home';
   }
 
   return resolveOnboardingHref();
@@ -386,10 +399,6 @@ export async function navigateFromNotification(link: string): Promise<void> {
     const gate = await tryEnterMainApp();
     if (gate === 'need_sign_in') {
       deferRouterReplace('/onboarding/account');
-      return;
-    }
-    if (gate === 'need_premium') {
-      deferRouterReplace(previewReportHref());
       return;
     }
     if (gate === 'need_ritual') {

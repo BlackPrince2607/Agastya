@@ -28,6 +28,7 @@ import type { FocusTopic } from '@/store/sessionStore';
 import { useSessionStore } from '@/store/sessionStore';
 import { enterMainApp } from '@/utils/navigationFlow';
 import { headlineNeedsPalmFix } from '@/utils/palmInsights';
+import { hasPremiumAccess } from '@/utils/premiumAccess';
 
 const FOCUS_LABEL: Record<FocusTopic, string> = {
   love: 'Love',
@@ -56,9 +57,10 @@ export default function ReportPreviewScreen() {
   const palmAnalysis = useSessionStore((s) => s.palmAnalysis);
   const palmCaptureBase64 = useSessionStore((s) => s.palmCaptureBase64);
   const displayName = useSessionStore((s) => s.userDisplayName);
-  const premium = useSessionStore((s) => s.hasUnlockedPremium);
+  const storePremium = useSessionStore((s) => s.hasUnlockedPremium);
   const mergedSeed = seed ?? storeSeed ?? 'stillness';
   const { isSignedIn } = useAuthSession();
+  const premium = storePremium || hasPremiumAccess();
   const { width: windowWidth } = useWindowDimensions();
   const overlayWidth = Math.min(windowWidth - 48, 320);
   const overlayHeight = Math.round(overlayWidth * 0.55);
@@ -114,7 +116,7 @@ export default function ReportPreviewScreen() {
           }}>
           <OnboardingHeader step={ONBOARDING_STEPS.reportPreview} total={ONBOARDING_TOTAL_STEPS} />
 
-          {__DEV__ ? <DevPremiumPanel showOpenReport /> : null}
+          <DevPremiumPanel showOpenReport />
 
           <MotiView from={{ opacity: 0, translateY: 12 }} animate={{ opacity: 1, translateY: 0 }}>
             <View className="flex-row flex-wrap items-center gap-2">
@@ -151,7 +153,7 @@ export default function ReportPreviewScreen() {
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={{ padding: 22 }}>
-              <GradientText className="font-label text-[10px] uppercase tracking-[0.42em] text-magenta">
+              <GradientText className="font-label text-[10px] uppercase leading-5 tracking-[0.42em] text-magenta">
                 {reading.visionaryTitle}
               </GradientText>
               <Text className="mt-3 font-headline-md text-[22px] leading-8 tracking-tight text-on-surface">
@@ -262,11 +264,13 @@ export default function ReportPreviewScreen() {
           </View>
 
           <View className="relative overflow-hidden rounded-4xl border border-white/10">
-            <GlassCard muted className="opacity-40">
-              <Text className="font-label text-[10px] uppercase tracking-[0.35em] text-primary">
+            <GlassCard muted className="p-5 opacity-40">
+              <Text
+                className="font-label text-[10px] uppercase tracking-[0.35em] text-primary"
+                style={{ lineHeight: 16, paddingTop: 2 }}>
                 Life scores
               </Text>
-              <Text className="mt-2 font-body text-[12px] text-on-primary-container">
+              <Text className="mt-2 font-body text-[12px] leading-5 text-on-primary-container">
                 Your scores across love, career, money, and growth.
               </Text>
               <View className="mt-8 flex-row flex-wrap justify-around gap-x-3 gap-y-8">
@@ -276,8 +280,10 @@ export default function ReportPreviewScreen() {
                 <MetricDonut label="Growth" value={reading.metrics.growth} size={72} />
               </View>
             </GlassCard>
-            <View className="absolute inset-0 items-center justify-center rounded-4xl bg-cosmic-void/78 px-7">
-              <Text className="text-center font-label text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan">
+            <View className="absolute inset-0 items-center justify-center rounded-4xl bg-cosmic-void/78 px-7 py-5">
+              <Text
+                className="text-center font-label text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan"
+                style={{ lineHeight: 18, paddingTop: 2 }}>
                 Included with full access
               </Text>
               <Text className="mt-3 text-center font-body text-[14px] leading-6 text-on-surface/90">
@@ -291,18 +297,20 @@ export default function ReportPreviewScreen() {
             <View className="absolute inset-0 rounded-4xl bg-cosmic-void/35" />
           </View>
 
-          <GlassCard className="border-cyan/20">
-            <GradientText className="font-label text-[10px] uppercase tracking-[0.38em]">
+          <GlassCard className="overflow-visible border-cyan/20 p-5">
+            <GradientText
+              className="font-label text-[10px] uppercase leading-5 tracking-[0.38em]"
+              textStyle={{ lineHeight: 20, paddingTop: 2 }}>
               Locked for now
             </GradientText>
-            <Text className="mt-4 font-body text-[15px] leading-7 text-on-surface/75" numberOfLines={3}>
+            <Text className="mt-4 font-body text-[15px] leading-7 text-on-surface/75" numberOfLines={4}>
               {reading.boldPrediction}
             </Text>
-            <View className="mt-5 gap-2">
+            <View className="mt-5 gap-2.5 pb-1">
               {LOCKED_PERKS.map((perk) => (
-                <View key={perk} className="flex-row items-center gap-3">
-                  <View className="h-1.5 w-1.5 rounded-full bg-cyan/70" />
-                  <Text className="font-body text-[13px] text-on-surface-variant">{perk}</Text>
+                <View key={perk} className="flex-row items-start gap-3">
+                  <View className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-cyan/70" />
+                  <Text className="flex-1 font-body text-[13px] leading-5 text-on-surface-variant">{perk}</Text>
                 </View>
               ))}
             </View>
@@ -314,23 +322,21 @@ export default function ReportPreviewScreen() {
           className="absolute bottom-0 left-0 right-0 z-20 rounded-none border-t border-white/14 bg-cosmic-void/92 px-6 pt-4"
           style={{ elevation: 24 }}>
           <View style={{ paddingBottom: Math.max(insets.bottom, 16) }} className="gap-y-3">
-            {isSignedIn && premium ? (
-              <CosmicButton gradient="nebulaMd3" label="Enter Agastya" onPress={() => enterMainApp()} />
-            ) : isSignedIn ? (
+            {isSignedIn ? (
               <>
-                <Text className="text-center font-body text-[14px] leading-6 text-on-surface-variant">
-                  You&apos;re signed in. Unlock full access to enter the app — chat, compatibility, and your complete report.
-                </Text>
-                <CosmicButton
-                  gradient="nebulaMd3"
-                  label="Unlock full report"
-                  onPress={() =>
-                    router.push({
-                      pathname: '/onboarding/paywall',
-                      params: { seed: mergedSeed },
-                    })
-                  }
-                />
+                <CosmicButton gradient="nebulaMd3" label="Enter Agastya" onPress={() => enterMainApp()} />
+                {!premium ? (
+                  <CosmicButton
+                    variant="ghost"
+                    label="Unlock full report"
+                    onPress={() =>
+                      router.push({
+                        pathname: '/onboarding/paywall',
+                        params: { seed: mergedSeed },
+                      })
+                    }
+                  />
+                ) : null}
               </>
             ) : premium ? (
               <CosmicButton
@@ -369,7 +375,9 @@ export default function ReportPreviewScreen() {
             ) : null}
             <Text className="mt-1 text-center font-body text-[11px] leading-5 text-on-surface-variant">
               {isSignedIn
-                ? 'Your reading is saved on this device.'
+                ? premium
+                  ? 'Your reading is saved on this device.'
+                  : 'Home is unlocked. Upgrade anytime for the full report and Guide.'
                 : 'Your preview stays on this device until you sign in.'}
             </Text>
           </View>

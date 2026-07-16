@@ -1,7 +1,7 @@
 import { mergeSessions } from '@/services/agastyaApi';
 import { track } from '@/services/analytics';
 import { syncAuthUserToStore } from '@/services/authSession';
-import { syncProfileRemote } from '@/services/identity';
+import { ensureDeviceIdentity, syncProfileRemote } from '@/services/identity';
 import { linkRevenueCatUser } from '@/services/revenuecat';
 import { restoreSessionFromServer } from '@/services/sessionRestore';
 import { getSupabase, waitForSupabaseAccessToken } from '@/services/supabase';
@@ -32,11 +32,16 @@ async function tryMergeSession(supabaseUserId: string) {
     }
 
     try {
+      await ensureDeviceIdentity();
       await syncProfileRemote().catch(() => {});
+      const deviceInstallId = useSessionStore.getState().deviceInstallId;
+      if (!deviceInstallId) {
+        throw new Error('deviceInstallId required for session merge');
+      }
       const res = await mergeSessions({
         anonymousSessionId,
         supabaseUserId,
-        deviceInstallId: useSessionStore.getState().deviceInstallId ?? undefined,
+        deviceInstallId,
       });
       syncAuthUserToStore(supabaseUserId);
       track('session_merge', { linked: res.linked });

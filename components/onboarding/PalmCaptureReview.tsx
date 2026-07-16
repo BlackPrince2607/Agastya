@@ -75,6 +75,7 @@ export function PalmCaptureReview({
   const analyzeLabel =
     confirming || detecting ? PALM_REVIEW_ANALYZING : variant === 'partner' ? PARTNER_PALM_REVIEW_ANALYZE : PALM_REVIEW_ANALYZE;
   const handReady = Boolean(landmarks && landmarkSource === 'mediapipe');
+  const canAnalyze = Boolean(landmarks && landmarkSource);
 
   return (
     <View className="flex-1 bg-black">
@@ -107,10 +108,18 @@ export function PalmCaptureReview({
                   <ActivityIndicator color="#d3beeb" />
                 </View>
               ) : null}
-              {!detecting && !handReady ? (
-                <View className="absolute bottom-3 left-3 right-3 rounded-2xl border border-amber-200/30 bg-black/65 px-3 py-2">
-                  <Text className="font-body text-[12px] leading-5 text-amber-100/90">
-                    Hand not clearly detected — retake with your open palm filling the frame and even light.
+              {!detecting && handReady ? (
+                <View className="absolute bottom-3 left-3 right-3 rounded-2xl border border-cyan/35 bg-black/65 px-3.5 py-3">
+                  <Text className="font-body text-[12px] leading-[18px] text-cyan/95">
+                    Palm detected — ready to analyze your major lines.
+                  </Text>
+                </View>
+              ) : null}
+              {!detecting && !handReady && canAnalyze ? (
+                <View className="absolute bottom-3 left-3 right-3 rounded-2xl border border-amber-200/30 bg-black/70 px-3.5 py-3">
+                  <Text className="font-body text-[12px] leading-[18px] text-amber-100/95">
+                    Hand outline is approximate. You can still analyze — for sharper line tracing, retake with
+                    your open palm filling the frame and even light.
                   </Text>
                 </View>
               ) : null}
@@ -123,7 +132,7 @@ export function PalmCaptureReview({
             <CosmicButton
               gradient="nebulaMd3"
               label={analyzeLabel}
-              disabled={detecting || confirming || !landmarks || !landmarkSource}
+              disabled={detecting || confirming || !canAnalyze}
               onPress={() => {
                 if (!landmarks || !landmarkSource) return;
                 onConfirm(landmarks, landmarkSource);

@@ -90,11 +90,18 @@ export async function ensureDeviceIdentity(): Promise<{
     deviceInstallId = await resolveInstallId();
   }
 
-  useSessionStore.setState({
-    sessionId,
-    deviceInstallId,
-    identityReady: true,
-  });
+  // Avoid persist churn — every API POST used to rewrite session AsyncStorage.
+  if (
+    snap.sessionId !== sessionId ||
+    snap.deviceInstallId !== deviceInstallId ||
+    !snap.identityReady
+  ) {
+    useSessionStore.setState({
+      sessionId,
+      deviceInstallId,
+      identityReady: true,
+    });
+  }
 
   return { sessionId, deviceInstallId };
 }
@@ -116,9 +123,6 @@ async function runBootstrapRemote(): Promise<void> {
   try {
     if (__DEV__) {
       console.log(`[Agastya API] health check → ${AGASTYA_API_ROOT}/v1/health`);
-    }
-    if (Platform.OS !== 'web') {
-      await new Promise((resolve) => setTimeout(resolve, 800));
     }
     const health = await fetchApiHealthWithRetry(2, 1500);
     setApiHealth({

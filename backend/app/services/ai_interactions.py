@@ -14,6 +14,9 @@ from app.prompts.templates import CHAT_SYSTEM, TASK_SYSTEM
 from app.schemas.chat import ChatRequest
 from app.schemas.palm import PalmAnalysis
 from app.schemas.tasks import DailyTasksBody, Task
+from app.services.bucket_store import SessionBucket, normalize_user_memory
+from app.services.day_context import resolve_today_focus_theme
+from app.services.reflection_task import EVENING_REFLECTION, ensure_reflection_task
 
 _SUGGESTION_LINE = re.compile(r"^\s*SUGGESTIONS:\s*(\[.*\])\s*$", re.IGNORECASE | re.MULTILINE)
 logger = logging.getLogger(__name__)
@@ -70,6 +73,7 @@ async def generate_chat_reply(
     body: ChatRequest,
     server_is_premium: bool = False,
     prior_chat_tail: list[dict[str, str]] | None = None,
+    bkt: SessionBucket | None = None,
 ) -> tuple[str, list[str]]:
     # Use server-authoritative premium flag only.
     is_premium = server_is_premium
@@ -89,10 +93,16 @@ async def generate_chat_reply(
         )
 
     palm_json = json.dumps(body.palm_analysis.model_dump())
+    memory_block = ""
+    if bkt is not None:
+        from app.services.user_memory import format_memory_block
+
+        memory_block = format_memory_block(bkt)
     context = (
         f"USER_PROFILE:\n{body.profile_summary}\n\n"
         f"PALM_JSON:\n{palm_json}\n\n"
-        "Answer as Agastya."
+        + (f"{memory_block}\n\n" if memory_block else "")
+        + "Answer as Agastya."
     )
 
     msgs = [{"role": "system", "content": f"{CHAT_SYSTEM}\n\n{context}"}]
@@ -102,7 +112,10 @@ async def generate_chat_reply(
             role = "assistant"
         elif role == "you":
             role = "user"
-        if role not in {"user", "assistant", "system"}:
+        elif role == "system":
+            # Never accept client-supplied system turns (prompt injection).
+            role = "user"
+        if role not in {"user", "assistant"}:
             role = "user"
         msgs.append({"role": role, "content": turn.content})
 
@@ -132,44 +145,147 @@ async def generate_chat_reply(
         return _chat_fallback(settings, body)
 
 
-def _deterministic_tasks(palm: PalmAnalysis, premium: bool) -> tuple[list[Task], str]:
-    variant = "premium_predictions" if premium else "standard"
-    tasks = [
-        Task(
-            id="gratitude",
-            text="Practice gratitude",
-            description="Write down three things you are grateful for today.",
-            category="growth",
-            estimatedMinutes=5,
-            difficulty="easy",
-            examples=["A person who helped you", "A small win", "Something you overlook"],
-        ),
-        Task(
-            id="bold-step",
-            text="Take a bold step",
-            description=f"Do one thing that honors your {palm.personality} pulse and scares you a little.",
-            category="career",
-            estimatedMinutes=15,
-            difficulty="medium",
-            examples=["Start that conversation", "Apply for that role", "Share your idea"],
-        ),
-        Task(
-            id="honest-message",
-            text="Send an honest message",
-            description="Reach out to someone you've been quietly avoiding — one honest sentence.",
-            category="love",
-            estimatedMinutes=10,
-            difficulty="easy",
-            examples=["Check in on a friend", "Say thank you", "Express how you feel"],
-        ),
-    ]
-    return tasks, variant
+def _deterministic_tasks(
+    palm: PalmAnalysis,
+    premium: bool,
+    focus_theme: str,
+) -> tuple[list[Task], str, str]:
+    variant = f"focus:{focus_theme}" if focus_theme else ("premium_predictions" if premium else "standard")
+    themed = {
+        "career": [
+            Task(
+                id="career-clarity",
+                text="Clarify one career move",
+                description=f"Name one next step that honors your {palm.personality} drive — even a small one.",
+                category="career",
+                estimatedMinutes=10,
+                difficulty="medium",
+                examples=["Update one bullet on your resume", "Message a mentor", "Block 25 minutes for deep work"],
+            ),
+            Task(
+                id="career-signal",
+                text="Send a professional signal",
+                description="Reach out once today in a way that advances your path — ask, share, or follow up.",
+                category="career",
+                estimatedMinutes=15,
+                difficulty="medium",
+                examples=["Reply to a recruiter", "Share a useful note with a colleague", "Apply to one role"],
+            ),
+            EVENING_REFLECTION,
+        ],
+        "love": [
+            Task(
+                id="love-presence",
+                text="Offer undivided presence",
+                description="Give someone ten uninterrupted minutes — no phone, no half-listening.",
+                category="love",
+                estimatedMinutes=10,
+                difficulty="easy",
+                examples=["A partner", "A friend", "A family member"],
+            ),
+            Task(
+                id="honest-message",
+                text="Send an honest message",
+                description="Reach out to someone you've been quietly avoiding — one honest sentence.",
+                category="love",
+                estimatedMinutes=10,
+                difficulty="easy",
+                examples=["Check in on a friend", "Say thank you", "Express how you feel"],
+            ),
+            EVENING_REFLECTION,
+        ],
+        "money": [
+            Task(
+                id="money-check",
+                text="Face one money fact",
+                description="Look at one account or bill without judgment — clarity beats avoidance.",
+                category="money",
+                estimatedMinutes=10,
+                difficulty="easy",
+                examples=["Check balance", "Open that bill email", "Note upcoming dues"],
+            ),
+            Task(
+                id="money-move",
+                text="Make one money move",
+                description="Take a single action that aligns spending or saving with who you're becoming.",
+                category="money",
+                estimatedMinutes=15,
+                difficulty="medium",
+                examples=["Move a small amount to savings", "Cancel one unused sub", "Price a skill you'd sell"],
+            ),
+            EVENING_REFLECTION,
+        ],
+        "growth": [
+            Task(
+                id="gratitude",
+                text="Practice gratitude",
+                description="Write down three things you are grateful for today.",
+                category="growth",
+                estimatedMinutes=5,
+                difficulty="easy",
+                examples=["A person who helped you", "A small win", "Something you overlook"],
+            ),
+            Task(
+                id="bold-step",
+                text="Take a bold step",
+                description=f"Do one thing that honors your {palm.personality} pulse and scares you a little.",
+                category="growth",
+                estimatedMinutes=15,
+                difficulty="medium",
+                examples=["Start that conversation", "Share your idea", "Begin a draft"],
+            ),
+            EVENING_REFLECTION,
+        ],
+    }
+    tasks = themed.get(focus_theme) or themed["growth"]
+    return ensure_reflection_task(tasks), variant, focus_theme
 
 
-async def generate_daily_tasks(settings: Settings, body: DailyTasksBody) -> tuple[list[Task], str]:
+async def generate_daily_tasks(
+    settings: Settings,
+    body: DailyTasksBody,
+    bkt: SessionBucket | None = None,
+) -> tuple[list[Task], str, str, bool]:
+    """Return tasks, variant, focusTheme, and whether daily_context was mutated (for persist)."""
+    from app.services.day_context import utc_today_iso
+
     palm = body.palm_analysis
     premium = body.is_premium
-    fallback = _deterministic_tasks(palm, premium)
+    focus_topics = list(body.focus_topics)
+    temporary: list[dict] = []
+    journey: list[str] = []
+    temporary_texts: list[str] = []
+    if bkt is not None:
+        if not focus_topics:
+            raw = bkt.meta.get("focusTopics") or []
+            focus_topics = [str(t) for t in raw] if isinstance(raw, list) else []
+        from app.services.user_memory import prompt_memory_snippets
+
+        mem = normalize_user_memory(bkt.user_memory)
+        temporary = list(mem.get("temporary") or [])
+        journey, temporary_texts = prompt_memory_snippets(bkt)
+        suggested = resolve_today_focus_theme(bkt.daily_context, focus_topics, temporary)
+    else:
+        suggested = resolve_today_focus_theme(None, focus_topics, None)
+
+    today = utc_today_iso()
+    if bkt is not None:
+        ctx = bkt.daily_context if isinstance(bkt.daily_context, dict) else {}
+        cache = ctx.get("tasksCache") if ctx.get("date") == today else None
+        if (
+            isinstance(cache, dict)
+            and cache.get("focusTheme") == suggested
+            and isinstance(cache.get("tasks"), list)
+        ):
+            try:
+                cached_tasks = [Task.model_validate(t) for t in cache["tasks"][:3]]
+                if len(cached_tasks) >= 3:
+                    variant = str(cache.get("variant") or f"focus:{suggested}")
+                    return ensure_reflection_task(cached_tasks), variant, suggested, False
+            except Exception:
+                pass
+
+    fallback = _deterministic_tasks(palm, premium, suggested)
 
     payload = {
         "traits": palm.traits,
@@ -178,6 +294,11 @@ async def generate_daily_tasks(settings: Settings, body: DailyTasksBody) -> tupl
         "heart_line": palm.heart_line,
         "head_line": palm.head_line,
         "premium": premium,
+        "focusTopics": focus_topics,
+        "lifeJourney": journey,
+        "temporaryContext": temporary_texts,
+        "streak": body.streak,
+        "focusTheme": suggested,
     }
     completion = await llm_chat_completion(
         settings,
@@ -191,22 +312,49 @@ async def generate_daily_tasks(settings: Settings, body: DailyTasksBody) -> tupl
     )
     if completion is None:
         logger.warning("llm_fallback_reason=daily_tasks llm_enabled=%s", settings.llm_enabled)
-        return fallback
+        return fallback[0], fallback[1], fallback[2], False
     try:
         raw = completion.choices[0].message.content or "{}"
         data = json.loads(raw)
         raw_tasks = data.get("tasks") or []
         if len(raw_tasks) < 3:
             logger.warning("llm_fallback_reason=daily_tasks_insufficient_count")
-            return fallback
+            return fallback[0], fallback[1], fallback[2], False
         try:
             tasks = [Task.model_validate(t) for t in raw_tasks[:3]]
         except Exception:
             logger.warning("llm_fallback_reason=daily_tasks_validation")
-            return fallback
-        variant = "premium_predictions" if premium else "standard"
-        return tasks, variant
+            return fallback[0], fallback[1], fallback[2], False
+        # focusTheme is locked via resolve_today_focus_theme — ignore LLM overrides.
+        variant = f"focus:{suggested}"
+        tasks_out = ensure_reflection_task(tasks)
+        if bkt is not None:
+            from app.services.day_context import (
+                chapter_entry_from_context,
+                get_recent_chapters,
+                merge_recent_chapters,
+            )
+
+            prev = bkt.daily_context if isinstance(bkt.daily_context, dict) else {}
+            base = dict(prev) if prev.get("date") == today else {"date": today}
+            base["date"] = today
+            recent = get_recent_chapters(prev)
+            prev_day = str(prev.get("date") or "")
+            if prev_day and prev_day != today:
+                archived = chapter_entry_from_context(prev)
+                if archived:
+                    recent = merge_recent_chapters(recent, [archived])
+            if recent:
+                base["recentChapters"] = recent
+            base["tasksCache"] = {
+                "focusTheme": suggested,
+                "variant": variant,
+                "tasks": [t.model_dump(by_alias=True) for t in tasks_out],
+            }
+            bkt.daily_context = base
+            return tasks_out, variant, suggested, True
+        return tasks_out, variant, suggested, False
     except Exception as exc:
         logger.exception("Daily tasks generation failed: %s", exc)
         sentry_sdk.capture_exception(exc)
-        return fallback
+        return fallback[0], fallback[1], fallback[2], False

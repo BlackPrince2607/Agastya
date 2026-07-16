@@ -60,7 +60,7 @@ export function ProfileBasicsForm({
       label="Your name"
       value={name}
       onChangeText={onNameChange}
-      placeholder="How should Agastya address you?"
+      placeholder="What should we call you?"
       autoCapitalize="words"
       maxLength={40}
       leadingIcon="sparkles-outline"

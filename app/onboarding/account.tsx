@@ -38,7 +38,6 @@ import { getSupabase, isSupabaseEnabled } from '@/services/supabase';
 import { useSessionStore } from '@/store/sessionStore';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { hasRitualReading } from '@/utils/navigationFlow';
-import { previewReportHref } from '@/utils/premiumAccess';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -185,9 +184,7 @@ export default function SaveJourneyScreen() {
                   {fromProfileFlow
                     ? 'Return to your profile below.'
                     : hasRitualReading() || hasEnteredMain
-                      ? premium
-                        ? 'Tap Enter Agastya below.'
-                        : 'You are signed in. Unlock full access to enter the app.'
+                      ? 'Tap Enter Agastya below.'
                       : 'Tap Enter Agastya to restore your journey or start from Home.'}
                 </Text>
               </GlassCard>
@@ -243,7 +240,7 @@ export default function SaveJourneyScreen() {
                     <GoogleLogo size={20} />
                   )}
                   <Text className="font-body-medium text-[16px] font-semibold text-on-surface">
-                    {oauthBusy === 'google' ? 'Signing in...' : 'Continue with Google'}
+                    {oauthBusy === 'google' ? 'Restoring your reading…' : 'Continue with Google'}
                   </Text>
                 </Pressable>
               </View>
@@ -299,17 +296,11 @@ export default function SaveJourneyScreen() {
             <View className="gap-y-3">
               {isSignedIn && fromProfileFlow ? (
                 <PrimaryButton label="Back to profile" onPress={() => router.replace('/(main)/profile')} />
-              ) : isSignedIn && premium ? (
+              ) : isSignedIn ? (
                 <PrimaryButton
                   label={enterBusy ? 'Opening Agastya...' : 'Enter Agastya'}
                   disabled={enterBusy || oauthBusy !== null}
                   onPress={continueOnboarding}
-                />
-              ) : isSignedIn ? (
-                <PrimaryButton
-                  label="View report preview"
-                  disabled={enterBusy || oauthBusy !== null}
-                  onPress={() => router.replace(previewReportHref())}
                 />
               ) : null}
               {!isSignedIn ? (
@@ -322,7 +313,7 @@ export default function SaveJourneyScreen() {
                   onPress={() => router.push({ pathname: '/onboarding/paywall', params: { seed: mergedSeed } })}
                   className="items-center pb-1">
                   <Text className="font-body text-[13px]" style={{ color: '#22d3ee' }}>
-                    Haven't unlocked yet? View plans
+                    Want full access? View plans
                   </Text>
                 </Pressable>
               ) : null}

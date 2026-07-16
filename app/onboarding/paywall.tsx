@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams, usePathname, useSegments } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, Text, View, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { MotiView } from 'moti';
@@ -14,11 +14,14 @@ import { BlurContainer, CosmicButton } from '@/components/primitives';
 import { ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS } from '@/constants/onboarding';
 import { stitchMd3 } from '@/constants/stitchWelcome';
 import { stitchSignal } from '@/constants/theme';
-import { track } from '@/services/analytics';
+import { AnalyticsEvent, track, trackOnce } from '@/services/analytics';
 import { unlockPremiumFromStore, finalizeStripeCheckout } from '@/services/premiumUnlock';
+import { devUnlockPremium, isPrototypePremiumUnlockEnabled } from '@/services/devPremium';
 import { isRevenueCatConfigured, isStripeCheckoutEnabled, isWebPremiumUnlockAvailable } from '@/services/revenuecat';
 import { useSessionStore } from '@/store/sessionStore';
+import { enterMainApp } from '@/utils/navigationFlow';
 import { goBack, normalizeRouteParams } from '@/utils/navigationBack';
+import { hasPremiumAccess } from '@/utils/premiumAccess';
 
 const TRUST_HIGHLIGHTS = [
   'Palm insights tied to your focus areas',
@@ -62,7 +65,7 @@ export default function PaywallScreen() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    track('paywall_viewed');
+    trackOnce('paywall_viewed', AnalyticsEvent.PAYWALL_VIEWED);
   }, []);
 
   const mergedSeed = seed ?? useSessionStore.getState().readingSeed ?? 'stillness';
@@ -75,10 +78,14 @@ export default function PaywallScreen() {
       const result = await finalizeStripeCheckout(mergedSeed);
       if (cancelled) return;
       if (result.ok) {
-        track('paywall_unlock_success', { source: result.source });
         goToAccountSync();
-      } else if (__DEV__) {
-        console.warn('[Agastya] Stripe checkout verify pending');
+      } else {
+        Alert.alert(
+          'Purchase pending',
+          result.reason === 'report_failed'
+            ? 'Payment may have succeeded, but we could not load your full report yet. Try Restore or sign in and try again.'
+            : 'We could not confirm your subscription yet. Wait a moment and tap Restore purchases, or contact support if this continues.',
+        );
       }
       setBusy(false);
     })();
@@ -94,17 +101,46 @@ export default function PaywallScreen() {
     });
   };
 
+  const unlockFailureMessage = (reason: string) => {
+    switch (reason) {
+      case 'cancelled':
+        return 'Purchase was cancelled.';
+      case 'unavailable':
+        return 'Subscriptions are not available right now. Check your connection and try again.';
+      case 'not_entitled':
+        return 'No active subscription was found for this account.';
+      case 'report_failed':
+        return 'Purchase succeeded, but we could not generate your full report. Please try again or Restore purchases.';
+      default:
+        return 'Something went wrong. Please try again.';
+    }
+  };
+
   const handleSubscribe = async () => {
     if (busy) return;
     setBusy(true);
-    track('paywall_primary_cta');
+    track(AnalyticsEvent.PURCHASE_STARTED, { billing_period: period });
 
     try {
+      if (isPrototypePremiumUnlockEnabled()) {
+        const proto = await devUnlockPremium();
+        if (proto.ok) {
+          if (hasPremiumAccess()) {
+            enterMainApp();
+          } else {
+            goToAccountSync();
+          }
+          return;
+        }
+        Alert.alert('Could not unlock', proto.reason);
+        return;
+      }
+
       const result = await unlockPremiumFromStore({ mode: 'purchase', seed: mergedSeed });
 
       if (!result.ok) {
-        if (__DEV__) {
-          console.warn('[Agastya] purchase failed', result.reason);
+        if (result.reason !== 'cancelled') {
+          Alert.alert('Could not unlock Premium', unlockFailureMessage(result.reason));
         }
         return;
       }
@@ -113,7 +149,6 @@ export default function PaywallScreen() {
         return;
       }
 
-      track('paywall_unlock_success', { source: result.source });
       goToAccountSync();
     } finally {
       setBusy(false);
@@ -127,8 +162,8 @@ export default function PaywallScreen() {
       const result = await unlockPremiumFromStore({ mode: 'restore', seed: mergedSeed });
       if (result.ok) {
         goToAccountSync();
-      } else if (__DEV__) {
-        console.warn('[Agastya] restore found no subscription');
+      } else if (result.reason !== 'cancelled') {
+        Alert.alert('Restore failed', unlockFailureMessage(result.reason));
       }
     } finally {
       setBusy(false);
@@ -172,10 +207,14 @@ export default function PaywallScreen() {
                   : 'Complete your purchase to unlock the full experience.'}
               </Text>
             ) : null}
-            {Platform.OS !== 'web' && !isRevenueCatConfigured() ? (
+            {isPrototypePremiumUnlockEnabled() ? (
+              <Text className="mt-3 font-body text-[13px] leading-5 text-cyan">
+                Store billing is not configured on this build. Tap below to unlock full access for testing.
+              </Text>
+            ) : Platform.OS !== 'web' && !isRevenueCatConfigured() ? (
               <Text className="mt-3 font-body text-[13px] leading-5 text-on-surface-variant">
-                Subscriptions aren't available in this version yet. You can continue with the free preview from the previous
-                screen.
+                Subscriptions aren&apos;t available in this version yet. You can continue with the free preview from the
+                previous screen.
               </Text>
             ) : null}
           </View>
@@ -241,7 +280,11 @@ export default function PaywallScreen() {
           style={{ elevation: 24 }}>
           <View style={{ paddingBottom: Math.max(insets.bottom, 16) }} className="gap-y-3.5">
             {premium ? (
-              <CosmicButton gradient="nebulaMd3" label="Sign in to enter" onPress={goToAccountSync} />
+              <CosmicButton
+                gradient="nebulaMd3"
+                label="Enter Agastya"
+                onPress={() => (hasPremiumAccess() ? enterMainApp() : goToAccountSync())}
+              />
             ) : (
               <MotiView
                 from={{ scale: 1 }}
@@ -252,9 +295,11 @@ export default function PaywallScreen() {
                   label={
                     busy
                       ? 'Processing...'
-                      : isStripeCheckoutEnabled()
-                        ? 'Subscribe with Stripe'
-                        : 'Start 7-Day Free Trial'
+                      : isPrototypePremiumUnlockEnabled()
+                        ? 'Unlock full access'
+                        : isStripeCheckoutEnabled()
+                          ? 'Subscribe with Stripe'
+                          : 'Start 7-Day Free Trial'
                   }
                   onPress={() => void handleSubscribe()}
                 />

@@ -1,33 +1,49 @@
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Linking, Platform, View } from 'react-native';
+import { Alert, Linking, Platform, Text, View } from 'react-native';
 
 import { MainTabScroll } from '@/components/layout/MainTabScroll';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { MainCosmicHeader } from '@/components/layout/MainCosmicHeader';
 import { MotiView } from '@/components/moti/MotiView';
 import { DevPremiumPanel } from '@/components/dev/DevPremiumPanel';
+import { isPrototypePremiumUnlockEnabled } from '@/services/devPremium';
 import { MembershipCard } from '@/components/profile/MembershipCard';
 import { ProfileHero } from '@/components/profile/ProfileHero';
 import { SettingsRow } from '@/components/profile/SettingsRow';
 import { SettingsSection } from '@/components/profile/SettingsSection';
 import { StatsGrid } from '@/components/profile/StatCard';
-import { SectionHeader } from '@/components/feedback';
+import { LoadingBlock, SectionHeader } from '@/components/feedback';
+import { GlassCard, InsightCard } from '@/components/ui';
 import { LEGAL_URLS } from '@/constants/legal';
 import { MAIN_SECTION_GAP, STACK_GAP } from '@/constants/layout';
-import { displayNameOrDefault, SIGN_IN_UNAVAILABLE } from '@/constants/userCopy';
+import {
+  displayNameOrDefault,
+  PROFILE_JOURNEY_LOADING,
+  PROFILE_TIMELINE_EMPTY,
+  PROFILE_WEEKLY_EMPTY,
+  SIGN_IN_UNAVAILABLE,
+} from '@/constants/userCopy';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { warmUpOAuthBrowser, coolDownOAuthBrowser } from '@/services/oauthBrowser';
 import { signInFromProfile, signOutAndReturnToWelcome, resetLocalAndSignOut, deleteAccountAndReset } from '@/services/authSession';
+import { fetchJourneyTimeline, fetchWeeklySummary } from '@/services/agastyaApi';
+import { readThisWeeksLocalSummary, writeLocalWeekly } from '@/services/guidanceCache';
+import { AnalyticsEvent, trackOnce } from '@/services/analytics';
 import { unlockPremiumFromStore } from '@/services/premiumUnlock';
 import { isSupabaseEnabled } from '@/services/supabase';
 import { useChatStore } from '@/store/chatStore';
 import { useSessionStore } from '@/store/sessionStore';
 import { useTaskStore } from '@/store/taskStore';
+import { withApiRetry } from '@/utils/apiRetry';
 import { replayOnboarding } from '@/utils/navigationFlow';
 import { paywallRouteParams } from '@/utils/paywallNavigation';
 import { previewReportHref } from '@/utils/premiumAccess';
+
+function ritualsCompletedTotal(history: Record<string, string[]>): number {
+  return Object.values(history).reduce((sum, ids) => sum + ids.length, 0);
+}
 
 function appVersionLabel(): string {
   const version = Constants.expoConfig?.version ?? '1.0.0';
@@ -49,6 +65,8 @@ function storeSubscriptionsUrl(): string | null {
 export default function ProfileScreen() {
   const name = useSessionStore((s) => s.userDisplayName);
   const avatarId = useSessionStore((s) => s.avatarId);
+  const sessionId = useSessionStore((s) => s.sessionId);
+  const focusTopics = useSessionStore((s) => s.focusTopics);
   const premium = useSessionStore((s) => s.hasUnlockedPremium);
   const hasEnteredMain = useSessionStore((s) => s.hasEnteredMain);
   const palmAnalysis = useSessionStore((s) => s.palmAnalysis);
@@ -56,12 +74,23 @@ export default function ProfileScreen() {
   const { isSignedIn, email, loading: authLoading } = useAuthSession();
 
   const streak = useTaskStore((s) => s.streak);
+  const history = useTaskStore((s) => s.history);
   const messageCount = useChatStore((s) => s.messageCount);
 
   const [restoreBusy, setRestoreBusy] = useState(false);
   const [signOutBusy, setSignOutBusy] = useState(false);
   const [startFreshBusy, setStartFreshBusy] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [weekly, setWeekly] = useState<{
+    title: string;
+    body: string;
+    currentChapter?: string | null;
+  } | null>(null);
+  const [timeline, setTimeline] = useState<Array<{ id: string; label: string; detail: string }>>([]);
+  const [journeyLoading, setJourneyLoading] = useState(false);
+  const [journeyLoaded, setJourneyLoaded] = useState(false);
+
+  const completedRituals = useMemo(() => ritualsCompletedTotal(history), [history]);
 
   useEffect(() => {
     warmUpOAuthBrowser();
@@ -69,6 +98,92 @@ export default function ProfileScreen() {
       coolDownOAuthBrowser();
     };
   }, []);
+
+  useEffect(() => {
+    if (!palmAnalysis || !sessionId) {
+      setJourneyLoading(false);
+      setJourneyLoaded(false);
+      return;
+    }
+    let active = true;
+    setJourneyLoading(true);
+
+    const load = async () => {
+      // Snapshot ritual stats at call time — do not re-POST when streak bumps.
+      const taskSnap = useTaskStore.getState();
+      const ritualsTotal = ritualsCompletedTotal(taskSnap.history) || undefined;
+      const stats = {
+        streak: taskSnap.streak > 0 ? taskSnap.streak : undefined,
+        ritualsCompletedTotal: ritualsTotal,
+      };
+
+      const localWeekly = await readThisWeeksLocalSummary();
+      if (!active) return;
+      if (localWeekly) {
+        setWeekly({
+          title: localWeekly.title,
+          body: localWeekly.body,
+          currentChapter: localWeekly.currentChapter ?? null,
+        });
+        trackOnce(`weekly_summary_viewed:${localWeekly.weekKey}`, AnalyticsEvent.WEEKLY_SUMMARY_VIEWED, {
+          source: 'profile',
+          week_key: localWeekly.weekKey,
+        });
+      }
+
+      try {
+        const timelinePromise = withApiRetry(() => fetchJourneyTimeline({ sessionId, ...stats }));
+        const weeklyPromise = localWeekly
+          ? Promise.resolve(null)
+          : withApiRetry(() =>
+              fetchWeeklySummary({
+                sessionId,
+                palmAnalysis,
+                focusTopics: focusTopics ?? [],
+                ...stats,
+              }),
+            );
+
+        const [weeklyRes, timelineRes] = await Promise.all([weeklyPromise, timelinePromise]);
+        if (!active) return;
+        if (weeklyRes?.title && weeklyRes.body) {
+          setWeekly({
+            title: weeklyRes.title,
+            body: weeklyRes.body,
+            currentChapter: weeklyRes.currentChapter ?? null,
+          });
+          trackOnce(`weekly_summary_viewed:${weeklyRes.weekKey}`, AnalyticsEvent.WEEKLY_SUMMARY_VIEWED, {
+            source: 'profile',
+            week_key: weeklyRes.weekKey,
+          });
+          await writeLocalWeekly({
+            weekKey: weeklyRes.weekKey,
+            title: weeklyRes.title,
+            body: weeklyRes.body,
+            topTheme: weeklyRes.topTheme ?? null,
+            consistencyNote: weeklyRes.consistencyNote ?? null,
+            currentChapter: weeklyRes.currentChapter ?? null,
+          });
+        }
+        if (timelineRes.items?.length) {
+          setTimeline(timelineRes.items.map((i) => ({ id: i.id, label: i.label, detail: i.detail })));
+        } else {
+          setTimeline([]);
+        }
+      } catch {
+        /* profile still usable without journey blocks; local weekly may already show */
+      } finally {
+        if (active) {
+          setJourneyLoading(false);
+          setJourneyLoaded(true);
+        }
+      }
+    };
+    void load();
+    return () => {
+      active = false;
+    };
+  }, [palmAnalysis, sessionId, focusTopics]);
 
   const displayName = displayNameOrDefault(name);
   const emailLabel = isSignedIn ? email ?? 'Signed in' : 'Not signed in';
@@ -217,7 +332,70 @@ export default function ProfileScreen() {
           </MotiView>
         </View>
 
-        <SettingsSection index={0} title="Reading" subtitle="Palm insights and compatibility">
+        {weekly && palmAnalysis ? (
+          <MotiView
+            from={{ opacity: 0, translateY: 10 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 420, delay: 90 }}
+            className="w-full">
+            <InsightCard
+              eyebrow="Current Chapter"
+              title={weekly.currentChapter?.trim() || weekly.title}
+              body={weekly.body}
+              ctaLabel="See your journey"
+              onPress={() => router.push('/tasks')}
+            />
+          </MotiView>
+        ) : journeyLoading && palmAnalysis ? (
+          <GlassCard muted className="w-full p-5">
+            <LoadingBlock variant="skeleton" compact message={PROFILE_JOURNEY_LOADING} />
+          </GlassCard>
+        ) : journeyLoaded && palmAnalysis && !weekly ? (
+          <GlassCard muted className="w-full gap-2 p-5">
+            <Text className="font-label text-[11px] uppercase tracking-[0.14em] text-primary">This Week</Text>
+            <Text className="font-headline-md text-[18px] text-on-surface">{PROFILE_WEEKLY_EMPTY.title}</Text>
+            <Text className="font-body text-[14px] leading-6 text-on-surface-variant">
+              {PROFILE_WEEKLY_EMPTY.body}
+            </Text>
+          </GlassCard>
+        ) : null}
+
+        {timeline.length > 0 && palmAnalysis ? (
+          <SettingsSection index={0} title="Your journey" subtitle="Moments from your Life Blueprint path">
+            <View className="gap-0 py-2">
+              {timeline.map((item, index) => (
+                <MotiView
+                  key={item.id}
+                  from={{ opacity: 0, translateY: 8 }}
+                  animate={{ opacity: 1, translateY: 0 }}
+                  transition={{ type: 'timing', duration: 380, delay: 40 + index * 50 }}
+                  className="flex-row gap-3 py-3">
+                  <View className="items-center pt-1.5">
+                    <View className="h-2 w-2 rounded-full bg-primary" />
+                    {index < timeline.length - 1 ? (
+                      <View className="mt-1 w-px flex-1 bg-white/15" style={{ minHeight: 28 }} />
+                    ) : null}
+                  </View>
+                  <View className="min-w-0 flex-1 gap-0.5">
+                    <Text className="font-headline-md text-[15px] text-on-surface">{item.label}</Text>
+                    <Text className="font-body text-[13px] leading-5 text-on-surface-variant">{item.detail}</Text>
+                  </View>
+                </MotiView>
+              ))}
+            </View>
+          </SettingsSection>
+        ) : journeyLoaded && palmAnalysis && timeline.length === 0 ? (
+          <SettingsSection index={0} title="Your journey" subtitle="Moments from your Life Blueprint path">
+            <View className="gap-1.5 py-4">
+              <Text className="font-headline-md text-[15px] text-on-surface">{PROFILE_TIMELINE_EMPTY.title}</Text>
+              <Text className="font-body text-[13px] leading-5 text-on-surface-variant">
+                {PROFILE_TIMELINE_EMPTY.body}
+              </Text>
+            </View>
+          </SettingsSection>
+        ) : null}
+
+        <SettingsSection index={1} title="Reading" subtitle="Palm insights and compatibility">
           {!palmAnalysis ? (
             <SettingsRow
               icon="front_hand"
@@ -241,7 +419,7 @@ export default function ProfileScreen() {
           />
         </SettingsSection>
 
-        <SettingsSection index={1} title="Subscription" subtitle="Membership and billing">
+        <SettingsSection index={2} title="Subscription" subtitle="Membership and billing">
           <SettingsRow
             icon="refresh"
             title={restoreBusy ? 'Restoring…' : 'Restore purchases'}
@@ -260,7 +438,7 @@ export default function ProfileScreen() {
           ) : null}
         </SettingsSection>
 
-        <SettingsSection index={2} title="Account" subtitle="Identity, backup, and security">
+        <SettingsSection index={3} title="Account" subtitle="Identity, backup, and security">
           <SettingsRow
             icon="edit"
             title="Edit profile"
@@ -321,20 +499,20 @@ export default function ProfileScreen() {
           )}
         </SettingsSection>
 
-        <SettingsSection index={3} title="About" subtitle="Legal and app information">
+        <SettingsSection index={4} title="About" subtitle="Legal and app information">
           <SettingsRow icon="lock" title="Privacy policy" onPress={() => openLink(LEGAL_URLS.privacy)} />
           <SettingsRow icon="article" title="Terms of use" onPress={() => openLink(LEGAL_URLS.terms)} />
           <SettingsRow icon="info" title="Version" subtitle={version} showChevron={false} last />
         </SettingsSection>
 
-        {__DEV__ ? (
+        {isPrototypePremiumUnlockEnabled() ? (
           <MotiView
             from={{ opacity: 0, translateY: 12 }}
             animate={{ opacity: 1, translateY: 0 }}
             transition={{ type: 'timing', duration: 400, delay: 280 }}
             className="w-full"
             style={{ gap: STACK_GAP }}>
-            <SectionHeader title="Developer" subtitle="Visible only in development builds" />
+            <SectionHeader title="Prototype" subtitle="Unlock when store billing is not configured" />
             <DevPremiumPanel showOpenReport />
           </MotiView>
         ) : null}

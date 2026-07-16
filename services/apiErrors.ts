@@ -1,5 +1,17 @@
 /** Map backend / client errors to user-friendly copy. */
 
+export class ApiHttpError extends Error {
+  readonly status: number;
+  readonly rawDetail: string;
+
+  constructor(message: string, status: number, rawDetail: string) {
+    super(message);
+    this.name = 'ApiHttpError';
+    this.status = status;
+    this.rawDetail = rawDetail;
+  }
+}
+
 export const ERRORS = {
   network: "We couldn't reach Agastya right now. Check your connection and try again.",
   guideNeedsPalm: 'Complete your palm reading first. Then the Guide can answer questions about your report.',
@@ -15,6 +27,16 @@ export const ERRORS = {
 
 export function mapApiError(detail: string): string {
   const d = detail.toLowerCase();
+  // FastAPI unknown-route body only — not "No saved session found" etc.
+  if (d.trim() === 'not found' || /"detail"\s*:\s*"not found"/i.test(detail)) {
+    return 'This feature is not available on the server yet. Redeploy the backend, then try again.';
+  }
+  if (d.includes('failed to save session') || d.includes('session storage temporarily unavailable')) {
+    return 'Could not save your session. Check your connection and try again.';
+  }
+  if (d.includes('rate limit')) {
+    return 'Too many requests. Wait a moment and try again.';
+  }
   if (d.includes('fastapi') || d.includes('expo_public') || d.includes('transmission frayed')) {
     return ERRORS.network;
   }

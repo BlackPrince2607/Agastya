@@ -9,12 +9,27 @@ from app.config import Settings, get_settings
 from app.schemas.palm import PalmAnalysis
 from app.schemas.predictions import PredictionsResponse
 from app.schemas.report import FullReport
-from app.services.bucket_store import SessionBucket
-from app.services.supabase_rest import SupabaseRest, rest_client
+from app.services.bucket_store import SessionBucket, empty_user_memory, normalize_user_memory
+from app.services.supabase_rest import SupabaseRest, SupabaseUnavailableError, rest_client
 
 logger = logging.getLogger(__name__)
 
 TABLE = "agastya_sessions"
+
+__all__ = [
+    "SupabaseUnavailableError",
+    "is_enabled",
+    "bucket_to_row",
+    "row_to_bucket",
+    "refresh_premium_from_db",
+    "load",
+    "save",
+    "link_user",
+    "list_sessions_for_user",
+    "delete_sessions_for_user",
+    "set_premium_by_user",
+    "set_premium_by_session",
+]
 
 
 def is_enabled(settings: Settings | None = None) -> bool:
@@ -47,6 +62,9 @@ def bucket_to_row(session_id: str, bucket: SessionBucket) -> dict[str, Any]:
         else None,
         "chat_tail": bucket.chat_tail,
         "is_premium": bucket.is_premium,
+        "user_memory": normalize_user_memory(bucket.user_memory),
+        "daily_context": bucket.daily_context,
+        "weekly_context": bucket.weekly_context,
     }
 
 
@@ -59,6 +77,8 @@ def row_to_bucket(row: dict[str, Any]) -> SessionBucket:
         "supabaseUserId": str(row["supabase_user_id"]) if row.get("supabase_user_id") else None,
         "palmStoragePath": row.get("palm_storage_path"),
     }
+    if row.get("created_at"):
+        meta["blueprintCreatedAt"] = str(row["created_at"])
     palm_raw = row.get("palm_analysis")
     preview_raw = row.get("preview_report")
     full_raw = row.get("full_report")
@@ -77,6 +97,10 @@ def row_to_bucket(row: dict[str, Any]) -> SessionBucket:
             except Exception:
                 continue
 
+    memory_raw = row.get("user_memory")
+    daily_raw = row.get("daily_context")
+    weekly_raw = row.get("weekly_context")
+
     return SessionBucket(
         palm=palm,
         preview=preview,
@@ -85,6 +109,9 @@ def row_to_bucket(row: dict[str, Any]) -> SessionBucket:
         predictions=predictions,
         meta={k: v for k, v in meta.items() if v is not None},
         is_premium=bool(row.get("is_premium", False)),
+        user_memory=normalize_user_memory(memory_raw) if memory_raw is not None else empty_user_memory(),
+        daily_context=daily_raw if isinstance(daily_raw, dict) else None,
+        weekly_context=weekly_raw if isinstance(weekly_raw, dict) else None,
     )
 
 
@@ -97,7 +124,7 @@ async def refresh_premium_from_db(
     client = _client(settings)
     if client is None:
         return bucket.is_premium
-    row = await client.select_one(TABLE, filters={"session_id": session_id})
+    row = await client.select_one(TABLE, filters={"session_id": session_id}, columns="is_premium")
     if row is not None:
         bucket.is_premium = bool(row.get("is_premium", False))
     return bucket.is_premium
@@ -134,7 +161,7 @@ async def link_user(
     client = _client(settings)
     if client is None:
         return False
-    existing = await client.select_one(TABLE, filters={"session_id": anonymous_session_id})
+    existing = await client.select_one(TABLE, filters={"session_id": anonymous_session_id}, columns="supabase_user_id")
     if existing:
         linked_user = existing.get("supabase_user_id")
         if linked_user and str(linked_user) != supabase_user_id:
@@ -153,7 +180,13 @@ async def list_sessions_for_user(
     client = _client(settings)
     if client is None:
         return []
-    return await client.select_many(TABLE, filters={"supabase_user_id": supabase_user_id})
+    # Prefer recent rows — restore scoring only needs the richest candidate, not every historical session.
+    return await client.select_many(
+        TABLE,
+        filters={"supabase_user_id": supabase_user_id},
+        limit=40,
+        order="updated_at.desc",
+    )
 
 
 async def delete_sessions_for_user(

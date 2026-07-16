@@ -25,6 +25,8 @@ class DailyTasksBody(BaseModel):
     device_install_id: str = Field(alias="deviceInstallId")
     palm_analysis: PalmAnalysis = Field(alias="palmAnalysis")
     is_premium: bool = Field(default=False, alias="isPremium")
+    focus_topics: list[str] = Field(default_factory=list, alias="focusTopics")
+    streak: int | None = None
 
     model_config = {"populate_by_name": True}
 
@@ -45,3 +47,6 @@ class DailyTasksBody(BaseModel):
 class DailyTasksResponse(BaseModel):
     tasks: list[Task]
     variant: str
+    focus_theme: str | None = Field(default=None, alias="focusTheme")
+
+    model_config = {"populate_by_name": True}

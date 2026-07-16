@@ -42,8 +42,17 @@ function startBackgroundSync(): void {
   });
 }
 
-/** Single navigation entry after sign-in — deduped, never awaits network. */
-export function navigateAfterAuth(href: Href, userId?: string | null): void {
+type NavigateAfterAuthOptions = {
+  /** When true, skip kicking off another merge/restore (already awaited before route choice). */
+  cloudAlreadySynced?: boolean;
+};
+
+/** Single navigation entry after sign-in — deduped. */
+export function navigateAfterAuth(
+  href: Href,
+  userId?: string | null,
+  options: NavigateAfterAuthOptions = {},
+): void {
   if (userId) {
     syncAuthUserToStore(userId);
   }
@@ -62,21 +71,15 @@ export function navigateAfterAuth(href: Href, userId?: string | null): void {
   if (useSessionStore.getState().skipCloudRestore) {
     useSessionStore.getState().setSkipCloudRestore(false);
   }
-  startBackgroundSync();
+  if (!options.cloudAlreadySynced) {
+    startBackgroundSync();
+  }
 
   if (__DEV__) {
     console.log('[Agastya auth] navigate →', href);
   }
 
   if (href === '/(main)/home') {
-    if (!useSessionStore.getState().hasUnlockedPremium) {
-      deferRouterReplace(
-        useSessionStore.getState().readingSeed
-          ? { pathname: '/onboarding/report-preview', params: { seed: useSessionStore.getState().readingSeed } }
-          : '/onboarding/report-preview',
-      );
-      return;
-    }
     useSessionStore.getState().setEnteredMain(true);
     resetAppNavigation(href);
     return;
@@ -84,7 +87,7 @@ export function navigateAfterAuth(href: Href, userId?: string | null): void {
   deferRouterReplace(href);
 }
 
-/** Establish session in store and route — fast, no API blocking. */
+/** Establish session, await cloud restore, then route to the correct resume screen. */
 export async function completeSignIn(options: { userId?: string | null; recovery?: boolean } = {}): Promise<void> {
   if (finishInFlight) {
     return finishInFlight;
@@ -97,8 +100,18 @@ export async function completeSignIn(options: { userId?: string | null; recovery
     }
 
     const userId = options.userId ?? useSessionStore.getState().supabaseUserId;
-    const href = resolveAuthenticatedHref(userId);
-    navigateAfterAuth(href, userId ?? undefined);
+    try {
+      const supabase = getSupabase();
+      const { data } = (await supabase?.auth.getUser()) ?? { data: { user: null } };
+      const email = data.user?.email ?? null;
+      if (userId || email) {
+        syncAuthUserToStore(userId ?? data.user?.id ?? null, email);
+      }
+    } catch {
+      if (userId) syncAuthUserToStore(userId);
+    }
+    const href = await resolveAuthenticatedHref(userId);
+    navigateAfterAuth(href, userId ?? undefined, { cloudAlreadySynced: true });
   })();
 
   try {

@@ -72,7 +72,7 @@ class SessionProfileResponse(BaseModel):
 class SessionMergeBody(BaseModel):
     anonymous_session_id: str = Field(alias="anonymousSessionId")
     supabase_user_id: str = Field(alias="supabaseUserId")
-    device_install_id: str | None = Field(default=None, alias="deviceInstallId")
+    device_install_id: str = Field(alias="deviceInstallId")
 
     model_config = {"populate_by_name": True}
 
@@ -83,10 +83,11 @@ class SessionMergeBody(BaseModel):
 
     @field_validator("device_install_id")
     @classmethod
-    def _device_id(cls, v: str | None) -> str | None:
-        if v is None:
-            return None
-        return validate_device_install_id(v)
+    def _device_id(cls, v: str) -> str:
+        out = validate_device_install_id(v)
+        if out is None:
+            raise ValueError("deviceInstallId required")
+        return out
 
 
 class SessionMergeResponse(BaseModel):
@@ -109,5 +110,7 @@ class SessionBootstrapResponse(BaseModel):
     full_report: dict[str, Any] | None = Field(default=None, alias="fullReport")
     is_premium: bool = Field(default=False, alias="isPremium")
     chat_tail: list[dict[str, str]] = Field(default_factory=list, alias="chatTail")
+    daily_context: dict[str, Any] | None = Field(default=None, alias="dailyContext")
+    weekly_context: dict[str, Any] | None = Field(default=None, alias="weeklyContext")
 
     model_config = {"populate_by_name": True}

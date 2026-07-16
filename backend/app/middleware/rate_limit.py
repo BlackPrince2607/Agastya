@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from collections import deque
 from typing import Annotated
@@ -17,9 +18,14 @@ logger = logging.getLogger(__name__)
 _LIMITS: dict[str, tuple[int, int]] = {
     "/chat": (30, 3600),
     "/palm/analyze": (5, 3600),
+    "/palm/landmarks": (30, 3600),
     "/reports/generate": (10, 3600),
     "/predictions/generate": (20, 3600),
     "/tasks/daily": (20, 3600),
+    "/insights/daily": (15, 3600),
+    "/insights/reflect": (30, 3600),
+    "/insights/weekly": (10, 3600),
+    "/insights/journey": (30, 3600),
     "/sessions/register": (10, 60),
     "/sessions/bootstrap": (20, 60),
     "/sessions/bootstrap/authenticated": (20, 60),
@@ -33,6 +39,11 @@ _LIMITS: dict[str, tuple[int, int]] = {
 _windows: dict[str, deque[float]] = {}
 _redis_client = None
 
+# sessionId is near the top of app request bodies; avoid json.loads on multi-MB palm payloads.
+_SESSION_ID_RE = re.compile(rb'"sessionId"\s*:\s*"([^"]+)"')
+_SESSION_ID_SNAKE_RE = re.compile(rb'"session_id"\s*:\s*"([^"]+)"')
+_SESSION_SCAN_BYTES = 4096
+
 
 def _get_limit(path: str) -> tuple[int, int] | None:
     for suffix, limit in _LIMITS.items():
@@ -41,12 +52,16 @@ def _get_limit(path: str) -> tuple[int, int] | None:
     return None
 
 
-async def _read_session_id(request: Request) -> str | None:
-    if request.method in {"GET", "HEAD"}:
-        return request.query_params.get("sessionId")
+async def _read_body_session_id(request: Request) -> str | None:
     try:
         body = await request.body()
-        if body:
+        if not body:
+            return None
+        head = body[:_SESSION_SCAN_BYTES]
+        m = _SESSION_ID_RE.search(head) or _SESSION_ID_SNAKE_RE.search(head)
+        if m:
+            return m.group(1).decode("utf-8", errors="ignore")
+        if len(body) <= 65_536:
             data = json.loads(body)
             return data.get("sessionId") or data.get("session_id")
     except Exception:
@@ -54,12 +69,31 @@ async def _read_session_id(request: Request) -> str | None:
     return None
 
 
+async def _read_session_id(request: Request) -> str | None:
+    """Resolve session id for rate-limit bucketing.
+
+    Prefer body/query sessionId. Never trust a spoofable X-Session-Id alone:
+    if the header differs from the body, fall back to IP bucketing (caller uses None).
+    """
+    if request.method in {"GET", "HEAD"}:
+        return request.query_params.get("sessionId")
+
+    body_session = await _read_body_session_id(request)
+    header = (request.headers.get("X-Session-Id") or "").strip() or None
+    if body_session:
+        if header and header != body_session:
+            # Spoof attempt: do not honor attacker-chosen header bucket.
+            return None
+        return body_session
+    # No body sessionId (unusual) — ignore header to prevent unlimited fresh buckets.
+    return None
+
+
 def _client_ip(request: Request) -> str:
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded and request.headers.get("X-Real-IP"):
-        return request.headers.get("X-Real-IP", "unknown")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
+    # Prefer X-Real-IP set by a trusted reverse proxy. Do not trust X-Forwarded-For alone.
+    real_ip = request.headers.get("X-Real-IP")
+    if real_ip:
+        return real_ip.strip() or "unknown"
     return request.client.host if request.client else "unknown"
 
 
@@ -140,6 +174,7 @@ async def check_rate_limit(
     key = _bucket_key(session_id, request, path)
 
     redis_active = False
+    retry_after: int | None = None
     if settings.redis_url:
         redis_active, retry_after = await _check_redis(key, max_requests, window_seconds)
         if retry_after is not None:
@@ -151,9 +186,9 @@ async def check_rate_limit(
 
     if not redis_active:
         retry_after = _check_memory(key, max_requests, window_seconds)
-    if retry_after is not None:
-        raise HTTPException(
-            status_code=429,
-            detail=f"Rate limit reached. Please wait {retry_after}s before retrying.",
-            headers={"Retry-After": str(retry_after)},
-        )
+        if retry_after is not None:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Rate limit reached. Please wait {retry_after}s before retrying.",
+                headers={"Retry-After": str(retry_after)},
+            )

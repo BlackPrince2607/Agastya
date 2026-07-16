@@ -14,10 +14,13 @@ import { CosmicButton, GradientText } from '@/components/primitives';
 import { PAGE_PADDING } from '@/constants/layout';
 import { colors } from '@/constants/theme';
 import {
+  CAMERA_PERMISSION_LOADING,
+  GALLERY_OPENING,
   PALM_CAMERA_CAPTURING,
   PALM_CAMERA_COACHING,
   PALM_CAPTURE_FAILED,
 } from '@/constants/userCopy';
+import { LoadingBlock } from '@/components/feedback';
 import { triggerLightTap } from '@/hooks/useHapticTap';
 import type { PalmScanHand } from '@/store/sessionStore';
 import { useSessionStore } from '@/store/sessionStore';
@@ -101,7 +104,7 @@ export default function PartnerPalmScanScreen() {
     return (
       <CosmicScreen insetTop={false}>
         <View className="flex-1 items-center justify-center px-8">
-          <Text className="font-body text-on-surface">Loading camera…</Text>
+          <LoadingBlock message={CAMERA_PERMISSION_LOADING} />
         </View>
       </CosmicScreen>
     );
@@ -121,9 +124,11 @@ export default function PartnerPalmScanScreen() {
               <GradientText className="font-label text-[12px] uppercase tracking-[0.4em] text-cyan">
                 Camera access
               </GradientText>
-              <Text className="font-headline text-[26px] leading-8 text-on-surface">We need your camera to scan their palm</Text>
+              <Text className="font-headline text-[26px] leading-8 text-on-surface">
+                Camera access for their palm scan
+              </Text>
               <Text className="font-body text-[15px] leading-7 text-on-surface-variant">
-                Ask your partner to hold their palm steady in a well-lit space. We only capture the hand, not their face.
+                Ask your partner for soft light and a steady, open palm. We only capture the hand.
               </Text>
             </View>
             <View className="gap-3">
@@ -194,7 +199,7 @@ export default function PartnerPalmScanScreen() {
                 />
                 <CosmicButton
                   variant="ghost"
-                  label={uploadBusy ? 'Opening gallery…' : 'Upload from gallery'}
+                  label={uploadBusy ? GALLERY_OPENING : 'Upload from gallery'}
                   disabled={uploadBusy || capturing}
                   onPress={() => void uploadFromGallery()}
                 />

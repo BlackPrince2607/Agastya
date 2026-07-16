@@ -11,6 +11,7 @@ import {
 import type { PalmScanHand } from '@/store/sessionStore';
 import { useSessionStore } from '@/store/sessionStore';
 import { isPalmHandLockedByGender, palmHandForGender } from '@/utils/palmHand';
+import { AnalyticsEvent, track } from '@/services/analytics';
 import { pickPalmImage } from '@/utils/pickPalmImage';
 import { deferRouterPush } from '@/utils/routerDefer';
 
@@ -61,6 +62,7 @@ export default function PalmScanWebScreen() {
     try {
       const base64 = await pickPalmImage();
       if (!base64) return;
+      track(AnalyticsEvent.PALM_SCAN_STARTED, { source: 'gallery' });
       setSelectedHand(handLocked ? recommendedHand : scanHand);
       setPreviewBase64(base64);
       setStep('review');
@@ -77,6 +79,7 @@ export default function PalmScanWebScreen() {
   ) => {
     if (!previewBase64 || confirming) return;
     setConfirming(true);
+    track(AnalyticsEvent.PALM_SCAN_COMPLETED, { landmark_source: source, hand });
     const seed = `${hand}-${Date.now()}`;
     setPalmScanHand(hand);
     setPalmCaptureBase64(previewBase64);

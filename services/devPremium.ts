@@ -1,11 +1,15 @@
 /**
- * DEV ONLY — delete this file and `components/dev/DevPremiumPanel.tsx` to remove.
- * Strips out automatically in production builds (`__DEV__ === false`).
+ * DEV / prototype unlock — delete with DevPremiumPanel when billing is live.
+ * Available in __DEV__ or when RevenueCat/Stripe are not configured.
  */
 
 import { generateReport } from '@/services/agastyaApi';
 import { isApiConfigured } from '@/services/env';
 import { normalizeFullReport } from '@/services/normalizeReport';
+import {
+  isRevenueCatConfigured,
+  isStripeCheckoutEnabled,
+} from '@/services/revenuecat';
 import { buildSimulatedReading } from '@/services/simulatedReading';
 import { useSessionStore } from '@/store/sessionStore';
 
@@ -14,6 +18,13 @@ export type DevPremiumStatus = {
   previewSections: number;
   fullSections: number;
 };
+
+/** True when store billing is missing — prototype builds can unlock without IAP. */
+export function isPrototypePremiumUnlockEnabled(): boolean {
+  if (__DEV__) return true;
+  if (isStripeCheckoutEnabled()) return false;
+  return !isRevenueCatConfigured();
+}
 
 export function devPremiumStatus(): DevPremiumStatus {
   const snap = useSessionStore.getState();
@@ -52,10 +63,10 @@ async function materializeDevFullReading(): Promise<number> {
   return reading.sections.length;
 }
 
-/** Turn on premium locally and populate a 4-chapter full report for UI testing. */
+/** Turn on premium locally and populate a full report for UI testing / prototype APKs. */
 export async function devUnlockPremium(): Promise<{ ok: true; sections: number } | { ok: false; reason: string }> {
-  if (!__DEV__) {
-    return { ok: false, reason: 'Dev unlock is disabled in production builds.' };
+  if (!isPrototypePremiumUnlockEnabled()) {
+    return { ok: false, reason: 'Prototype unlock is disabled when store billing is configured.' };
   }
 
   const snap = useSessionStore.getState();
@@ -70,7 +81,7 @@ export async function devUnlockPremium(): Promise<{ ok: true; sections: number }
 
 /** Reset premium locally so you can test the free / preview experience again. */
 export function devLockPremium(): void {
-  if (!__DEV__) return;
+  if (!isPrototypePremiumUnlockEnabled()) return;
   const snap = useSessionStore.getState();
   snap.setPremium(false);
   snap.setFullReading(null);

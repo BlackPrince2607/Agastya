@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
+import { AnalyticsEvent, track, trackOnce } from '@/services/analytics';
 import { persistentStorage } from '@/services/persistentStorage';
 import type { Task } from '@/types/task';
 
@@ -10,11 +11,14 @@ type TaskStore = {
   /** ISO date (yyyy-mm-dd) the current tasks belong to. */
   taskDate: string | null;
   variant: string | null;
+  /** Today's Focus theme from the rituals API (career|love|money|growth). */
+  focusTheme: string | null;
   streak: number;
   /** isoDate -> completed task ids (for streak history). */
   history: Record<string, string[]>;
 
-  setTasks: (tasks: Task[], variant: string | null, isoDate: string) => void;
+  setTasks: (tasks: Task[], variant: string | null, isoDate: string, focusTheme?: string | null) => void;
+  setFocusTheme: (focusTheme: string | null) => void;
   toggleComplete: (id: string) => void;
   isComplete: (id: string) => boolean;
 };
@@ -32,19 +36,26 @@ export const useTaskStore = create<TaskStore>()(
       completedIds: [],
       taskDate: null,
       variant: null,
+      focusTheme: null,
       streak: 0,
       history: {},
 
-      setTasks: (tasks, variant, isoDate) => {
+      setTasks: (tasks, variant, isoDate, focusTheme = null) => {
         const prev = get().taskDate;
         // New day → reset completion for the fresh list.
         const sameDay = prev === isoDate;
         set({
           tasks,
           variant,
+          focusTheme: focusTheme ?? null,
           taskDate: isoDate,
           completedIds: sameDay ? get().completedIds : [],
         });
+      },
+
+      setFocusTheme: (focusTheme) => {
+        if (get().focusTheme === focusTheme) return;
+        set({ focusTheme });
       },
 
       toggleComplete: (id) => {
@@ -54,7 +65,7 @@ export const useTaskStore = create<TaskStore>()(
         const nextCompleted = has ? completedIds.filter((c) => c !== id) : [...completedIds, id];
 
         let nextStreak = streak;
-        const nextHistory = { ...history };
+        let nextHistory = history;
         if (taskDate && !has && activeCount > 0 && nextCompleted.length === activeCount) {
           // All tasks done for the day → record + bump streak.
           if (!history[taskDate]) {
@@ -63,10 +74,23 @@ export const useTaskStore = create<TaskStore>()(
             nextStreak = last && isYesterday(last, taskDate) ? streak + 1 : Math.max(1, streak === 0 ? 1 : streak + 1);
             if (!last) nextStreak = 1;
           }
-          nextHistory[taskDate] = nextCompleted;
+          nextHistory = { ...history, [taskDate]: nextCompleted };
         }
 
         set({ completedIds: nextCompleted, streak: nextStreak, history: nextHistory });
+
+        if (!has) {
+          track(AnalyticsEvent.RITUAL_COMPLETED, {
+            task_id: id,
+            is_reflection: id === 'evening-reflection',
+          });
+          if (taskDate && activeCount > 0 && nextCompleted.length === activeCount) {
+            trackOnce(`all_rituals_completed:${taskDate}`, AnalyticsEvent.ALL_RITUALS_COMPLETED, {
+              date: taskDate,
+              ritual_count: activeCount,
+            });
+          }
+        }
       },
 
       isComplete: (id) => get().completedIds.includes(id),

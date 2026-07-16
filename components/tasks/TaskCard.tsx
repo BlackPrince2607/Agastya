@@ -1,7 +1,6 @@
 import { Pressable, Text, View } from 'react-native';
 
 import { GlassCard, Icon } from '@/components/ui';
-import { PressableScale } from '@/components/ui/PressableScale';
 import { colors } from '@/constants/theme';
 import { triggerLightTap } from '@/hooks/useHapticTap';
 import type { Task } from '@/types/task';
@@ -13,9 +12,17 @@ type TaskCardProps = {
   onPress: () => void;
 };
 
+/** Compact daily-ritual row — height wraps content (no Moti flex stretch). */
 export function TaskCard({ task, completed, onToggle, onPress }: TaskCardProps) {
+  const title = task.text.trim() || 'Daily ritual';
+  const description = task.description.trim();
+
   return (
-    <GlassCard muted className={`p-4 ${completed ? 'opacity-70' : ''}`} innerClassName="flex-row items-center gap-3">
+    <GlassCard
+      muted
+      className={completed ? 'opacity-70' : undefined}
+      style={{ alignSelf: 'stretch', flexGrow: 0 }}
+      innerClassName="flex-row items-center gap-3 px-4 py-3.5">
       <Pressable
         onPress={() => {
           void triggerLightTap();
@@ -24,7 +31,7 @@ export function TaskCard({ task, completed, onToggle, onPress }: TaskCardProps) 
         hitSlop={12}
         accessibilityRole="checkbox"
         accessibilityState={{ checked: completed }}
-        accessibilityLabel={`Mark ${task.text} ${completed ? 'incomplete' : 'complete'}`}
+        accessibilityLabel={`Mark ${title} ${completed ? 'incomplete' : 'complete'}`}
         className={`h-10 w-10 shrink-0 items-center justify-center rounded-full border ${
           completed ? 'border-transparent' : 'border-white/25'
         }`}
@@ -32,25 +39,35 @@ export function TaskCard({ task, completed, onToggle, onPress }: TaskCardProps) 
         {completed ? <Icon name="check" size={18} color={colors.health} /> : null}
       </Pressable>
 
-      <PressableScale
+      <Pressable
         onPress={onPress}
-        scaleTo={0.99}
-        accessibilityLabel={`Open ${task.text}`}
-        style={{ flex: 1, minWidth: 0 }}>
-        <View className="min-w-0 flex-1 flex-row items-center gap-2">
-          <View className="min-w-0 flex-1">
+        accessibilityRole="button"
+        accessibilityLabel={`Open ${title}`}
+        style={{ flex: 1, minWidth: 0, flexGrow: 1, flexShrink: 1 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0 }}>
+          <View style={{ flex: 1, minWidth: 0 }}>
             <Text
-              className="font-body-medium text-[16px] text-on-surface"
-              style={completed ? { textDecorationLine: 'line-through', opacity: 0.75 } : undefined}>
-              {task.text}
+              numberOfLines={2}
+              className="font-body-medium text-[16px]"
+              style={{
+                color: colors.onSurface,
+                textDecorationLine: completed ? 'line-through' : 'none',
+                opacity: completed ? 0.75 : 1,
+              }}>
+              {title}
             </Text>
-            {task.description ? (
-              <Text className="mt-0.5 font-body text-[13px] leading-5 text-on-surface-variant">{task.description}</Text>
+            {description ? (
+              <Text
+                numberOfLines={2}
+                className="mt-0.5 font-body text-[13px] leading-5"
+                style={{ color: colors.onSurfaceVariant }}>
+                {description}
+              </Text>
             ) : null}
           </View>
           <Icon name="chevron_right" size={20} color="rgba(203,196,206,0.6)" />
         </View>
-      </PressableScale>
+      </Pressable>
     </GlassCard>
   );
 }

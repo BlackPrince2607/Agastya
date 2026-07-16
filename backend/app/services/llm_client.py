@@ -15,6 +15,9 @@ logger = logging.getLogger(__name__)
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
+# Reuse one client per (api_key, timeout) — avoids new connection pools per LLM call.
+_client_cache: dict[tuple[str, float], AsyncOpenAI] = {}
+
 
 def _openrouter_extra_headers(settings: Settings) -> dict[str, str]:
     """Headers recommended by https://openrouter.ai/docs/quickstart"""
@@ -31,11 +34,17 @@ def openrouter_client(settings: Settings, *, timeout_seconds: float | None = Non
     if not settings.openrouter_api_key:
         return None
     timeout = timeout_seconds if timeout_seconds is not None else settings.openrouter_chat_timeout_seconds
-    return AsyncOpenAI(
+    key = (settings.openrouter_api_key, float(timeout))
+    cached = _client_cache.get(key)
+    if cached is not None:
+        return cached
+    client = AsyncOpenAI(
         api_key=settings.openrouter_api_key,
         base_url=OPENROUTER_BASE_URL,
         timeout=timeout,
     )
+    _client_cache[key] = client
+    return client
 
 
 async def llm_chat_completion(

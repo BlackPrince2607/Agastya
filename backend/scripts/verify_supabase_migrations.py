@@ -29,6 +29,9 @@ EXPECTED_COLUMNS = {
     "updated_at",
     "predictions",
     "is_premium",
+    "user_memory",
+    "daily_context",
+    "weekly_context",
 }
 
 EXPECTED_PALM_MIMES = {
@@ -44,6 +47,9 @@ MIGRATIONS = [
     "20260520120000_agastya_palms_mime_expand.sql",
     "20260606120000_agastya_predictions.sql",
     "20260606130000_agastya_premium.sql",
+    "20260716010000_agastya_life_context.sql",
+    "20260716020000_agastya_weekly_context.sql",
+    "20260716030000_agastya_sessions_revoke_client_update.sql",
 ]
 
 
@@ -93,7 +99,17 @@ def main() -> int:
             issues.append("Migration 3 missing: column predictions on agastya_sessions.")
         if "is_premium" in missing_cols:
             issues.append("Migration 4 missing: column is_premium on agastya_sessions.")
-        other = [c for c in missing_cols if c not in {"predictions", "is_premium"}]
+        if "user_memory" in missing_cols or "daily_context" in missing_cols:
+            issues.append(
+                "Migration 5 missing: columns user_memory and/or daily_context on agastya_sessions."
+            )
+        if "weekly_context" in missing_cols:
+            issues.append("Migration 6 missing: column weekly_context on agastya_sessions.")
+        other = [
+            c
+            for c in missing_cols
+            if c not in {"predictions", "is_premium", "user_memory", "daily_context", "weekly_context"}
+        ]
         if other:
             issues.append(f"Other missing columns on agastya_sessions: {', '.join(other)}")
 
@@ -114,7 +130,17 @@ def main() -> int:
                 f"Migration 2 incomplete: palms file_size_limit is {limit}; expected >= 7340032."
             )
 
-    ok = not issues
+    next_steps: list[str] = [
+        "Manual RLS check: with anon key + user JWT, PATCH is_premium on agastya_sessions must fail "
+        "(migration 20260716030000 revokes client UPDATE).",
+    ]
+    if not ok:
+        next_steps = [
+            "Run: npx supabase login && npx supabase link --project-ref <ref> && npx supabase db push",
+            "Or paste each file from supabase/migrations/ into Supabase SQL Editor (in timestamp order).",
+            *next_steps,
+        ]
+
     print(
         json.dumps(
             {
@@ -122,10 +148,7 @@ def main() -> int:
                 "project_url": url,
                 "issues": issues,
                 "local_migrations": MIGRATIONS,
-                "next_steps": [] if ok else [
-                    "Run: npx supabase login && npx supabase link --project-ref <ref> && npx supabase db push",
-                    "Or paste each file from supabase/migrations/ into Supabase SQL Editor (in timestamp order).",
-                ],
+                "next_steps": next_steps,
             },
             indent=2,
         )

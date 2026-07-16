@@ -27,11 +27,10 @@ function resolveGateHref(target: Href): Href {
     if (gate === 'need_sign_in') {
       return '/onboarding/account';
     }
-    if (gate === 'need_premium' && hasRitualReading()) {
-      return '/onboarding/report-preview';
-    }
     if (hasRitualReading()) {
-      return '/onboarding/report-preview';
+      useSessionStore.getState().setEnteredMain(true);
+      void requestNotificationPermission();
+      return '/(main)/home';
     }
     if (useSessionStore.getState().supabaseUserId) {
       return resolveSignedInHrefSync();

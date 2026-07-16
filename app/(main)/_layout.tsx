@@ -1,5 +1,5 @@
 import { Redirect, Tabs } from 'expo-router';
-import { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 import { BackHandler, Platform, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -18,7 +18,6 @@ import { leaveMainAppForOnboarding, syncAuthUserToStore } from '@/services/authS
 import { useSessionStore } from '@/store/sessionStore';
 import { useTaskStore } from '@/store/taskStore';
 import { canEnterMainAppSync, resolveBlockedAppHref } from '@/utils/navigationFlow';
-import { hasPremiumAccess } from '@/utils/premiumAccess';
 import { LOCAL_TASKS } from '@/utils/localTasks';
 
 /** Home • Chat • Tasks • Profile (Reports & Compatibility pushed from Home). */
@@ -31,10 +30,13 @@ export default function MainTabsLayout() {
   const tabBarHeight = TAB_BAR_BODY_HEIGHT + tabBarBottom + 6;
   const palmAnalysis = useSessionStore((s) => s.palmAnalysis);
   const storeUserId = useSessionStore((s) => s.supabaseUserId);
-  const tasks = useTaskStore((s) => s.tasks);
-  const completedIds = useTaskStore((s) => s.completedIds);
+  const tasksRemaining = useTaskStore((s) => {
+    const list = s.tasks.length ? s.tasks : LOCAL_TASKS;
+    return list.filter((t) => !s.completedIds.includes(t.id)).length;
+  });
+  const tasksTabBadge = palmAnalysis && tasksRemaining > 0 ? tasksRemaining : undefined;
   const gate = canEnterMainAppSync();
-  const canShowTabs = (entered || gate === 'ok') && hasPremiumAccess();
+  const canShowTabs = entered || gate === 'ok';
   const authPending = authLoading && !isSignedIn && !storeUserId;
 
   useEffect(() => {
@@ -42,17 +44,10 @@ export default function MainTabsLayout() {
     if (userId) {
       syncAuthUserToStore(userId);
     }
-    if (canEnterMainAppSync() === 'ok' && hasPremiumAccess()) {
+    if (canEnterMainAppSync() === 'ok') {
       useSessionStore.getState().setEnteredMain(true);
     }
   }, [entered, isSignedIn, userId, authLoading]);
-
-  const tasksTabBadge = useMemo(() => {
-    if (!palmAnalysis) return undefined;
-    const list = tasks.length ? tasks : LOCAL_TASKS;
-    const remaining = list.filter((t) => !completedIds.includes(t.id)).length;
-    return remaining > 0 ? remaining : undefined;
-  }, [palmAnalysis, tasks, completedIds]);
 
   useEffect(() => {
     if (!requiresSupabaseSignIn() || authLoading || isSignedIn || storeUserId || isRecentAuthEstablished()) {

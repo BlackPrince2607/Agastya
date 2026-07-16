@@ -8,6 +8,7 @@ import { bootstrapIdentity } from '@/services/identity';
 import { getSupabase, isSupabaseEnabled } from '@/services/supabase';
 import { useChatStore } from '@/store/chatStore';
 import { useSessionStore } from '@/store/sessionStore';
+import { setPremiumAllowlistEmail } from '@/utils/premiumAllowlist';
 import { resetAppNavigation } from '@/utils/routerDefer';
 
 export type AuthSessionSnapshot = {
@@ -94,8 +95,13 @@ export function consumePostSignInReturn(): Href | null {
   return href;
 }
 
-export function syncAuthUserToStore(userId: string | null) {
+export function syncAuthUserToStore(userId: string | null, email?: string | null) {
   useSessionStore.setState({ supabaseUserId: userId });
+  if (userId === null && email === undefined) {
+    setPremiumAllowlistEmail(null);
+  } else if (email !== undefined) {
+    setPremiumAllowlistEmail(email);
+  }
 }
 
 /** Leave main app and return to welcome — keeps local reading; use after sign-out. */

@@ -10,6 +10,9 @@ import { ReadingChecklist, type ChecklistItem } from '@/components/onboarding/Re
 import { AnalyzingSeal, GradientText } from '@/components/primitives';
 import {
   ANALYSIS_LOADING_PHRASES,
+  ANALYSIS_SEAL_STATUS,
+  ANALYSIS_STATUS_ALMOST,
+  ANALYSIS_STATUS_READY,
   PALM_RETAKE_DEFAULT,
   SAMPLE_READING_BADGE,
 } from '@/constants/userCopy';
@@ -18,7 +21,7 @@ import { analyzePalm, generateReport } from '@/services/agastyaApi';
 import { bootstrapIdentity, syncProfileRemote } from '@/services/identity';
 import { normalizeFullReport } from '@/services/normalizeReport';
 import { scheduleReadyNotification } from '@/services/notifications';
-import { track } from '@/services/analytics';
+import { AnalyticsEvent, track } from '@/services/analytics';
 import { buildSimulatedReading } from '@/services/simulatedReading';
 import { isApiConfigured } from '@/services/env';
 import type { PalmAnalysisDto } from '@/types/palmAnalysis';
@@ -181,7 +184,7 @@ export default function AnalysisScreen() {
           setPreviewReading(buildSimulatedReading(resolvedSeed, snap.focusTopics, palm));
         }
 
-        track('analysis_pipeline_complete', { seed_len: resolvedSeed.length });
+        track(AnalyticsEvent.REPORT_GENERATED, { mode: 'preview' });
         useSessionStore.getState().setSkipCloudRestore(false);
         void scheduleReadyNotification();
       };
@@ -196,6 +199,7 @@ export default function AnalysisScreen() {
         setApiPalm(FALLBACK_PALM);
         setPalmAnalysis(FALLBACK_PALM);
         setPreviewReading(buildSimulatedReading(resolvedSeed, snap.focusTopics, FALLBACK_PALM));
+        track(AnalyticsEvent.REPORT_GENERATED, { mode: 'preview', fallback: true });
         useSessionStore.getState().setSkipCloudRestore(false);
       } finally {
         if (cancelled || runId !== runIdRef.current) return;
@@ -242,10 +246,10 @@ export default function AnalysisScreen() {
     const shapeDone = Boolean(p?.hand_shape);
     const fingersDone = Boolean(p?.line_details || p?.fate_line);
     return [
-      { label: 'Major Lines', state: lineDone ? 'done' : pct > 30 ? 'active' : 'pending' },
+      { label: 'Major lines', state: lineDone ? 'done' : pct > 30 ? 'active' : 'pending' },
       { label: 'Mounts', state: mountsDone ? 'done' : pct > 55 ? 'active' : 'pending' },
-      { label: 'Hand Shape', state: shapeDone ? 'done' : pct > 78 ? 'active' : 'pending' },
-      { label: 'Finger Analysis', state: fingersDone ? 'done' : pct >= 100 ? 'active' : 'pending' },
+      { label: 'Hand shape', state: shapeDone ? 'done' : pct > 78 ? 'active' : 'pending' },
+      { label: 'Fine details', state: fingersDone ? 'done' : pct >= 100 ? 'active' : 'pending' },
     ];
   }, [palmResult, pct]);
 
@@ -261,14 +265,16 @@ export default function AnalysisScreen() {
               Analyzing your palm
             </GradientText>
             {sampleBadge ? (
-              <Text className="font-body text-[12px] text-amber-200/90">{SAMPLE_READING_BADGE}</Text>
+              <Text className="max-w-[320px] text-center font-body text-[12px] leading-5 text-amber-200/90">
+                {SAMPLE_READING_BADGE}
+              </Text>
             ) : null}
             <View className="relative items-center justify-center">
               <AnalyzingSeal diameter={244} hideCenterGlyph />
               <View className="pointer-events-none absolute items-center justify-center gap-1">
                 <Text className="font-label text-[28px] font-semibold text-on-surface/95">{pct}%</Text>
                 <Text className="font-label text-[10px] uppercase tracking-[0.35em] text-on-surface-variant">
-                  processing
+                  {ANALYSIS_SEAL_STATUS}
                 </Text>
               </View>
             </View>
@@ -302,7 +308,7 @@ export default function AnalysisScreen() {
             </View>
 
             <Text className="text-center font-body text-[13px] text-on-surface-variant">
-              {pct >= 100 ? 'Ready' : 'Almost ready'}
+              {pct >= 100 ? ANALYSIS_STATUS_READY : ANALYSIS_STATUS_ALMOST}
             </Text>
           </View>
         </View>

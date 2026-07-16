@@ -1,5 +1,4 @@
 import { useId } from 'react';
-import { MotiView } from 'moti';
 import { Text, View } from 'react-native';
 import Svg, { Circle, Defs, G, LinearGradient, Stop } from 'react-native-svg';
 
@@ -11,7 +10,7 @@ type ProgressRingProps = {
 };
 
 /** Teal→lavender SVG progress ring with fraction in the center. */
-export function ProgressRing({ done, total, size = 148, stroke = 10 }: ProgressRingProps) {
+export function ProgressRing({ done, total, size = 112, stroke = 8 }: ProgressRingProps) {
   const gradId = useId().replace(/:/g, '');
   const pad = stroke / 2;
   const canvas = size + pad * 2;
@@ -51,15 +50,12 @@ export function ProgressRing({ done, total, size = 148, stroke = 10 }: ProgressR
           />
         </G>
       </Svg>
-      <MotiView
-        from={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="absolute items-center justify-center">
+      <View className="absolute items-center justify-center">
         <Text className="font-headline text-[28px] text-on-surface">
           {done}/{total}
         </Text>
         <Text className="font-label text-[10px] uppercase tracking-[0.12em] text-on-surface-variant">Completed</Text>
-      </MotiView>
+      </View>
     </View>
   );
 }

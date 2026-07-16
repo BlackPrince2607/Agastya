@@ -1,9 +1,11 @@
 import type { Href } from 'expo-router';
 
+import { isEmailPremiumAllowlisted } from '@/utils/premiumAllowlist';
 import { useSessionStore } from '@/store/sessionStore';
 
 export function hasPremiumAccess(): boolean {
-  return useSessionStore.getState().hasUnlockedPremium;
+  if (useSessionStore.getState().hasUnlockedPremium) return true;
+  return isEmailPremiumAllowlisted();
 }
 
 /** Onboarding preview report — free tier landing after sign-in. */

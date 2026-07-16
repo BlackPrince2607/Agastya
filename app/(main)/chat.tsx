@@ -22,8 +22,13 @@ import { ScreenBody } from '@/components/layout/ScreenBody';
 import { GlassCard, Icon } from '@/components/ui';
 import { TAB_BAR_CLEARANCE } from '@/constants/layout';
 import { colors, gradients } from '@/constants/theme';
+import {
+  CHAT_PLACEHOLDER_EMPTY,
+  CHAT_PLACEHOLDER_FOLLOW,
+  GUIDE_INTRO,
+} from '@/constants/userCopy';
 import { useLayoutMetrics } from '@/hooks/useLayoutMetrics';
-import { track } from '@/services/analytics';
+import { AnalyticsEvent, track } from '@/services/analytics';
 import { isApiConfigured, isMisconfiguredProductionApi, getApiHostLabel } from '@/services/env';
 import { requestGuideReply } from '@/services/agastyaApi';
 import { useChatStore } from '@/store/chatStore';
@@ -33,9 +38,6 @@ import {
   splitIntoTextBubbles,
   typingDelayForBubble,
 } from '@/utils/splitChatBubbles';
-
-const GUIDE_INTRO =
-  'Ask me about your palm reading, your focus areas, or what today might hold. What is on your mind?';
 
 function delay(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -117,6 +119,11 @@ export default function ChatScreen() {
     const trimmed = input.trim();
     if (!trimmed || replyBusy || isTyping) return;
 
+    const isFirstMessage = messages.length === 0;
+    if (isFirstMessage) {
+      track(AnalyticsEvent.CHAT_STARTED);
+    }
+
     setError(null);
     addMessage('you', trimmed);
     setInput('');
@@ -133,6 +140,9 @@ export default function ChatScreen() {
     const result = await requestGuideReply(transcript);
 
     if (result.ok) {
+      if (result.memoryChanged) {
+        track(AnalyticsEvent.MEMORY_EXTRACTED);
+      }
       await deliverGuideBubbles(result.text, result.suggestions);
     } else {
       setTyping(false);
@@ -167,8 +177,8 @@ export default function ChatScreen() {
   if (!premium) {
     return (
       <PremiumLockGate
-        title="Guide chat is a Pro feature"
-        body="Unlock full access for unlimited conversations with Agastya about your reading."
+        title="Ask Agastya is a Pro feature"
+        body="Unlock unlimited conversations about your reading, focus areas, and what comes next."
       />
     );
   }
@@ -192,7 +202,7 @@ export default function ChatScreen() {
               <View className="min-w-0 flex-1">
                 <Text className="font-headline text-[20px] leading-7 text-on-surface">Ask Agastya</Text>
                 <Text className="font-body text-[13px] leading-5 text-on-surface-variant">
-                  Your spiritual guide for reading, purpose, and what comes next
+                  Your guide for reading, purpose, and what comes next
                 </Text>
               </View>
             </View>
@@ -261,7 +271,7 @@ export default function ChatScreen() {
                   ref={inputRef}
                   value={input}
                   onChangeText={setInput}
-                  placeholder={empty ? 'Ask me anything' : 'Ask a follow up'}
+                  placeholder={empty ? CHAT_PLACEHOLDER_EMPTY : CHAT_PLACEHOLDER_FOLLOW}
                   placeholderTextColor={colors.placeholder}
                   className="min-w-0 flex-1 font-body text-[15px] text-on-surface"
                   style={{

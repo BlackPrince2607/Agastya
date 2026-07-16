@@ -9,7 +9,7 @@ class PalmAnalyzeBody(BaseModel):
     session_id: str = Field(alias="sessionId")
     seed: str = Field(max_length=512)
     image_base64: str | None = Field(default=None, alias="imageBase64", max_length=6_000_000)
-    device_install_id: str | None = Field(default=None, alias="deviceInstallId")
+    device_install_id: str = Field(alias="deviceInstallId")
     dominant_hand: str | None = Field(default=None, alias="dominantHand")
     gender: str | None = Field(default=None, max_length=32)
     landmarks: list[list[float]] | None = Field(default=None, max_length=21)
@@ -24,8 +24,11 @@ class PalmAnalyzeBody(BaseModel):
 
     @field_validator("device_install_id")
     @classmethod
-    def _device_id(cls, v: str | None) -> str | None:
-        return validate_device_install_id(v)
+    def _device_id(cls, v: str) -> str:
+        out = validate_device_install_id(v)
+        if out is None:
+            raise ValueError("deviceInstallId required")
+        return out
 
     @field_validator("dominant_hand")
     @classmethod

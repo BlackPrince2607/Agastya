@@ -17,12 +17,26 @@ const DEFAULT_SUGGESTIONS = [
   'Career advice please',
 ];
 
+/** Topic snippet for Home "Continue conversation" — avoids full-message subscriptions. */
+export function lastUserTopicFromMessages(messages: { role: string; text: string }[]): string | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg.role === 'you' && msg.text.trim()) {
+      const trimmed = msg.text.trim();
+      return trimmed.length > 72 ? `${trimmed.slice(0, 69)}…` : trimmed;
+    }
+  }
+  return null;
+}
+
 type ChatStore = {
   messages: ChatMessage[];
   suggestions: string[];
   isTyping: boolean;
   /** User turns sent — drives free-tier soft cap. */
   messageCount: number;
+  /** Derived for Home / continue-card; updated with messages. */
+  lastUserTopic: string | null;
 
   addMessage: (role: ChatRole, text: string) => void;
   setSuggestions: (suggestions: string[]) => void;
@@ -39,12 +53,16 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   suggestions: DEFAULT_SUGGESTIONS,
   isTyping: false,
   messageCount: 0,
+  lastUserTopic: null,
 
-  addMessage: (role, text) =>
+  addMessage: (role, text) => {
+    const messages = [...get().messages, { id: nextId(), role, text }];
     set({
-      messages: [...get().messages, { id: nextId(), role, text }],
+      messages,
       messageCount: role === 'you' ? get().messageCount + 1 : get().messageCount,
-    }),
+      lastUserTopic: role === 'you' ? lastUserTopicFromMessages(messages) : get().lastUserTopic,
+    });
+  },
   setSuggestions: (suggestions) =>
     set({ suggestions: suggestions.length > 0 ? suggestions : DEFAULT_SUGGESTIONS }),
   setTyping: (isTyping) => set({ isTyping }),
@@ -66,9 +84,22 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       }
     }
     if (!messages.length) return;
-    set({ messages, messageCount, suggestions: DEFAULT_SUGGESTIONS, isTyping: false });
+    set({
+      messages,
+      messageCount,
+      suggestions: DEFAULT_SUGGESTIONS,
+      isTyping: false,
+      lastUserTopic: lastUserTopicFromMessages(messages),
+    });
   },
-  clear: () => set({ messages: [], suggestions: DEFAULT_SUGGESTIONS, isTyping: false, messageCount: 0 }),
+  clear: () =>
+    set({
+      messages: [],
+      suggestions: DEFAULT_SUGGESTIONS,
+      isTyping: false,
+      messageCount: 0,
+      lastUserTopic: null,
+    }),
 }));
 
 export { DEFAULT_SUGGESTIONS };

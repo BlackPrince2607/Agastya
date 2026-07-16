@@ -45,13 +45,17 @@ def assert_device_binding(
     device_install_id: str | None,
     stored_device_id: str | None,
     allow_first_bind: bool = True,
-    allow_rebind: bool = True,
+    allow_rebind: bool = False,
 ) -> None:
-    """Ensure mutating requests come from the device that registered the session."""
+    """Ensure requests come from the device that registered the session.
+
+    Missing deviceInstallId is always rejected. Rebind of an existing stored
+    device is rejected unless allow_rebind=True (not used on mutate routes).
+    """
     validate_session_id(session_id)
     incoming = validate_device_install_id(device_install_id)
     if incoming is None:
-        return
+        raise HTTPException(status_code=403, detail="deviceInstallId required")
     if stored_device_id is None:
         if allow_first_bind:
             return

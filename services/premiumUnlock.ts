@@ -1,5 +1,5 @@
 import { generateReport } from '@/services/agastyaApi';
-import { track } from '@/services/analytics';
+import { AnalyticsEvent, track } from '@/services/analytics';
 import { normalizeFullReport } from '@/services/normalizeReport';
 import { restoreSessionFromServer } from '@/services/sessionRestore';
 import {
@@ -14,24 +14,22 @@ import { useSessionStore } from '@/store/sessionStore';
 
 export type UnlockResult =
   | { ok: true; source: 'purchase' | 'restore' | 'entitlement' | 'stripe' }
-  | { ok: false; reason: 'cancelled' | 'unavailable' | 'not_entitled' };
+  | { ok: false; reason: 'cancelled' | 'unavailable' | 'not_entitled' | 'report_failed' };
 
 async function syncPremiumFromServer(): Promise<boolean> {
-  const restored = await restoreSessionFromServer({ force: true });
-  if (restored && useSessionStore.getState().hasUnlockedPremium) {
-    return true;
-  }
+  await restoreSessionFromServer({ force: true });
   return useSessionStore.getState().hasUnlockedPremium;
 }
 
-async function materializeFullReport(seed?: string) {
+async function materializeFullReport(seed?: string): Promise<boolean> {
   const snap = useSessionStore.getState();
   const targetedSeed = seed ?? snap.readingSeed;
   if (targetedSeed) {
     useSessionStore.getState().setReadingSeed(targetedSeed);
   }
 
-  if (!snap.sessionId || !snap.palmAnalysis) return;
+  if (snap.fullReading) return true;
+  if (!snap.sessionId || !snap.palmAnalysis) return false;
 
   try {
     const payload = await generateReport({
@@ -44,8 +42,10 @@ async function materializeFullReport(seed?: string) {
       gender: snap.userGender,
     });
     useSessionStore.getState().setFullReading(normalizeFullReport(payload));
+    track(AnalyticsEvent.REPORT_GENERATED, { mode: 'full' });
+    return true;
   } catch {
-    /* offline tolerated */
+    return false;
   }
 }
 
@@ -92,10 +92,24 @@ export async function unlockPremiumFromStore(options: {
     return { ok: false, reason: 'not_entitled' };
   }
 
-  const serverPremium = await syncPremiumFromServer();
+  // Prefer server isPremium (webhook). Fall back to store entitlement if webhook lags.
+  let serverPremium = await syncPremiumFromServer();
+  if (!serverPremium && entitled) {
+    // Brief wait for webhook, then re-check once.
+    await new Promise((r) => setTimeout(r, 1500));
+    serverPremium = await syncPremiumFromServer();
+  }
+
+  const reportOk = await materializeFullReport(seed);
+  if (!reportOk && !useSessionStore.getState().fullReading) {
+    setPremium(false);
+    return { ok: false, reason: 'report_failed' };
+  }
+
   setPremium(serverPremium || entitled);
-  await materializeFullReport(seed);
-  track('premium_unlock_ok', { mode });
+  if (mode === 'purchase') {
+    track(AnalyticsEvent.PURCHASE_COMPLETED, { source: 'purchase' });
+  }
   return { ok: true, source: mode === 'restore' ? 'restore' : 'purchase' };
 }
 
@@ -106,8 +120,12 @@ export async function finalizeStripeCheckout(seed?: string): Promise<UnlockResul
   if (!entitled) {
     return { ok: false, reason: 'not_entitled' };
   }
+  const reportOk = await materializeFullReport(seed);
+  if (!reportOk && !useSessionStore.getState().fullReading) {
+    setPremium(false);
+    return { ok: false, reason: 'report_failed' };
+  }
   setPremium(true);
-  await materializeFullReport(seed);
-  track('premium_unlock_ok', { mode: 'stripe' });
+  track(AnalyticsEvent.PURCHASE_COMPLETED, { source: 'stripe' });
   return { ok: true, source: 'stripe' };
 }

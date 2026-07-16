@@ -15,16 +15,22 @@ import { ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS } from '@/constants/onboarding
 import { PAGE_PADDING } from '@/constants/layout';
 import { colors } from '@/constants/theme';
 import {
+  CAMERA_PERMISSION_LOADING,
+  GALLERY_OPENING,
   PALM_CAMERA_CAPTURING,
+  PALM_CAMERA_CENTER,
   PALM_CAMERA_COACHING,
   PALM_CAPTURE_FAILED,
   PALM_RETAKE_BANNER_PREFIX,
 } from '@/constants/userCopy';
+import { LoadingBlock } from '@/components/feedback';
+import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { triggerLightTap } from '@/hooks/useHapticTap';
 import type { PalmScanHand } from '@/store/sessionStore';
 import { useSessionStore } from '@/store/sessionStore';
 import { isPalmHandLockedByGender, palmHandForGender, palmHandGuidanceLabel } from '@/utils/palmHand';
 import { pickPalmImage } from '@/utils/pickPalmImage';
+import { AnalyticsEvent, track } from '@/services/analytics';
 import { deferRouterPush } from '@/utils/routerDefer';
 
 type ScanStep = 'briefing' | 'camera' | 'review';
@@ -83,6 +89,7 @@ export default function PalmScanScreen() {
     try {
       const base64 = await pickPalmImage();
       if (!base64) return;
+      track(AnalyticsEvent.PALM_SCAN_STARTED, { source: 'gallery' });
       setSelectedHand(handLocked ? recommendedHand : scanHand);
       goToReview(base64);
     } finally {
@@ -96,6 +103,7 @@ export default function PalmScanScreen() {
   ) => {
     if (!previewBase64 || confirming) return;
     setConfirming(true);
+    track(AnalyticsEvent.PALM_SCAN_COMPLETED, { landmark_source: source, hand });
     const seed = `${hand}-${Date.now()}`;
     setPalmScanHand(hand);
     setPalmCaptureBase64(previewBase64);
@@ -124,13 +132,16 @@ export default function PalmScanScreen() {
 
   if (!permission) {
     return (
-      <View className="flex-1 items-center justify-center bg-black px-8">
-        <Text className="font-body text-on-surface">Loading camera...</Text>
-      </View>
+      <CosmicScreen>
+        <View className="flex-1 items-center justify-center px-8">
+          <LoadingBlock message={CAMERA_PERMISSION_LOADING} />
+        </View>
+      </CosmicScreen>
     );
   }
 
   const requestAndContinue = async (scanHand: PalmScanHand) => {
+    track(AnalyticsEvent.PALM_SCAN_STARTED, { source: 'camera' });
     setSelectedHand(handLocked ? recommendedHand : scanHand);
     setStep('camera');
     await requestPermission();
@@ -158,7 +169,7 @@ export default function PalmScanScreen() {
           beforePrimary={
             <CosmicButton
               variant="ghost"
-              label={uploadBusy ? 'Opening gallery...' : 'Upload from gallery'}
+              label={uploadBusy ? GALLERY_OPENING : 'Upload from gallery'}
               disabled={uploadBusy}
               onPress={() => void uploadFromGallery(hand)}
             />
@@ -178,9 +189,11 @@ export default function PalmScanScreen() {
               <GradientText className="font-label text-[12px] uppercase tracking-[0.4em] text-cyan">
                 Camera access
               </GradientText>
-              <Text className="font-headline text-[26px] leading-8 text-on-surface">We need your camera for the palm scan</Text>
+              <Text className="font-headline text-[26px] leading-8 text-on-surface">
+                Camera access for your palm scan
+              </Text>
               <Text className="font-body text-[15px] leading-7 text-on-surface-variant">
-                Use a well-lit space and hold your palm steady. We only capture your hand, not your face.
+                Find soft light and keep your palm open. We only capture your hand — never your face.
               </Text>
             </View>
             <View className="gap-3">
@@ -241,14 +254,14 @@ export default function PalmScanScreen() {
               {hand === 'left' ? 'Left' : 'Right'} palm
             </Text>
             <Text className="mt-1 font-body text-[14px] text-on-surface-variant">
-              Center your hand inside the frame
+              {PALM_CAMERA_CENTER}
             </Text>
             {handLocked ? (
-              <Text className="mt-1 font-body text-[12px] leading-5 text-on-surface-variant/90">
+              <Text className="mt-1.5 font-body text-[12px] leading-5 text-on-surface-variant/90">
                 {palmHandGuidanceLabel(hand, userGender)}
               </Text>
             ) : null}
-            <Text className="mt-1 font-body text-[12px] leading-5 text-on-surface-variant/80">
+            <Text className="mt-1.5 font-body text-[12px] leading-5 text-on-surface-variant/80">
               {PALM_CAMERA_COACHING}
             </Text>
           </View>
@@ -284,7 +297,7 @@ export default function PalmScanScreen() {
               onPress={() => void uploadFromGallery(hand)}
               className="items-center py-2 active:opacity-75">
               <Text className="font-label text-[13px] uppercase tracking-[0.08em] text-on-surface-variant">
-                {uploadBusy ? 'Opening gallery...' : 'Upload from gallery'}
+                {uploadBusy ? GALLERY_OPENING : 'Upload from gallery'}
               </Text>
             </Pressable>
           </View>

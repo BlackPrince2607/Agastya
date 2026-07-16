@@ -68,9 +68,14 @@ Migrations to apply (in order):
 1. `supabase/migrations/20260518120000_agastya_sessions.sql`
 2. `supabase/migrations/20260520120000_agastya_palms_mime_expand.sql`
 3. `supabase/migrations/20260606120000_agastya_predictions.sql`
-4. `supabase/migrations/20260606130000_agastya_premium.sql` ← new: `is_premium` column
+4. `supabase/migrations/20260606130000_agastya_premium.sql` — `is_premium` column
+5. `supabase/migrations/20260716010000_agastya_life_context.sql` — `user_memory`, `daily_context`
+6. `supabase/migrations/20260716020000_agastya_weekly_context.sql` — `weekly_context`
+7. `supabase/migrations/20260716030000_agastya_sessions_revoke_client_update.sql` — revoke client UPDATE (premium lock)
 
 You can also run them directly in the Supabase SQL editor.
+
+**RLS smoke check (after migration 7):** with the anon key + a user access token, `PATCH /rest/v1/agastya_sessions?supabase_user_id=eq.<uid>` setting `{"is_premium": true}` must fail (permission denied / RLS). Writes are service-role only.
 
 ---
 
@@ -225,7 +230,21 @@ Pushes to `main` that touch `backend/**` auto-redeploy.
 
 **Via CLI:** `railway login && railway init && npm run deploy:railway`
 
-Required Railway variables: `OPENROUTER_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DEBUG=false`
+Required Railway variables: `OPENROUTER_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DEBUG=false`, `REVENUECAT_WEBHOOK_SECRET`, non-wildcard `CORS_ORIGINS`. Recommended: `REDIS_URL`, `SENTRY_DSN`.
+
+**Production must run with `DEBUG=false`.** When `DEBUG=true`, webhook signature checks and startup secret validation are skipped — never ship beta that way.
+
+**Proxy / rate limits:** set `X-Real-IP` (or equivalent) on the reverse proxy so clients cannot spoof `X-Forwarded-For` alone.
+
+### Post-deploy smoke
+
+| Check | Expected |
+|-------|----------|
+| `GET /v1/health` | 200 |
+| Anonymous `GET /v1/sessions/bootstrap` with matching `deviceInstallId` | Profile + slim guidance only; **no** palm/reports/`chatTail` |
+| Authenticated bootstrap (Bearer JWT) | Full reading when linked |
+| `PATCH` own `agastya_sessions` with anon key + user JWT setting `is_premium` | Denied |
+| Purchase / restore → main | Server `isPremium` and full report present |
 
 If deploy crashes on startup, open **Deploy Logs** — missing `OPENROUTER_API_KEY` or Supabase keys is the usual cause.
 

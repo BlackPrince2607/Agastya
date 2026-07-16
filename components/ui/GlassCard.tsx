@@ -23,10 +23,12 @@ type GlassCardProps = PropsWithChildren<
 export function GlassCard({ muted, glow, className, innerClassName, children, style, ...rest }: GlassCardProps) {
   const ring = muted ? 'border-white/10' : 'border-white/[0.14]';
   const aura = glow ? 'shadow-aura' : '';
+  // Allow callers to opt into overflow-visible (e.g. gradient labels) via className.
+  const clips = !(className ?? '').includes('overflow-visible');
 
   return (
     <View
-      className={`overflow-hidden rounded-glass border ${ring} bg-white/[0.055] ${aura} ${className ?? ''}`}
+      className={`${clips ? 'overflow-hidden' : 'overflow-visible'} rounded-glass border ${ring} bg-white/[0.055] ${aura} ${className ?? ''}`}
       style={[glow ? elevation.aura : undefined, style]}
       {...rest}>
       {!muted ? (
