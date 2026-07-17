@@ -14,7 +14,7 @@ function parseAllowlist(): Set<string> {
   const raw = process.env.EXPO_PUBLIC_PREMIUM_EMAIL_ALLOWLIST ?? '';
   const fromEnv = raw
     .split(',')
-    .map((s) => s.trim().toLowerCase())
+    .map((s: string) => s.trim().toLowerCase())
     .filter(Boolean);
   return new Set([...BUILTIN_ALLOWLIST, ...fromEnv]);
 }

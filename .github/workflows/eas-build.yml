@@ -25,28 +25,40 @@ jobs:
   build:
     name: EAS Build (${{ github.event.inputs.profile }})
     runs-on: ubuntu-latest
-    if: ${{ secrets.EXPO_TOKEN != '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Require EXPO_TOKEN
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "EXPO_TOKEN secret is not set; skipping EAS build."
+            exit 0
+          fi
+          echo "EXPO_TOKEN_PRESENT=true" >> "$GITHUB_ENV"
+
       - name: Setup Node
+        if: env.EXPO_TOKEN_PRESENT == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
 
       - name: Install dependencies
+        if: env.EXPO_TOKEN_PRESENT == 'true'
         run: npm ci
 
       - name: Setup EAS
+        if: env.EXPO_TOKEN_PRESENT == 'true'
         uses: expo/expo-github-action@v8
         with:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
       - name: Build (iOS)
-        if: ${{ github.event.inputs.platform == 'ios' || github.event.inputs.platform == 'all' }}
+        if: ${{ env.EXPO_TOKEN_PRESENT == 'true' && (github.event.inputs.platform == 'ios' || github.event.inputs.platform == 'all') }}
         run: |
           eas build \
             --platform ios \
@@ -64,7 +76,7 @@ jobs:
           EXPO_PUBLIC_POSTHOG_KEY: ${{ secrets.EXPO_PUBLIC_POSTHOG_KEY }}
 
       - name: Build (Android)
-        if: ${{ github.event.inputs.platform == 'android' || github.event.inputs.platform == 'all' }}
+        if: ${{ env.EXPO_TOKEN_PRESENT == 'true' && (github.event.inputs.platform == 'android' || github.event.inputs.platform == 'all') }}
         run: |
           eas build \
             --platform android \

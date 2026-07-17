@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from app.schemas.palm import LineGeometry, LineGeometryPoint, PalmAnalysis
 from app.services.palm_crease import CreaseExtractionResult, extract_creases_from_image

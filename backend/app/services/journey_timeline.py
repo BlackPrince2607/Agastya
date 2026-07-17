@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from app.schemas.guidance import JourneyTimelineItem, JourneyTimelineResponse
 from app.services.bucket_store import SessionBucket, normalize_user_memory
 from app.services.user_memory import prune_user_memory

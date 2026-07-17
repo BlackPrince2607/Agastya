@@ -15,15 +15,26 @@ jobs:
   deploy-railway:
     name: Deploy to Railway
     runs-on: ubuntu-latest
-    if: ${{ secrets.RAILWAY_TOKEN != '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Require RAILWAY_TOKEN
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo "RAILWAY_TOKEN secret is not set; skipping deploy."
+            exit 0
+          fi
+          echo "RAILWAY_TOKEN_PRESENT=true" >> "$GITHUB_ENV"
+
       - name: Install Railway CLI
+        if: env.RAILWAY_TOKEN_PRESENT == 'true'
         run: npm install -g @railway/cli
 
       - name: Deploy
+        if: env.RAILWAY_TOKEN_PRESENT == 'true'
         run: |
           if [ -n "$RAILWAY_SERVICE_ID" ]; then
             railway up --service "$RAILWAY_SERVICE_ID"
