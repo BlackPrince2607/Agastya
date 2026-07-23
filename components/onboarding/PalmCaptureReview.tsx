@@ -113,21 +113,34 @@ export function PalmCaptureReview({
 
         // Vision-first: one API call reads motifs + line overlays from the photo.
         const capture = trimBase64Payload(base64);
-        const analyzed = await withApiRetry(() =>
-          analyzePalm({
-            sessionId: snap.sessionId!,
-            deviceInstallId: snap.deviceInstallId!,
-            seed: `${hand}-review-${Date.now()}`,
-            imageBase64: capture,
-            dominantHand: hand,
-            gender: snap.userGender,
-          }),
-        );
+        let analyzed: PalmAnalysisDto | null = null;
+        let lastErr: unknown = null;
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          try {
+            analyzed = await withApiRetry(() =>
+              analyzePalm({
+                sessionId: snap.sessionId!,
+                deviceInstallId: snap.deviceInstallId!,
+                seed: `${hand}-review-${Date.now()}-${attempt}`,
+                imageBase64: capture,
+                dominantHand: hand,
+                gender: snap.userGender,
+              }),
+            );
+            if (reviewReady(analyzed)) break;
+            lastErr = new Error(PALM_RETAKE_DEFAULT);
+            analyzed = null;
+          } catch (err) {
+            lastErr = err;
+            analyzed = null;
+          }
+        }
         if (cancelled) return;
 
-        if (!reviewReady(analyzed)) {
+        if (!analyzed || !reviewReady(analyzed)) {
           setPhase('failed');
-          setStatusMsg(PALM_RETAKE_DEFAULT);
+          const msg = lastErr instanceof Error ? lastErr.message : PALM_RETAKE_DEFAULT;
+          setStatusMsg(isPalmRetakeError(msg) ? msg : PALM_RETAKE_DEFAULT);
           return;
         }
 

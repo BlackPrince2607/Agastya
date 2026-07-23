@@ -4,8 +4,9 @@ import { isEmailPremiumAllowlisted } from '@/utils/premiumAllowlist';
 import { useSessionStore } from '@/store/sessionStore';
 
 export function hasPremiumAccess(): boolean {
-  if (useSessionStore.getState().hasUnlockedPremium) return true;
-  return isEmailPremiumAllowlisted();
+  // Allowlist free access requires a signed-in allowlisted email (see setPremiumAllowlistEmail).
+  if (isEmailPremiumAllowlisted()) return true;
+  return useSessionStore.getState().hasUnlockedPremium;
 }
 
 /** Onboarding preview report — free tier landing after sign-in. */

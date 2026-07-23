@@ -7,14 +7,12 @@ import { MainTabScroll } from '@/components/layout/MainTabScroll';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { MainCosmicHeader } from '@/components/layout/MainCosmicHeader';
 import { MotiView } from '@/components/moti/MotiView';
-import { DevPremiumPanel } from '@/components/dev/DevPremiumPanel';
-import { isPrototypePremiumUnlockEnabled } from '@/services/devPremium';
 import { MembershipCard } from '@/components/profile/MembershipCard';
 import { ProfileHero } from '@/components/profile/ProfileHero';
 import { SettingsRow } from '@/components/profile/SettingsRow';
 import { SettingsSection } from '@/components/profile/SettingsSection';
 import { StatsGrid } from '@/components/profile/StatCard';
-import { LoadingBlock, SectionHeader } from '@/components/feedback';
+import { LoadingBlock } from '@/components/feedback';
 import { GlassCard, InsightCard } from '@/components/ui';
 import { LEGAL_URLS } from '@/constants/legal';
 import { MAIN_SECTION_GAP, STACK_GAP } from '@/constants/layout';
@@ -504,18 +502,6 @@ export default function ProfileScreen() {
           <SettingsRow icon="article" title="Terms of use" onPress={() => openLink(LEGAL_URLS.terms)} />
           <SettingsRow icon="info" title="Version" subtitle={version} showChevron={false} last />
         </SettingsSection>
-
-        {isPrototypePremiumUnlockEnabled() ? (
-          <MotiView
-            from={{ opacity: 0, translateY: 12 }}
-            animate={{ opacity: 1, translateY: 0 }}
-            transition={{ type: 'timing', duration: 400, delay: 280 }}
-            className="w-full"
-            style={{ gap: STACK_GAP }}>
-            <SectionHeader title="Prototype" subtitle="Unlock when store billing is not configured" />
-            <DevPremiumPanel showOpenReport />
-          </MotiView>
-        ) : null}
       </MainTabScroll>
     </CosmicScreen>
   );

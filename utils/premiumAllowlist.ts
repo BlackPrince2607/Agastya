@@ -1,6 +1,6 @@
 /**
  * Comma-separated emails in EXPO_PUBLIC_PREMIUM_EMAIL_ALLOWLIST get free premium
- * (founder / tester accounts) without a paid subscription.
+ * (founder accounts) only while signed in with that email — never while signed out.
  */
 
 import { useSessionStore } from '@/store/sessionStore';
@@ -21,15 +21,21 @@ function parseAllowlist(): Set<string> {
 
 /** Keep the signed-in email so sync `hasPremiumAccess()` checks work. */
 export function setPremiumAllowlistEmail(email: string | null | undefined): void {
+  const prev = cachedAuthEmail;
   const next = email?.trim().toLowerCase() || null;
   cachedAuthEmail = next;
-  if (
-    next &&
-    parseAllowlist().has(next) &&
-    !useSessionStore.getState().hasUnlockedPremium &&
-    (process.env.EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS || '').trim() !== 'true'
-  ) {
+  const list = parseAllowlist();
+
+  if (next && list.has(next)) {
+    // Free premium only after this allowlisted account is signed in.
     useSessionStore.getState().setPremium(true);
+    return;
+  }
+
+  // Signed out or switched to a non-allowlisted account — revoke allowlist unlock.
+  // Paid entitlement is restored by server bootstrap when applicable.
+  if (prev && list.has(prev)) {
+    useSessionStore.getState().setPremium(false);
   }
 }
 
@@ -37,11 +43,8 @@ export function getPremiumAllowlistEmail(): string | null {
   return cachedAuthEmail;
 }
 
+/** True only when a signed-in email is on the allowlist (cached from auth). */
 export function isEmailPremiumAllowlisted(email?: string | null): boolean {
-  // During Razorpay E2E, do not skip paywall via founder allowlist.
-  if ((process.env.EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS || '').trim() === 'true') {
-    return false;
-  }
   const candidate = (email ?? cachedAuthEmail)?.trim().toLowerCase();
   if (!candidate) return false;
   return parseAllowlist().has(candidate);

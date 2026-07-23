@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { Image, Text, View, useWindowDimensions } from 'react-native';
 import { colors } from '@/constants/theme';
 
-import { DevPremiumPanel } from '@/components/dev/DevPremiumPanel';
 import { EmptyState, LoadingBlock } from '@/components/feedback';
 import { BackButton } from '@/components/layout/BackButton';
 import { StackScroll } from '@/components/layout/StackScroll';
@@ -172,8 +171,6 @@ export default function ReportScreen() {
       <StackScroll>
         <View className="w-full gap-5">
           <ReportHeader />
-
-          <DevPremiumPanel />
 
           {/* Pill tab bar */}
           <View className="w-full flex-row flex-wrap gap-2">

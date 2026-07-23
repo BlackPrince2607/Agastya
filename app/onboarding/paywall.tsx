@@ -18,7 +18,6 @@ import { AnalyticsEvent, track, trackOnce } from '@/services/analytics';
 import { getBillingConfig } from '@/services/billing/billingService';
 import type { BillingConfig } from '@/services/billing/billingService';
 import { isPlayUserChoiceAvailable } from '@/services/billing/playUserChoice';
-import { devUnlockPremium, isPrototypePremiumUnlockEnabled } from '@/services/devPremium';
 import {
   unlockPremium,
   checkPremiumStatus,
@@ -115,7 +114,6 @@ export default function PaywallScreen() {
 
   const subscribeLabel = () => {
     if (busy) return 'Processing...';
-    if (isPrototypePremiumUnlockEnabled()) return 'Unlock full access';
     return 'Unlock Premium';
   };
 
@@ -175,20 +173,6 @@ export default function PaywallScreen() {
     track(AnalyticsEvent.PURCHASE_STARTED, { billing_period: period });
 
     try {
-      if (isPrototypePremiumUnlockEnabled()) {
-        const proto = await devUnlockPremium();
-        if (proto.ok) {
-          if (hasPremiumAccess()) {
-            enterMainApp();
-          } else {
-            goToAccountSync();
-          }
-          return;
-        }
-        Alert.alert('Could not unlock', proto.reason);
-        return;
-      }
-
       const result = await unlockPremium({ seed: mergedSeed });
 
       if (!result.ok) {
@@ -254,14 +238,11 @@ export default function PaywallScreen() {
                 <Text className="font-body text-[14px] text-cyan">You already have full access on this device.</Text>
               </View>
             ) : null}
-            {!isPrototypePremiumUnlockEnabled() && billingAvailable ? (
+            {billingAvailable ? (
               <Text className="mt-3 font-body text-[13px] leading-5 text-cyan">
-                Google Play will show a secure payment choice — UPI/cards via Razorpay or Google Play billing.
-              </Text>
-            ) : null}
-            {isPrototypePremiumUnlockEnabled() ? (
-              <Text className="mt-3 font-body text-[13px] leading-5 text-cyan">
-                Development build — tap below to unlock full access for testing.
+                {testBypass
+                  ? 'Test mode — Razorpay checkout opens without Play User Choice.'
+                  : 'Google Play will show a secure payment choice — UPI/cards via Razorpay or Google Play billing.'}
               </Text>
             ) : !billingAvailable && Platform.OS === 'android' ? (
               <Text className="mt-3 font-body text-[13px] leading-5 text-on-surface-variant">

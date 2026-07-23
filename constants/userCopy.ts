@@ -183,6 +183,10 @@ export const PALM_CAMERA_COACHING =
   'Ask someone to hold the phone, or rest it and photograph your other hand.';
 export const PALM_CAMERA_CAPTURING = 'Capturing…';
 export const PALM_CAMERA_CENTER = 'Center your hand inside the frame';
+export const PALM_CAMERA_AUTO_SEARCH = 'Searching for your open palm…';
+export const PALM_CAMERA_AUTO_LOCK = 'Palm detected — hold still…';
+export const PALM_CAMERA_AUTO_HOLD = 'Hold still — capturing automatically…';
+export const PALM_CAMERA_MANUAL = 'Capture manually';
 
 export const PALM_RETAKE_DEFAULT =
   "We couldn't read that palm clearly. Try brighter light and an open palm.";

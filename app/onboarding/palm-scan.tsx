@@ -1,6 +1,6 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useLocalSearchParams } from 'expo-router';
-import { useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Alert, Pressable, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -17,14 +17,17 @@ import { colors } from '@/constants/theme';
 import {
   CAMERA_PERMISSION_LOADING,
   GALLERY_OPENING,
+  PALM_CAMERA_AUTO_HOLD,
   PALM_CAMERA_CAPTURING,
   PALM_CAMERA_CENTER,
   PALM_CAMERA_COACHING,
+  PALM_CAMERA_MANUAL,
   PALM_CAPTURE_FAILED,
   PALM_RETAKE_BANNER_PREFIX,
 } from '@/constants/userCopy';
 import { LoadingBlock } from '@/components/feedback';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
+import { useAutoPalmCapture } from '@/hooks/useAutoPalmCapture';
 import { triggerLightTap } from '@/hooks/useHapticTap';
 import type { PalmScanHand } from '@/store/sessionStore';
 import { useSessionStore } from '@/store/sessionStore';
@@ -73,15 +76,32 @@ export default function PalmScanScreen() {
 
   const frameSize = Math.min(windowWidth - PAGE_PADDING * 2 - 8, Math.round(windowHeight * 0.42), 320);
   const hand = handLocked ? recommendedHand : selectedHand;
+  const cameraActive = step === 'camera' && Boolean(permission?.granted) && !previewBase64 && !capturing;
+
+  const goToReview = useCallback((base64: string) => {
+    setPreviewBase64(base64);
+    setStep('review');
+  }, []);
+
+  const onAutoCaptured = useCallback(
+    (base64: string) => {
+      void triggerLightTap();
+      track(AnalyticsEvent.PALM_SCAN_STARTED, { source: 'camera_auto' });
+      goToReview(base64);
+    },
+    [goToReview],
+  );
+
+  const auto = useAutoPalmCapture({
+    enabled: cameraActive,
+    hand,
+    cameraRef: camRef,
+    onCaptured: onAutoCaptured,
+  });
 
   const chooseHand = (next: PalmScanHand) => {
     if (handLocked) return;
     setSelectedHand(next);
-  };
-
-  const goToReview = (base64: string) => {
-    setPreviewBase64(base64);
-    setStep('review');
   };
 
   const uploadFromGallery = async (scanHand: PalmScanHand) => {
@@ -215,13 +235,14 @@ export default function PalmScanScreen() {
   }
 
   const startScan = async () => {
-    if (capturing) return;
+    if (capturing || auto.phase === 'capturing') return;
     setCapturing(true);
     try {
       const photo = await camRef.current?.takePictureAsync({
         base64: true,
-        quality: 0.85,
-      });
+        quality: 0.88,
+        shutterSound: false,
+      } as never);
       if (!photo?.base64) {
         Alert.alert("Couldn't capture palm", PALM_CAPTURE_FAILED);
         return;
@@ -234,6 +255,13 @@ export default function PalmScanScreen() {
       setCapturing(false);
     }
   };
+
+  const statusColor =
+    auto.phase === 'locking' || auto.phase === 'capturing' || auto.phase === 'timed_hold'
+      ? 'text-cyan/95'
+      : 'text-on-surface-variant';
+  const frameCorner =
+    auto.phase === 'locking' || auto.phase === 'capturing' ? colors.cyan : colors.primary;
 
   return (
     <View className="flex-1 bg-black">
@@ -275,9 +303,14 @@ export default function PalmScanScreen() {
             size={frameSize}
             hand={hand}
             showInnerGuide
-            showScanLine
-            cornerColor={colors.primary}
+            showScanLine={auto.phase === 'searching' || auto.phase === 'idle'}
+            cornerColor={frameCorner}
           />
+          <View className="mt-4 max-w-[320px] rounded-2xl border border-white/15 bg-black/65 px-4 py-3">
+            <Text className={`text-center font-body text-[13px] leading-5 ${statusColor}`}>
+              {capturing ? PALM_CAMERA_CAPTURING : auto.phase === 'timed_hold' ? PALM_CAMERA_AUTO_HOLD : auto.message}
+            </Text>
+          </View>
         </View>
 
         <SafeAreaView edges={['left', 'right', 'bottom']}>
@@ -288,15 +321,15 @@ export default function PalmScanScreen() {
             {handLocked ? null : <HandToggleRow hand={hand} onSelect={chooseHand} compact />}
 
             <CosmicButton
-              gradient="nebulaMd3"
-              label={capturing ? PALM_CAMERA_CAPTURING : 'Capture palm'}
-              disabled={capturing}
+              variant="ghost"
+              label={capturing || auto.phase === 'capturing' ? PALM_CAMERA_CAPTURING : PALM_CAMERA_MANUAL}
+              disabled={capturing || auto.phase === 'capturing'}
               onPress={() => void startScan()}
             />
 
             <Pressable
               accessibilityRole="button"
-              disabled={uploadBusy || capturing}
+              disabled={uploadBusy || capturing || auto.phase === 'capturing'}
               onPress={() => void uploadFromGallery(hand)}
               className="items-center py-2 active:opacity-75">
               <Text className="font-label text-[13px] uppercase tracking-[0.08em] text-on-surface-variant">

@@ -7,7 +7,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MotiView } from '@/components/moti/MotiView';
 import { CosmicDotGrid } from '@/components/layout/CosmicDotGrid';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
-import { DevPremiumPanel } from '@/components/dev/DevPremiumPanel';
 import { OnboardingHeader } from '@/components/onboarding/OnboardingHeader';
 import {
   AuraNebulaCard,
@@ -29,7 +28,7 @@ import { useSessionStore } from '@/store/sessionStore';
 import { enterMainApp } from '@/utils/navigationFlow';
 import { headlineNeedsPalmFix } from '@/utils/palmInsights';
 import { hasPalmLineOverlay } from '@/types/palmAnalysis';
-import { hasPremiumAccess } from '@/utils/premiumAccess';
+import { isEmailPremiumAllowlisted } from '@/utils/premiumAllowlist';
 
 const FOCUS_LABEL: Record<FocusTopic, string> = {
   love: 'Love',
@@ -58,15 +57,28 @@ export default function ReportPreviewScreen() {
   const palmAnalysis = useSessionStore((s) => s.palmAnalysis);
   const palmCaptureBase64 = useSessionStore((s) => s.palmCaptureBase64);
   const displayName = useSessionStore((s) => s.userDisplayName);
-  const storePremium = useSessionStore((s) => s.hasUnlockedPremium);
+  const fullReading = useSessionStore((s) => s.fullReading);
   const mergedSeed = seed ?? storeSeed ?? 'stillness';
   const { isSignedIn } = useAuthSession();
-  const premium = storePremium || hasPremiumAccess();
+  // Free skip: signed in with allowlisted email only. Paid: full report after checkout.
+  // Never hide Unlock for unsigned users just because local hasUnlockedPremium is stale.
+  const allowlistPremium = isSignedIn && isEmailPremiumAllowlisted();
+  const hasConfirmedPremium = allowlistPremium || Boolean(fullReading);
+  const showUnlockCta = !hasConfirmedPremium;
   const { width: windowWidth } = useWindowDimensions();
   const overlayWidth = Math.min(windowWidth - 48, 320);
   const overlayHeight = Math.round(overlayWidth * 0.55);
 
   const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(null);
+
+  // Drop leftover local unlocks when not signed in and not paid (no full report).
+  useEffect(() => {
+    if (isSignedIn) return;
+    const snap = useSessionStore.getState();
+    if (!snap.fullReading && snap.hasUnlockedPremium) {
+      snap.setPremium(false);
+    }
+  }, [isSignedIn]);
 
   useEffect(() => {
     if (!palmCaptureBase64) {
@@ -117,8 +129,6 @@ export default function ReportPreviewScreen() {
           }}>
           <OnboardingHeader step={ONBOARDING_STEPS.reportPreview} total={ONBOARDING_TOTAL_STEPS} />
 
-          <DevPremiumPanel showOpenReport />
-
           <MotiView from={{ opacity: 0, translateY: 12 }} animate={{ opacity: 1, translateY: 0 }}>
             <View className="flex-row flex-wrap items-center gap-2">
               <View className="rounded-full border border-cyan/35 bg-cyan/10 px-3 py-1">
@@ -143,8 +153,10 @@ export default function ReportPreviewScreen() {
             ) : null}
             <Text className="mt-4 font-body text-[14px] leading-6 text-on-surface-variant">
               {isSignedIn
-                ? 'Your preview is ready. Enter the app to keep exploring.'
-                : 'Sign in to save your reading and enter the app.'}
+                ? showUnlockCta
+                  ? 'Your preview is ready. Unlock Premium for the full Blueprint, or enter the app anytime.'
+                  : 'Your preview is ready. Enter the app to keep exploring.'
+                : 'Upgrade for the full Blueprint, or sign in to save your reading.'}
             </Text>
           </MotiView>
 
@@ -325,37 +337,10 @@ export default function ReportPreviewScreen() {
           className="absolute bottom-0 left-0 right-0 z-20 rounded-none border-t border-white/14 bg-cosmic-void/92 px-6 pt-4"
           style={{ elevation: 24 }}>
           <View style={{ paddingBottom: Math.max(insets.bottom, 16) }} className="gap-y-3">
-            {isSignedIn ? (
-              <>
-                <CosmicButton gradient="nebulaMd3" label="Enter Agastya" onPress={() => enterMainApp()} />
-                {!premium ? (
-                  <CosmicButton
-                    variant="ghost"
-                    label="Unlock full report"
-                    onPress={() =>
-                      router.push({
-                        pathname: '/onboarding/paywall',
-                        params: { seed: mergedSeed },
-                      })
-                    }
-                  />
-                ) : null}
-              </>
-            ) : premium ? (
+            {showUnlockCta ? (
               <CosmicButton
                 gradient="nebulaMd3"
-                label="Save & sign in to continue"
-                onPress={() =>
-                  router.push({
-                    pathname: '/onboarding/account',
-                    params: { seed: mergedSeed },
-                  })
-                }
-              />
-            ) : (
-              <CosmicButton
-                gradient="nebulaMd3"
-                label="Unlock full report"
+                label="Unlock Premium"
                 onPress={() =>
                   router.push({
                     pathname: '/onboarding/paywall',
@@ -363,11 +348,17 @@ export default function ReportPreviewScreen() {
                   })
                 }
               />
-            )}
-            {!isSignedIn ? (
+            ) : null}
+            {isSignedIn ? (
               <CosmicButton
-                variant="ghost"
-                label="Save & sign in"
+                variant={showUnlockCta ? 'ghost' : 'primary'}
+                label="Enter Agastya"
+                onPress={() => enterMainApp()}
+              />
+            ) : (
+              <CosmicButton
+                variant={showUnlockCta ? 'ghost' : 'primary'}
+                label={showUnlockCta ? 'Save & sign in' : 'Save & sign in to continue'}
                 onPress={() =>
                   router.push({
                     pathname: '/onboarding/account',
@@ -375,13 +366,15 @@ export default function ReportPreviewScreen() {
                   })
                 }
               />
-            ) : null}
+            )}
             <Text className="mt-1 text-center font-body text-[11px] leading-5 text-on-surface-variant">
               {isSignedIn
-                ? premium
-                  ? 'Your reading is saved on this device.'
-                  : 'Home is unlocked. Upgrade anytime for the full report and Guide.'
-                : 'Your preview stays on this device until you sign in.'}
+                ? showUnlockCta
+                  ? 'Home is unlocked. Upgrade anytime for the full report and Guide.'
+                  : 'Your reading is saved on this device.'
+                : showUnlockCta
+                  ? 'Your preview stays on this device until you unlock or sign in.'
+                  : 'Sign in to sync your unlocked reading across devices.'}
             </Text>
           </View>
         </BlurContainer>

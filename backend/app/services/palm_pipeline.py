@@ -157,9 +157,23 @@ async def analyze_palm(settings: Settings, body: PalmAnalyzeBody) -> PalmAnalysi
             return result
 
         # Motifs without drawable geometry — still usable for the reading text.
-        if result.life_line and result.heart_line and result.head_line and result.image_quality != "no_hand":
+        if result.life_line and result.heart_line and result.head_line:
+            if result.image_quality == "no_hand" and not _has_usable_geometry(result):
+                if not settings.debug:
+                    raise HTTPException(
+                        status_code=422,
+                        detail="No clear palm visible - please retake the photo with your palm open and well lit.",
+                    )
             logger.warning("vision motifs without geometry seed=%s", body.seed[:32])
-            return result.model_copy(update={"geometry_source": result.geometry_source or "unavailable"})
+            quality = result.image_quality
+            if quality in {"poor", "no_hand"}:
+                quality = "acceptable"
+            return result.model_copy(
+                update={
+                    "geometry_source": result.geometry_source or "unavailable",
+                    "image_quality": quality,
+                }
+            )
 
         if not settings.debug:
             raise HTTPException(
