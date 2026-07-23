@@ -134,23 +134,35 @@ export default function AnalysisScreen() {
       setConfirmBusy(true);
       const snap = useSessionStore.getState();
       try {
-        const previewPayload = await withApiRetry(() =>
-          generateReport({
-            sessionId: snap.sessionId!,
-            seed: resolvedSeed,
-            palmAnalysis: palm,
-            focusTopics: snap.focusTopics,
-            mode: 'preview',
-            displayName: snap.userDisplayName,
-            gender: snap.userGender,
-          }),
-        );
+        const runGenerate = () =>
+          withApiRetry(() =>
+            generateReport({
+              sessionId: snap.sessionId!,
+              seed: resolvedSeed,
+              palmAnalysis: palm,
+              focusTopics: snap.focusTopics,
+              mode: 'preview',
+              displayName: snap.userDisplayName,
+              gender: snap.userGender,
+            }),
+          );
+        let previewPayload;
+        try {
+          previewPayload = await runGenerate();
+        } catch {
+          // One quiet retry — palm is already locked; don't blame the photo.
+          previewPayload = await runGenerate();
+        }
         setPreviewReading(normalizeFullReport(previewPayload));
       } catch {
         if (isApiConfigured()) {
-          // Live backend failed — don't invent a frontend Life Blueprint.
-          goRetake(PALM_RETAKE_DEFAULT);
+          Alert.alert(
+            'Report unavailable',
+            "Your palm reading is saved, but the Life Blueprint preview couldn't be built. Tap continue to try again.",
+          );
           setConfirmBusy(false);
+          // Stay on confirm so the user can tap continue to retry generate.
+          setFlowPhase('confirm');
           return;
         }
         setPreviewReading(buildSimulatedReading(resolvedSeed, snap.focusTopics, palm));
@@ -166,7 +178,7 @@ export default function AnalysisScreen() {
         params: { seed: resolvedSeed },
       });
     },
-    [setPreviewReading, goRetake],
+    [setPreviewReading],
   );
 
   const runIdRef = useRef(0);
@@ -231,7 +243,13 @@ export default function AnalysisScreen() {
 
         // Review screen already locked lines (vision or CV) — reuse, skip re-analyze / re-confirm.
         const prelocked = snap.palmAnalysis;
-        if (prelocked && !palmNeedsRetake(prelocked) && isLivePalmAnalysis(prelocked)) {
+        const prelockedOk =
+          prelocked &&
+          !palmNeedsRetake(prelocked) &&
+          (isLivePalmAnalysis(prelocked) ||
+            hasPalmLineOverlay(prelocked) ||
+            Boolean(prelocked.life_line && prelocked.heart_line && prelocked.head_line));
+        if (prelockedOk && prelocked) {
           resolvedPalm = prelocked;
           setApiPalm(prelocked);
           setPalmAnalysis(prelocked);
@@ -305,8 +323,12 @@ export default function AnalysisScreen() {
         setSyncPulse(1);
         await delay(ANALYSIS_SETTLE_MS);
         if (cancelled || runId !== runIdRef.current) return;
-        // Live API configured → retake; offline-only may use a sample reading.
+        // Live API configured → retake only if we never locked a palm; offline may use a sample.
         if (isApiConfigured()) {
+          if (resolvedPalm && !palmNeedsRetake(resolvedPalm)) {
+            await finishReport(resolvedPalm, resolvedSeed);
+            return;
+          }
           goRetake(PALM_RETAKE_DEFAULT);
           return;
         }

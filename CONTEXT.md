@@ -385,23 +385,19 @@ Backend `backend/.env` commonly includes:
 - `DEBUG`
 - `CORS_ORIGINS`
 - `CORS_ORIGIN_REGEX`
-- `PALM_ANALYSIS_MODE`
-- `OPENROUTER_API_KEY`
+- `PALM_ANALYSIS_MODE` (`vision` on Railway — required for single-capture line read)
+- `OPENROUTER_API_KEY` (required; without it `/v1/palm/analyze` returns 503)
 - `OPENROUTER_CHAT_MODEL`
 - `OPENROUTER_VISION_MODEL`
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `SUPABASE_PALM_BUCKET`
 - `REDIS_URL`
-- `REVENUECAT_WEBHOOK_SECRET`
-- `STRIPE_SECRET_KEY`
-- `STRIPE_WEBHOOK_SECRET`
-- `STRIPE_PRICE_MONTHLY`
-- `STRIPE_PRICE_ANNUAL`
+- `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` / `RAZORPAY_WEBHOOK_SECRET` (when billing enabled)
 - `SENTRY_DSN`
 - `SENTRY_ENVIRONMENT`
 
-Never commit real `.env` files or service-role secrets.
+Never commit real `.env` files or service-role secrets. After palm-pipeline changes, redeploy Railway so the Expo app’s `EXPO_PUBLIC_AGASTYA_API_URL` hits the vision-first backend.
 
 ## Testing and Quality Notes
 

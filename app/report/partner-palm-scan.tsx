@@ -69,7 +69,6 @@ export default function PartnerPalmScanScreen() {
 
   const auto = useAutoPalmCapture({
     enabled: cameraActive,
-    hand,
     cameraRef: camRef,
     onCaptured: onAutoCaptured,
   });
@@ -186,11 +185,10 @@ export default function PartnerPalmScanScreen() {
   };
 
   const statusColor =
-    auto.phase === 'locking' || auto.phase === 'capturing' || auto.phase === 'timed_hold'
-      ? 'text-cyan/95'
-      : 'text-on-surface-variant';
+    auto.phase === 'holding' || auto.phase === 'capturing' ? 'text-cyan/95' : 'text-on-surface-variant';
   const frameCorner =
-    auto.phase === 'locking' || auto.phase === 'capturing' ? colors.cyan : colors.primary;
+    auto.phase === 'holding' || auto.phase === 'capturing' ? colors.cyan : colors.primary;
+  const autoBusy = auto.phase === 'capturing' || capturing;
 
   return (
     <CosmicScreen insetTop={false}>
@@ -208,7 +206,7 @@ export default function PartnerPalmScanScreen() {
               </View>
 
               <Text className="mt-4 font-body text-[14px] leading-6 text-on-surface-variant">
-                Center their palm inside the guide. Auto-capture when the palm is locked.
+                Center their palm inside the guide. Hold steady — we capture once automatically.
               </Text>
               <Text className="mt-1 font-body text-[12px] leading-5 text-on-surface-variant/80">
                 {PALM_CAMERA_COACHING}
@@ -216,14 +214,22 @@ export default function PartnerPalmScanScreen() {
 
               <View className="flex-1 items-center justify-center py-4" pointerEvents="none">
                 <PalmScanFrame hand={hand} size={frameSize} cornerColor={frameCorner} />
-                <View className="mt-4 max-w-[320px] rounded-2xl border border-white/15 bg-black/65 px-4 py-3">
+                <View className="mt-4 max-w-[320px] gap-2 rounded-2xl border border-white/15 bg-black/65 px-4 py-3">
                   <Text className={`text-center font-body text-[13px] leading-5 ${statusColor}`}>
                     {capturing
                       ? PALM_CAMERA_CAPTURING
-                      : auto.phase === 'timed_hold'
+                      : auto.phase === 'holding'
                         ? PALM_CAMERA_AUTO_HOLD
                         : auto.message}
                   </Text>
+                  {auto.phase === 'holding' ? (
+                    <View className="h-1 overflow-hidden rounded-full bg-white/15">
+                      <View
+                        className="h-full rounded-full bg-cyan"
+                        style={{ width: `${Math.round(auto.progress * 100)}%` }}
+                      />
+                    </View>
+                  ) : null}
                 </View>
               </View>
 
@@ -232,13 +238,13 @@ export default function PartnerPalmScanScreen() {
                 <HandToggleRow hand={selectedHand} onSelect={setSelectedHand} compact />
                 <CosmicButton
                   variant="ghost"
-                  label={capturing || auto.phase === 'capturing' ? PALM_CAMERA_CAPTURING : PALM_CAMERA_MANUAL}
-                  disabled={capturing || auto.phase === 'capturing'}
+                  label={autoBusy ? PALM_CAMERA_CAPTURING : PALM_CAMERA_MANUAL}
+                  disabled={autoBusy}
                   onPress={() => void startScan()}
                 />
                 <Pressable
                   accessibilityRole="button"
-                  disabled={uploadBusy || capturing || auto.phase === 'capturing'}
+                  disabled={uploadBusy || autoBusy}
                   onPress={() => void uploadFromGallery()}
                   className="items-center py-2 active:opacity-75">
                   <Text className="font-label text-[13px] uppercase tracking-[0.08em] text-on-surface-variant">

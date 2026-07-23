@@ -19,7 +19,7 @@ import {
   PALM_RETAKE_DEFAULT,
 } from '@/constants/userCopy';
 import { analyzePalm } from '@/services/agastyaApi';
-import { isPalmRetakeError } from '@/services/apiErrors';
+import { ApiHttpError, isPalmRetakeError } from '@/services/apiErrors';
 import { isApiConfigured } from '@/services/env';
 import { bootstrapIdentity } from '@/services/identity';
 import type { PalmScanHand } from '@/store/sessionStore';
@@ -53,7 +53,24 @@ function toImageUri(base64: string): string {
 
 function reviewReady(palm: PalmAnalysisDto | null): boolean {
   if (!palm || palmNeedsRetake(palm)) return false;
-  return isLivePalmAnalysis(palm) || hasPalmLineOverlay(palm);
+  if (isLivePalmAnalysis(palm) || hasPalmLineOverlay(palm)) return true;
+  // Motifs present — allow continue even if overlay points were thin.
+  return Boolean(palm.life_line && palm.heart_line && palm.head_line);
+}
+
+function errorMessageForReview(err: unknown): string {
+  if (err instanceof ApiHttpError) {
+    const raw = (err.rawDetail || err.message || '').toLowerCase();
+    if (raw.includes('openrouter') || raw.includes('vision not configured') || raw.includes('temporarily unavailable')) {
+      return err.message;
+    }
+    if (isPalmRetakeError(err.message) || isPalmRetakeError(err.rawDetail)) {
+      return err.message;
+    }
+    return err.message || PALM_RETAKE_DEFAULT;
+  }
+  if (err instanceof Error && err.message) return err.message;
+  return PALM_RETAKE_DEFAULT;
 }
 
 export function PalmCaptureReview({
@@ -139,8 +156,7 @@ export function PalmCaptureReview({
 
         if (!analyzed || !reviewReady(analyzed)) {
           setPhase('failed');
-          const msg = lastErr instanceof Error ? lastErr.message : PALM_RETAKE_DEFAULT;
-          setStatusMsg(isPalmRetakeError(msg) ? msg : PALM_RETAKE_DEFAULT);
+          setStatusMsg(errorMessageForReview(lastErr));
           return;
         }
 
@@ -153,9 +169,8 @@ export function PalmCaptureReview({
         );
       } catch (err) {
         if (cancelled) return;
-        const msg = err instanceof Error ? err.message : PALM_RETAKE_DEFAULT;
         setPhase('failed');
-        setStatusMsg(isPalmRetakeError(msg) ? msg : PALM_RETAKE_DEFAULT);
+        setStatusMsg(errorMessageForReview(err));
       }
     })();
 

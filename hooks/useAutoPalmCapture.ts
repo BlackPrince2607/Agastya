@@ -1,69 +1,28 @@
 /**
- * Live palm auto-capture for expo-camera.
- * Polls quiet low-res snapshots → MediaPipe landmarks → stable lock → HQ capture.
- * If landmarks never lock, falls back to a short hold-still auto-capture.
+ * Single-shot palm auto-capture for expo-camera.
+ * Hold guidance → exactly one HQ photo. No probe shutters.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CameraView } from 'expo-camera';
 
-import { isApiConfigured } from '@/services/env';
-import { detectHandLandmarksFromBase64 } from '@/utils/handLandmarks';
-import type { HandLandmark } from '@/utils/palmLandmarks';
-
-export type AutoPalmPhase =
-  | 'idle'
-  | 'searching'
-  | 'locking'
-  | 'capturing'
-  | 'ready'
-  | 'timed_hold';
+export type AutoPalmPhase = 'idle' | 'holding' | 'capturing' | 'ready';
 
 export type AutoPalmStatus = {
   phase: AutoPalmPhase;
-  hits: number;
+  /** 0–1 progress through the hold window. */
+  progress: number;
   message: string;
 };
 
 type Options = {
   enabled: boolean;
-  hand: 'left' | 'right';
   cameraRef: React.RefObject<CameraView | null>;
   onCaptured: (base64: string) => void;
-  requiredHits?: number;
-  pollMs?: number;
-  fallbackHoldAfterMs?: number;
+  /** Hold duration before the single capture (ms). */
+  holdMs?: number;
 };
 
-const DEFAULT_HITS = 2;
-const DEFAULT_POLL_MS = 950;
-const FALLBACK_HOLD_MS = 9_000;
-const HOLD_COUNTDOWN_MS = 1600;
-
-function landmarksLookLikeOpenPalm(lm: HandLandmark[]): boolean {
-  if (lm.length < 21) return false;
-  const wrist = lm[0];
-  const middleTip = lm[12];
-  const indexMcp = lm[5];
-  const pinkyMcp = lm[17];
-  if (!wrist || !middleTip || !indexMcp || !pinkyMcp) return false;
-  const verticalSpan = Math.abs(wrist[1] - middleTip[1]);
-  const palmWidth = Math.abs(pinkyMcp[0] - indexMcp[0]);
-  return verticalSpan >= 0.22 && palmWidth >= 0.12 && wrist[1] > middleTip[1] - 0.05;
-}
-
-async function takeProbe(camera: CameraView): Promise<string | null> {
-  try {
-    const photo = await camera.takePictureAsync({
-      base64: true,
-      quality: 0.35,
-      shutterSound: false,
-      skipProcessing: true,
-    } as never);
-    return photo?.base64 ?? null;
-  } catch {
-    return null;
-  }
-}
+const DEFAULT_HOLD_MS = 2200;
 
 async function takeFinal(camera: CameraView): Promise<string | null> {
   try {
@@ -80,159 +39,91 @@ async function takeFinal(camera: CameraView): Promise<string | null> {
 
 export function useAutoPalmCapture({
   enabled,
-  hand,
   cameraRef,
   onCaptured,
-  requiredHits = DEFAULT_HITS,
-  pollMs = DEFAULT_POLL_MS,
-  fallbackHoldAfterMs = FALLBACK_HOLD_MS,
+  holdMs = DEFAULT_HOLD_MS,
 }: Options): AutoPalmStatus {
   const [phase, setPhase] = useState<AutoPalmPhase>('idle');
-  const [hits, setHits] = useState(0);
+  const [progress, setProgress] = useState(0);
   const [message, setMessage] = useState('Open your palm inside the frame');
 
-  const busyRef = useRef(false);
-  const hitsRef = useRef(0);
-  const startedAtRef = useRef(0);
   const capturedRef = useRef(false);
-  const fallbackArmedRef = useRef(false);
+  const capturingRef = useRef(false);
   const onCapturedRef = useRef(onCaptured);
   onCapturedRef.current = onCaptured;
 
   const finishCapture = useCallback(async () => {
-    if (capturedRef.current || busyRef.current) return false;
+    if (capturedRef.current || capturingRef.current) return;
     const cam = cameraRef.current;
-    if (!cam) return false;
-    busyRef.current = true;
+    if (!cam) return;
+
+    capturingRef.current = true;
     capturedRef.current = true;
     setPhase('capturing');
-    setMessage('Palm locked — capturing…');
+    setProgress(1);
+    setMessage('Capturing your palm…');
+
     try {
       const base64 = await takeFinal(cam);
       if (!base64) {
         capturedRef.current = false;
-        setPhase('searching');
+        capturingRef.current = false;
+        setPhase('holding');
+        setProgress(0);
         setMessage('Couldn’t capture — hold steady…');
-        return false;
+        return;
       }
       setPhase('ready');
       setMessage('Photo captured');
       onCapturedRef.current(base64);
-      return true;
     } finally {
-      busyRef.current = false;
+      capturingRef.current = false;
     }
   }, [cameraRef]);
 
   useEffect(() => {
     if (!enabled) {
       setPhase('idle');
+      setProgress(0);
       setMessage('Open your palm inside the frame');
-      hitsRef.current = 0;
-      setHits(0);
       capturedRef.current = false;
-      busyRef.current = false;
-      fallbackArmedRef.current = false;
+      capturingRef.current = false;
       return;
     }
 
-    const apiOk = isApiConfigured();
-    setPhase(apiOk ? 'searching' : 'timed_hold');
-    setMessage(apiOk ? 'Searching for your open palm…' : 'Hold your open palm steady — capturing shortly');
-    hitsRef.current = 0;
-    setHits(0);
     capturedRef.current = false;
-    busyRef.current = false;
-    fallbackArmedRef.current = !apiOk;
-    startedAtRef.current = Date.now();
+    capturingRef.current = false;
+    setPhase('holding');
+    setProgress(0);
+    setMessage('Hold your open palm steady…');
 
+    const started = Date.now();
     let cancelled = false;
-    let holdTimer: ReturnType<typeof setTimeout> | null = null;
-    let intervalId: ReturnType<typeof setInterval> | null = null;
+    let captureArmed = false;
 
-    const armFallbackHold = () => {
-      if (fallbackArmedRef.current || capturedRef.current || cancelled) return;
-      fallbackArmedRef.current = true;
-      setPhase('timed_hold');
-      setMessage('Hold still — capturing your palm…');
-      holdTimer = setTimeout(() => {
+    const progressId = setInterval(() => {
+      if (cancelled || capturedRef.current) return;
+      const elapsed = Date.now() - started;
+      const pct = Math.min(1, elapsed / holdMs);
+      setProgress(pct);
+      if (pct >= 1 && !captureArmed) {
+        captureArmed = true;
         void finishCapture();
-      }, HOLD_COUNTDOWN_MS);
-    };
-
-    if (!apiOk) {
-      armFallbackHold();
-    }
-
-    const tick = async () => {
-      if (cancelled || capturedRef.current || busyRef.current) return;
-      if (fallbackArmedRef.current) return;
-
-      const cam = cameraRef.current;
-      if (!cam) return;
-
-      const elapsed = Date.now() - startedAtRef.current;
-      if (elapsed >= fallbackHoldAfterMs) {
-        armFallbackHold();
-        return;
       }
+    }, 50);
 
-      if (!isApiConfigured()) {
-        armFallbackHold();
-        return;
-      }
-
-      busyRef.current = true;
-      try {
-        const probe = await takeProbe(cam);
-        if (cancelled || capturedRef.current || !probe) return;
-
-        const result = await detectHandLandmarksFromBase64(probe, hand);
-        if (cancelled || capturedRef.current) return;
-
-        const ok =
-          result.source === 'mediapipe' &&
-          Boolean(result.landmarks) &&
-          landmarksLookLikeOpenPalm(result.landmarks!);
-
-        if (ok) {
-          hitsRef.current += 1;
-          setHits(hitsRef.current);
-          if (hitsRef.current >= requiredHits) {
-            setPhase('locking');
-            setMessage('Palm detected — hold still…');
-            await finishCapture();
-            return;
-          }
-          setPhase('locking');
-          setMessage(`Palm found — hold steady (${hitsRef.current}/${requiredHits})…`);
-        } else {
-          hitsRef.current = 0;
-          setHits(0);
-          setPhase('searching');
-          setMessage('Open your palm and fill the frame…');
-        }
-      } catch {
-        if (!cancelled && !capturedRef.current) {
-          setPhase('searching');
-          setMessage('Looking for your palm…');
-        }
-      } finally {
-        busyRef.current = false;
-      }
-    };
-
-    intervalId = setInterval(() => {
-      void tick();
-    }, pollMs);
-    void tick();
+    const holdTimer = setTimeout(() => {
+      if (cancelled || captureArmed) return;
+      captureArmed = true;
+      void finishCapture();
+    }, holdMs);
 
     return () => {
       cancelled = true;
-      if (intervalId) clearInterval(intervalId);
-      if (holdTimer) clearTimeout(holdTimer);
+      clearInterval(progressId);
+      clearTimeout(holdTimer);
     };
-  }, [enabled, hand, cameraRef, requiredHits, pollMs, fallbackHoldAfterMs, finishCapture]);
+  }, [enabled, cameraRef, holdMs, finishCapture]);
 
-  return { phase, hits, message };
+  return { phase, progress, message };
 }

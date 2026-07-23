@@ -94,7 +94,6 @@ export default function PalmScanScreen() {
 
   const auto = useAutoPalmCapture({
     enabled: cameraActive,
-    hand,
     cameraRef: camRef,
     onCaptured: onAutoCaptured,
   });
@@ -257,11 +256,10 @@ export default function PalmScanScreen() {
   };
 
   const statusColor =
-    auto.phase === 'locking' || auto.phase === 'capturing' || auto.phase === 'timed_hold'
-      ? 'text-cyan/95'
-      : 'text-on-surface-variant';
+    auto.phase === 'holding' || auto.phase === 'capturing' ? 'text-cyan/95' : 'text-on-surface-variant';
   const frameCorner =
-    auto.phase === 'locking' || auto.phase === 'capturing' ? colors.cyan : colors.primary;
+    auto.phase === 'holding' || auto.phase === 'capturing' ? colors.cyan : colors.primary;
+  const autoBusy = auto.phase === 'capturing' || capturing;
 
   return (
     <View className="flex-1 bg-black">
@@ -303,13 +301,25 @@ export default function PalmScanScreen() {
             size={frameSize}
             hand={hand}
             showInnerGuide
-            showScanLine={auto.phase === 'searching' || auto.phase === 'idle'}
+            showScanLine={auto.phase === 'holding'}
             cornerColor={frameCorner}
           />
-          <View className="mt-4 max-w-[320px] rounded-2xl border border-white/15 bg-black/65 px-4 py-3">
+          <View className="mt-4 max-w-[320px] gap-2 rounded-2xl border border-white/15 bg-black/65 px-4 py-3">
             <Text className={`text-center font-body text-[13px] leading-5 ${statusColor}`}>
-              {capturing ? PALM_CAMERA_CAPTURING : auto.phase === 'timed_hold' ? PALM_CAMERA_AUTO_HOLD : auto.message}
+              {capturing
+                ? PALM_CAMERA_CAPTURING
+                : auto.phase === 'holding'
+                  ? PALM_CAMERA_AUTO_HOLD
+                  : auto.message}
             </Text>
+            {auto.phase === 'holding' ? (
+              <View className="h-1 overflow-hidden rounded-full bg-white/15">
+                <View
+                  className="h-full rounded-full bg-cyan"
+                  style={{ width: `${Math.round(auto.progress * 100)}%` }}
+                />
+              </View>
+            ) : null}
           </View>
         </View>
 
@@ -322,14 +332,14 @@ export default function PalmScanScreen() {
 
             <CosmicButton
               variant="ghost"
-              label={capturing || auto.phase === 'capturing' ? PALM_CAMERA_CAPTURING : PALM_CAMERA_MANUAL}
-              disabled={capturing || auto.phase === 'capturing'}
+              label={autoBusy ? PALM_CAMERA_CAPTURING : PALM_CAMERA_MANUAL}
+              disabled={autoBusy}
               onPress={() => void startScan()}
             />
 
             <Pressable
               accessibilityRole="button"
-              disabled={uploadBusy || capturing || auto.phase === 'capturing'}
+              disabled={uploadBusy || autoBusy}
               onPress={() => void uploadFromGallery(hand)}
               className="items-center py-2 active:opacity-75">
               <Text className="font-label text-[13px] uppercase tracking-[0.08em] text-on-surface-variant">

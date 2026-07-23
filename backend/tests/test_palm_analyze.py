@@ -291,8 +291,59 @@ def test_palm_analyze_vision_fallback_when_llm_fails_without_usable_image(mock_v
             "imageBase64": "aGVsbG8=",
         },
     )
-    # DEBUG=true in conftest allows fallback without 422
+    # DEBUG=true in conftest allows deterministic fallback (production returns 503).
     assert res.status_code == 200
     data = res.json()
     assert data["analysis_source"] == "fallback"
     assert data.get("line_geometry") in (None, [])
+
+
+def test_palm_analyze_503_when_vision_not_configured(monkeypatch):
+    monkeypatch.setenv("PALM_ANALYSIS_MODE", "vision")
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    get_settings.cache_clear()
+    client = TestClient(create_app())
+    session_id = str(uuid.uuid4())
+    client.post(
+        "/v1/sessions/register",
+        json={"sessionId": session_id, "deviceInstallId": "device-test-1"},
+    )
+    res = client.post(
+        "/v1/palm/analyze",
+        json={
+            "sessionId": session_id,
+            "deviceInstallId": "device-test-1",
+            "seed": "unit-test",
+            "imageBase64": "aGVsbG8=",
+        },
+    )
+    assert res.status_code == 503
+    assert "OPENROUTER" in (res.json().get("detail") or "").upper() or "vision" in (
+        res.json().get("detail") or ""
+    ).lower()
+
+
+@patch("app.services.palm_pipeline.palm_analysis_from_vision", new_callable=AsyncMock)
+def test_palm_analyze_503_when_vision_fails_in_production(mock_vision, monkeypatch):
+    mock_vision.return_value = None
+    monkeypatch.setenv("PALM_ANALYSIS_MODE", "vision")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test-key")
+    monkeypatch.setenv("DEBUG", "false")
+    get_settings.cache_clear()
+    client = TestClient(create_app())
+    session_id = str(uuid.uuid4())
+    client.post(
+        "/v1/sessions/register",
+        json={"sessionId": session_id, "deviceInstallId": "device-test-1"},
+    )
+    res = client.post(
+        "/v1/palm/analyze",
+        json={
+            "sessionId": session_id,
+            "deviceInstallId": "device-test-1",
+            "seed": "unit-test",
+            "imageBase64": "aGVsbG8=",
+        },
+    )
+    assert res.status_code == 503
+    assert "unavailable" in (res.json().get("detail") or "").lower()

@@ -248,7 +248,9 @@ Pushes to `main` that touch `backend/**` auto-redeploy.
 
 **Via CLI:** `railway login && railway init && npm run deploy:railway`
 
-Required Railway variables: `OPENROUTER_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DEBUG=false`, `RAZORPAY_*` (when billing enabled), non-wildcard `CORS_ORIGINS`. Recommended: `REDIS_URL`, `SENTRY_DSN`.
+Required Railway variables: `OPENROUTER_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DEBUG=false`, `PALM_ANALYSIS_MODE=vision`, `RAZORPAY_*` (when billing enabled), non-wildcard `CORS_ORIGINS`. Recommended: `REDIS_URL`, `SENTRY_DSN`.
+
+**Palm scan (vision-first):** the app takes one HQ photo after a short hold, then `POST /v1/palm/analyze` uses OpenRouter vision. Without `OPENROUTER_API_KEY` on Railway, analyze returns **503** (“Palm vision not configured”) and the review screen will not unlock lines. After backend changes, redeploy Railway and reload the Expo app so single-capture + vision stay in sync.
 
 **Production must run with `DEBUG=false`.** When `DEBUG=true`, webhook signature checks and startup secret validation are skipped — never ship beta that way.
 

@@ -49,6 +49,12 @@ export function mapApiError(detail: string): string {
   if (d.includes('invalid supabase') || d.includes('token missing subject')) {
     return ERRORS.authInvalid;
   }
+  if (d.includes('palm vision not configured') || d.includes('openrouter_api_key')) {
+    return 'Palm reading is not configured on the server yet. Add OPENROUTER_API_KEY and redeploy.';
+  }
+  if (d.includes('palm vision temporarily unavailable')) {
+    return 'Palm reading is temporarily unavailable. Please try again in a moment.';
+  }
   if (d.includes('guide_llm_unavailable')) {
     return ERRORS.guideLlmUnavailable;
   }

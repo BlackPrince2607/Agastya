@@ -111,6 +111,12 @@ async def analyze_palm(settings: Settings, body: PalmAnalyzeBody) -> PalmAnalysi
     if settings.llm_enabled and ai_mode and not has_image:
         raise HTTPException(status_code=400, detail="Palm image required for AI analysis.")
 
+    if has_image and ai_mode and not settings.llm_enabled:
+        raise HTTPException(
+            status_code=503,
+            detail="Palm vision not configured — set OPENROUTER_API_KEY on the server.",
+        )
+
     # Vision-first: model reads motifs + crease polylines from the photo.
     inferred: PalmAnalysis | None = None
     if settings.llm_enabled and has_image and ai_mode:
@@ -199,6 +205,12 @@ async def analyze_palm(settings: Settings, body: PalmAnalyzeBody) -> PalmAnalysi
         if merged.line_geometry:
             return merged.model_copy(update={"analysis_source": "hybrid"})
 
+    if has_image and ai_mode and settings.llm_enabled and not settings.debug:
+        raise HTTPException(
+            status_code=503,
+            detail="Palm vision temporarily unavailable — please try again in a moment.",
+        )
+
     logger.warning("Palm analysis falling back to deterministic motifs (seed entropy)")
     fallback = dummy_palm_analysis(entropy)
     fallback = fallback.model_copy(update={"analysis_source": "fallback"})
@@ -208,10 +220,5 @@ async def analyze_palm(settings: Settings, body: PalmAnalyzeBody) -> PalmAnalysi
             landmarks,
             image_base64=img,
             allow_landmark_heuristic=settings.palm_crease_fallback_heuristic,
-        )
-    if has_image and not settings.debug and settings.llm_enabled:
-        raise HTTPException(
-            status_code=422,
-            detail="Palm creases not detected — please retake with your open palm filling the frame and even light.",
         )
     return fallback
