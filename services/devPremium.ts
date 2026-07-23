@@ -17,7 +17,12 @@ export type DevPremiumStatus = {
 
 /** True in development builds for UI testing without real payments. */
 export function isPrototypePremiumUnlockEnabled(): boolean {
-  return __DEV__;
+  if (!__DEV__) return false;
+  // When testing live Razorpay (Option B bypass), never use local prototype unlock.
+  if ((process.env.EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS || '').trim() === 'true') {
+    return false;
+  }
+  return true;
 }
 
 export function devPremiumStatus(): DevPremiumStatus {

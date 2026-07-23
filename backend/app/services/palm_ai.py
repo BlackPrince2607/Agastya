@@ -1,4 +1,4 @@
-"""Vision-LM extraction of structured palm motifs from a capture."""
+"""Vision-LM extraction of structured palm motifs + line overlays from a capture."""
 
 from __future__ import annotations
 
@@ -88,10 +88,45 @@ def _clamp_confidence(value: object) -> float:
     return max(0.0, min(1.0, n))
 
 
-def _parse_line_geometry(raw: object) -> list[dict] | None:
-    """Deprecated — vision models must not supply overlays. Always returns None."""
-    del raw
-    return None
+def _clamp01(value: float) -> float:
+    return max(0.0, min(1.0, value))
+
+
+def _parse_point(raw: object) -> dict[str, float] | None:
+    if not isinstance(raw, dict):
+        return None
+    try:
+        return {"x": _clamp01(float(raw.get("x", 0))), "y": _clamp01(float(raw.get("y", 0)))}
+    except (TypeError, ValueError):
+        return None
+
+
+def parse_vision_line_geometry(raw: object) -> list[dict] | None:
+    """Normalize vision-returned crease polylines (0–1 image coords)."""
+    if not isinstance(raw, list):
+        return None
+    allowed = {"life_line", "heart_line", "head_line"}
+    cleaned: list[dict] = []
+    for line in raw:
+        if not isinstance(line, dict):
+            continue
+        name = str(line.get("name", "")).strip().lower().replace(" ", "_")
+        # Accept casual aliases from models
+        if name in {"life", "life-line"}:
+            name = "life_line"
+        elif name in {"heart", "heart-line"}:
+            name = "heart_line"
+        elif name in {"head", "head-line"}:
+            name = "head_line"
+        points = line.get("points")
+        if name not in allowed or not isinstance(points, list):
+            continue
+        parsed = [_parse_point(p) for p in points]
+        parsed = [p for p in parsed if p is not None]
+        if len(parsed) < 2:
+            continue
+        cleaned.append({"name": name, "points": parsed[:14]})
+    return cleaned if len(cleaned) >= 2 else None
 
 
 async def palm_analysis_from_vision(
@@ -138,7 +173,8 @@ async def palm_analysis_from_vision(
                 {
                     "type": "text",
                     "text": (
-                        "Read this palm photo. Return ONLY valid JSON matching the schema. "
+                        "Read this palm photo. Trace life, heart, and head creases with normalized "
+                        "line_geometry points, and return ONLY valid JSON matching the schema. "
                         f"Scanned hand (client): {hand_note}. "
                         f"Gender (client): {gender_note}.{tradition} "
                         f"Nonce (ignore unless tie-break): {seed_note!r}"
@@ -154,8 +190,8 @@ async def palm_analysis_from_vision(
             model=settings.openrouter_vision_model,
             messages=messages,
             response_format={"type": "json_object"},
-            temperature=0.35,
-            max_tokens=600,
+            temperature=0.25,
+            max_tokens=1400,
             timeout_seconds=settings.openrouter_vision_timeout_seconds,
         )
         if completion is None:
@@ -199,6 +235,12 @@ async def palm_analysis_from_vision(
         warnings_in = data.get("quality_warnings") or []
         warnings = [str(w).strip() for w in warnings_in if str(w).strip()][:5] if isinstance(warnings_in, list) else []
 
+        geometry = parse_vision_line_geometry(data.get("line_geometry"))
+        # Clear open palms with motifs should not be rejected as poor/no_hand by a timid model.
+        if geometry and image_quality in {"poor", "no_hand"}:
+            image_quality = "acceptable"
+            warnings = [w for w in warnings if "no" not in w.lower()][:5]
+
         return PalmAnalysis(
             life_line=life,
             heart_line=heart,
@@ -208,13 +250,14 @@ async def palm_analysis_from_vision(
             dominant_hand=dom,
             hand_shape=hand_shape,
             image_quality=image_quality,
-            confidence=_clamp_confidence(data.get("confidence", 0.65)),
+            confidence=_clamp_confidence(data.get("confidence", 0.7)),
             analysis_source="openrouter_vision",
             quality_warnings=warnings,
             line_details=data.get("line_details") if isinstance(data.get("line_details"), dict) else None,
             mounts=data.get("mounts") if isinstance(data.get("mounts"), dict) else None,
             fate_line=str(data.get("fate_line", "")).strip() or None,
-            line_geometry=None,
+            line_geometry=geometry,
+            geometry_source="vision_model" if geometry else None,
         )
     except Exception as exc:
         logger.exception("OpenRouter palm vision failed: %s", exc)

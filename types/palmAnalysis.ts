@@ -32,8 +32,17 @@ export type PalmAnalysisDto = {
       notes?: string;
     }
   >;
-  geometry_source?: 'opencv_creases' | 'landmark_heuristic' | 'unavailable' | null;
+  geometry_source?: 'opencv_creases' | 'vision_model' | 'landmark_heuristic' | 'unavailable' | null;
 };
+
+const LIVE_GEOMETRY = new Set(['opencv_creases', 'vision_model', 'landmark_heuristic']);
+
+/** True when we have drawable major-line overlays from vision or CV. */
+export function hasPalmLineOverlay(palm: PalmAnalysisDto | null | undefined): boolean {
+  if (!palm?.line_geometry || palm.line_geometry.length < 2) return false;
+  if (!palm.geometry_source || !LIVE_GEOMETRY.has(palm.geometry_source)) return false;
+  return true;
+}
 
 export function isLivePalmAnalysis(palm: PalmAnalysisDto | null | undefined): boolean {
   if (!palm) return false;
@@ -46,9 +55,19 @@ export function isLivePalmAnalysis(palm: PalmAnalysisDto | null | undefined): bo
 
 export function palmNeedsRetake(palm: PalmAnalysisDto | null | undefined): boolean {
   if (!palm) return false;
-  if (palm.image_quality === 'no_hand' || palm.image_quality === 'poor') return true;
-  // Invented anatomy overlays are not trustworthy — treat as retake.
-  if (palm.geometry_source === 'landmark_heuristic') return true;
-  if (palm.geometry_source === 'unavailable') return true;
+  // Drawable lines from vision or CV — capture is usable.
+  if (hasPalmLineOverlay(palm)) return false;
+  // Vision returned motifs for a visible palm — proceed even if overlay points were thin.
+  if (
+    isLivePalmAnalysis(palm) &&
+    palm.image_quality !== 'no_hand' &&
+    palm.life_line &&
+    palm.heart_line &&
+    palm.head_line
+  ) {
+    return false;
+  }
+  if (palm.image_quality === 'no_hand') return true;
+  if (palm.geometry_source === 'unavailable' && palm.image_quality === 'poor') return true;
   return false;
 }

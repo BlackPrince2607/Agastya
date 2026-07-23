@@ -18,6 +18,7 @@ import { fetchPredictions } from '@/services/agastyaApi';
 import { buildSimulatedReading } from '@/services/simulatedReading';
 import { useSessionStore } from '@/store/sessionStore';
 import type { PalmAnalysisDto } from '@/types/palmAnalysis';
+import { hasPalmLineOverlay } from '@/types/palmAnalysis';
 import { PREDICTION_PERIODS, type PredictionPeriod } from '@/types/predictions';
 import { buildLocalPredictions } from '@/utils/localPredictions';
 import { withApiRetry } from '@/utils/apiRetry';
@@ -231,7 +232,7 @@ export default function ReportScreen() {
                   <Text className="font-headline-md text-[18px] text-on-surface">
                     {Math.round(palm.confidence * 100)}%
                   </Text>
-                  {palm.geometry_source === 'opencv_creases' ? (
+                  {hasPalmLineOverlay(palm) ? (
                     <Text className="font-body text-[13px] text-cyan/90">
                       Lines locked from your photo scan
                     </Text>
@@ -264,7 +265,7 @@ export default function ReportScreen() {
                   </View>
                 </GlassCard>
               ) : null}
-              {palm.line_geometry?.length && palm.geometry_source === 'opencv_creases' ? (
+              {hasPalmLineOverlay(palm) && palm.line_geometry?.length ? (
                 <View className="gap-2">
                   <Text className="font-label text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">
                     Your palm lines

@@ -10,6 +10,7 @@ import {
 } from '@/constants/userCopy';
 import type { PalmScanHand } from '@/store/sessionStore';
 import { useSessionStore } from '@/store/sessionStore';
+import type { PalmAnalysisDto } from '@/types/palmAnalysis';
 import { isPalmHandLockedByGender, palmHandForGender } from '@/utils/palmHand';
 import { AnalyticsEvent, track } from '@/services/analytics';
 import { pickPalmImage } from '@/utils/pickPalmImage';
@@ -75,7 +76,8 @@ export default function PalmScanWebScreen() {
 
   const confirmReview = (
     landmarks: Array<[number, number]>,
-    source: 'mediapipe' | 'roi_estimate',
+    source: 'mediapipe',
+    palm: PalmAnalysisDto,
   ) => {
     if (!previewBase64 || confirming) return;
     setConfirming(true);
@@ -84,6 +86,7 @@ export default function PalmScanWebScreen() {
     setPalmScanHand(hand);
     setPalmCaptureBase64(previewBase64);
     setPalmCaptureLandmarks(landmarks, source);
+    useSessionStore.getState().setPalmAnalysis(palm);
     deferRouterPush({
       pathname: '/onboarding/analysis',
       params: { seed },

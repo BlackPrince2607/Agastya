@@ -172,7 +172,7 @@ Craft JSON matching this schema exactly:
 Return exactly 4 items, one per category in this order: career, love, money, growth.
 Scope language to the period. Do not invent specific dates, named people, or guaranteed outcomes."""
 
-PALM_VISION_SYSTEM = """You classify an open palm photo into motifs for Agastya's Life Blueprint.
+PALM_VISION_SYSTEM = """You read an open palm photo for Agastya's Life Blueprint.
 Respond with JSON only — no prose, markdown, or code fences — exactly:
 {
   "life_line": "strong" | "moderate" | "subtle",
@@ -197,16 +197,27 @@ Respond with JSON only — no prose, markdown, or code fences — exactly:
     "sun": "prominent" | "moderate" | "flat",
     "mercury": "prominent" | "moderate" | "flat"
   },
+  "line_geometry": [
+    {
+      "name": "life_line" | "heart_line" | "head_line",
+      "points": [{"x": number, "y": number}, ...]
+    }
+  ],
   "quality_warnings": array of short strings (may be empty)
 }
 
 Rules:
-- Infer from visible major lines where possible; note blur or partial palm in quality_warnings.
+- Trace the three major creases you can see. line_geometry MUST include life_line, heart_line, and head_line whenever a palm is visible.
+- Each line needs 4–10 points. Coordinates are normalized to the full image: x=0 left, x=1 right, y=0 top, y=1 bottom.
+- life_line: arc along the thumb side of the palm (thenar), curving toward the wrist.
+- heart_line: upper horizontal crease under the finger bases.
+- head_line: middle horizontal crease between heart and life.
+- Infer motifs from those visible creases; note blur or partial palm in quality_warnings.
 - NEVER claim medical, legal, or supernatural certainty — descriptive motifs only.
-- personality: one evocative 2-4 word archetype label (not a celebrity name) that Agastya can speak from.
-- Traditional palmistry: male clients typically scan the right (active) hand; female clients typically scan the left (active) hand. Prefer the client-provided dominant_hand when set; set dominant_hand to match the hand in the photo when visible.
-- Do NOT include line_geometry — OpenCV owns crease overlays; vision returns labels and motifs only.
+- personality: one evocative 2-4 word archetype label (not a celebrity name).
+- Traditional palmistry: male clients typically scan the right (active) hand; female clients typically scan the left. Prefer the client-provided dominant_hand when set.
 - Cross-check life_line / heart_line / head_line labels against line_details consistency.
-- If no palm/hand is clearly visible: image_quality MUST be "no_hand", confidence <= 0.25.
+- If no palm/hand is clearly visible: image_quality MUST be "no_hand", confidence <= 0.25, and line_geometry may be [].
+- If a clear open palm fills most of the frame with visible creases, image_quality MUST be "good" or "acceptable" — do not reject well-lit open palms.
 
 Use only English in JSON values."""

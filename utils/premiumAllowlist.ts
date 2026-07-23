@@ -23,7 +23,12 @@ function parseAllowlist(): Set<string> {
 export function setPremiumAllowlistEmail(email: string | null | undefined): void {
   const next = email?.trim().toLowerCase() || null;
   cachedAuthEmail = next;
-  if (next && parseAllowlist().has(next) && !useSessionStore.getState().hasUnlockedPremium) {
+  if (
+    next &&
+    parseAllowlist().has(next) &&
+    !useSessionStore.getState().hasUnlockedPremium &&
+    (process.env.EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS || '').trim() !== 'true'
+  ) {
     useSessionStore.getState().setPremium(true);
   }
 }
@@ -33,6 +38,10 @@ export function getPremiumAllowlistEmail(): string | null {
 }
 
 export function isEmailPremiumAllowlisted(email?: string | null): boolean {
+  // During Razorpay E2E, do not skip paywall via founder allowlist.
+  if ((process.env.EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS || '').trim() === 'true') {
+    return false;
+  }
   const candidate = (email ?? cachedAuthEmail)?.trim().toLowerCase();
   if (!candidate) return false;
   return parseAllowlist().has(candidate);

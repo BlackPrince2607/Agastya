@@ -164,32 +164,31 @@ def _warp_palm(
     return gray, M, M_inv
 
 
-def _enhance_creases(gray: np.ndarray) -> np.ndarray:
-    """CLAHE + black-hat to emphasize dark creases; returns float score map (higher = crease)."""
-    import cv2
-
-    clahe = cv2.createCLAHE(clipLimit=2.4, tileGridSize=(8, 8))
-    eq = clahe.apply(gray)
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9))
-    blackhat = cv2.morphologyEx(eq, cv2.MORPH_BLACKHAT, kernel)
-    # Soft invert so valleys are bright on score map
-    blur = cv2.GaussianBlur(eq, (5, 5), 0)
-    valleys = cv2.subtract(blur, eq)
-    score = cv2.addWeighted(blackhat, 0.65, valleys, 0.35, 0)
-    score = cv2.GaussianBlur(score, (3, 3), 0)
-    return score.astype(np.float32)
-
-
 def _relative_score_floor(band: np.ndarray) -> float:
     """Reject points below a soft floor derived from band contrast (not a fixed absolute)."""
     flat = band.reshape(-1)
     if flat.size == 0:
-        return 4.0
+        return 2.0
     p70 = float(np.percentile(flat, 70))
     p90 = float(np.percentile(flat, 90))
     # Need some crease contrast; floor sits between mid and high percentile.
-    return max(2.5, min(12.0, p70 * 0.55 + p90 * 0.15))
+    return max(1.2, min(10.0, p70 * 0.45 + p90 * 0.12))
 
+
+def _enhance_creases(gray: np.ndarray) -> np.ndarray:
+    """CLAHE + black-hat to emphasize dark creases; returns float score map (higher = crease)."""
+    import cv2
+
+    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+    eq = clahe.apply(gray)
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11, 11))
+    blackhat = cv2.morphologyEx(eq, cv2.MORPH_BLACKHAT, kernel)
+    # Soft invert so valleys are bright on score map
+    blur = cv2.GaussianBlur(eq, (5, 5), 0)
+    valleys = cv2.subtract(blur, eq)
+    score = cv2.addWeighted(blackhat, 0.7, valleys, 0.3, 0)
+    score = cv2.GaussianBlur(score, (3, 3), 0)
+    return score.astype(np.float32)
 
 def _trace_horizontal_corridor(
     score: np.ndarray,
@@ -494,6 +493,108 @@ def _map_head_motif(feat: dict[str, Any]) -> str:
     return "medium"
 
 
+def _corridor_candidates(
+    landmarks: list[list[float]],
+    M: np.ndarray,
+    img_w: int,
+    img_h: int,
+) -> list[dict[str, dict[str, float]]]:
+    """Adaptive corridors first, then wider / shifted anatomic retries for faint creases."""
+    primary = _adaptive_corridors(landmarks, M, img_w, img_h)
+    wide = {
+        "heart": {"y_lo": 0.06, "y_hi": 0.34, "x_start": 0.05, "x_end": 0.95},
+        "head": {"y_lo": 0.28, "y_hi": 0.58, "x_start": 0.06, "x_end": 0.94},
+        "life": {"x_lo": 0.02, "x_hi": 0.50, "y_start": 0.08, "y_end": 0.92},
+    }
+    shifted = {
+        "heart": {
+            "y_lo": _clamp01(primary["heart"]["y_lo"] + 0.04),
+            "y_hi": _clamp01(primary["heart"]["y_hi"] + 0.06),
+            "x_start": 0.05,
+            "x_end": 0.95,
+        },
+        "head": {
+            "y_lo": _clamp01(primary["head"]["y_lo"] + 0.04),
+            "y_hi": _clamp01(primary["head"]["y_hi"] + 0.06),
+            "x_start": 0.06,
+            "x_end": 0.94,
+        },
+        "life": {
+            "x_lo": 0.02,
+            "x_hi": _clamp01(primary["life"]["x_hi"] + 0.08),
+            "y_start": primary["life"]["y_start"],
+            "y_end": primary["life"]["y_end"],
+        },
+    }
+    return [primary, wide, shifted]
+
+
+def _trace_named_creases(
+    score: np.ndarray,
+    corridors: dict[str, dict[str, float]],
+) -> dict[str, list[tuple[float, float]]]:
+    heart_c = corridors["heart"]
+    head_c = corridors["head"]
+    life_c = corridors["life"]
+    heart_pts = _trace_horizontal_corridor(
+        score,
+        y_lo=heart_c["y_lo"],
+        y_hi=heart_c["y_hi"],
+        x_start=heart_c["x_start"],
+        x_end=heart_c["x_end"],
+        steps=42,
+    )
+    head_pts = _trace_horizontal_corridor(
+        score,
+        y_lo=head_c["y_lo"],
+        y_hi=head_c["y_hi"],
+        x_start=head_c["x_start"],
+        x_end=head_c["x_end"],
+        steps=42,
+    )
+    life_pts = _trace_arc_corridor(
+        score,
+        x_lo=life_c["x_lo"],
+        x_hi=life_c["x_hi"],
+        y_start=life_c["y_start"],
+        y_end=life_c["y_end"],
+        steps=36,
+    )
+    return {
+        "heart_line": _downsample(heart_pts),
+        "head_line": _downsample(head_pts),
+        "life_line": _downsample(life_pts),
+    }
+
+
+def _lock_geometry(
+    named: dict[str, list[tuple[float, float]]],
+    score: np.ndarray,
+    M_inv: np.ndarray,
+    img_w: int,
+    img_h: int,
+) -> tuple[list[dict[str, Any]], dict[str, Any], list[str]]:
+    geometry: list[dict[str, Any]] = []
+    features: dict[str, Any] = {}
+    warnings: list[str] = []
+
+    for name, pts in named.items():
+        if len(pts) < 3:
+            warnings.append(f"{name} crease not clearly visible")
+            continue
+        feat = _features_for(name, pts, score)
+        # Soft floors — real phone photos are often lower-contrast than synthetic tests.
+        if feat["depth_score"] < 2.8 or feat["length"] < 0.08:
+            warnings.append(f"{name} too faint to lock")
+            continue
+        full_pts = _roi_to_full(_downsample(pts, max_pts=14), M_inv, img_w, img_h)
+        if len(full_pts) < 2:
+            continue
+        geometry.append({"name": name, "points": full_pts})
+        features[name] = feat
+    return geometry, features, warnings
+
+
 def extract_creases_from_image(
     image_base64: str,
     landmarks: list[list[float]] | None,
@@ -532,61 +633,14 @@ def extract_creases_from_image(
     gray, M, M_inv = warped
     score = _enhance_creases(gray)
 
-    corridors = _adaptive_corridors(landmarks, M, img_w, img_h)
-    heart_c = corridors["heart"]
-    head_c = corridors["head"]
-    life_c = corridors["life"]
-
-    # Corridors in normalized ROI space (index→pinky as TL→TR after warp).
-    heart_pts = _trace_horizontal_corridor(
-        score,
-        y_lo=heart_c["y_lo"],
-        y_hi=heart_c["y_hi"],
-        x_start=heart_c["x_start"],
-        x_end=heart_c["x_end"],
-    )
-    head_pts = _trace_horizontal_corridor(
-        score,
-        y_lo=head_c["y_lo"],
-        y_hi=head_c["y_hi"],
-        x_start=head_c["x_start"],
-        x_end=head_c["x_end"],
-    )
-    life_pts = _trace_arc_corridor(
-        score,
-        x_lo=life_c["x_lo"],
-        x_hi=life_c["x_hi"],
-        y_start=life_c["y_start"],
-        y_end=life_c["y_end"],
-    )
-
-    heart_pts = _downsample(heart_pts)
-    head_pts = _downsample(head_pts)
-    life_pts = _downsample(life_pts)
-
-    named = {
-        "heart_line": heart_pts,
-        "head_line": head_pts,
-        "life_line": life_pts,
-    }
-
     geometry: list[dict[str, Any]] = []
     features: dict[str, Any] = {}
     warnings: list[str] = []
-
-    for name, pts in named.items():
-        if len(pts) < 3:
-            warnings.append(f"{name} crease not clearly visible")
-            continue
-        feat = _features_for(name, pts, score)
-        if feat["depth_score"] < 5.0 or feat["length"] < 0.12:
-            warnings.append(f"{name} too faint to lock")
-            continue
-        full_pts = _roi_to_full(_downsample(pts, max_pts=14), M_inv, img_w, img_h)
-        if len(full_pts) < 2:
-            continue
-        geometry.append({"name": name, "points": full_pts})
-        features[name] = feat
+    for corridors in _corridor_candidates(landmarks, M, img_w, img_h):
+        named = _trace_named_creases(score, corridors)
+        geometry, features, warnings = _lock_geometry(named, score, M_inv, img_w, img_h)
+        if len(geometry) >= 2:
+            break
 
     if len(geometry) < 2:
         result.quality_warnings = warnings or ["Major palm creases not detected — retake with open palm and even light"]

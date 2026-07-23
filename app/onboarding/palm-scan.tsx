@@ -28,6 +28,7 @@ import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { triggerLightTap } from '@/hooks/useHapticTap';
 import type { PalmScanHand } from '@/store/sessionStore';
 import { useSessionStore } from '@/store/sessionStore';
+import type { PalmAnalysisDto } from '@/types/palmAnalysis';
 import { isPalmHandLockedByGender, palmHandForGender, palmHandGuidanceLabel } from '@/utils/palmHand';
 import { pickPalmImage } from '@/utils/pickPalmImage';
 import { AnalyticsEvent, track } from '@/services/analytics';
@@ -99,7 +100,8 @@ export default function PalmScanScreen() {
 
   const confirmReview = (
     landmarks: Array<[number, number]>,
-    source: 'mediapipe' | 'roi_estimate',
+    source: 'mediapipe',
+    palm: PalmAnalysisDto,
   ) => {
     if (!previewBase64 || confirming) return;
     setConfirming(true);
@@ -108,6 +110,7 @@ export default function PalmScanScreen() {
     setPalmScanHand(hand);
     setPalmCaptureBase64(previewBase64);
     setPalmCaptureLandmarks(landmarks, source);
+    useSessionStore.getState().setPalmAnalysis(palm);
     deferRouterPush({
       pathname: '/onboarding/analysis',
       params: { seed },

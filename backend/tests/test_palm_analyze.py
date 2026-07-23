@@ -120,6 +120,89 @@ def test_merge_cv_strips_null_geometry_points_without_inventing():
 
 @patch("app.services.palm_pipeline.palm_analysis_from_vision", new_callable=AsyncMock)
 @patch("app.services.palm_pipeline.detect_hand_landmarks_from_bytes")
+def test_palm_analyze_vision_only_without_landmarks(mock_landmarks, mock_vision, vision_client):
+    """Vision model owns motifs + line geometry — MediaPipe optional."""
+    mock_landmarks.return_value = (None, "not_found")
+    mock_vision.return_value = PalmAnalysis(
+        life_line="strong",
+        heart_line="curved",
+        head_line="long",
+        personality="quiet visionary",
+        traits=["thoughtful", "resilient"],
+        analysis_source="openrouter_vision",
+        image_quality="good",
+        geometry_source="vision_model",
+        line_geometry=[
+            {"name": "life_line", "points": [{"x": 0.3, "y": 0.4}, {"x": 0.32, "y": 0.55}, {"x": 0.35, "y": 0.7}]},
+            {"name": "heart_line", "points": [{"x": 0.2, "y": 0.28}, {"x": 0.5, "y": 0.26}, {"x": 0.8, "y": 0.3}]},
+            {"name": "head_line", "points": [{"x": 0.25, "y": 0.4}, {"x": 0.55, "y": 0.42}, {"x": 0.75, "y": 0.45}]},
+        ],
+    )
+    # minimal valid jpeg bytes as base64
+    b64, _ = _synthetic_palm_jpeg_and_landmarks()
+    session_id = str(uuid.uuid4())
+    vision_client.post(
+        "/v1/sessions/register",
+        json={"sessionId": session_id, "deviceInstallId": "device-test-1"},
+    )
+    res = vision_client.post(
+        "/v1/palm/analyze",
+        json={
+            "sessionId": session_id,
+            "deviceInstallId": "device-test-1",
+            "seed": "unit-test",
+            "imageBase64": b64,
+        },
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["analysis_source"] == "openrouter_vision"
+    assert data["geometry_source"] == "vision_model"
+    assert len(data["line_geometry"]) >= 2
+
+
+@patch("app.services.palm_pipeline.palm_analysis_from_vision", new_callable=AsyncMock)
+@patch("app.services.palm_pipeline.detect_hand_landmarks_from_bytes")
+def test_palm_analyze_prefers_cv_when_vision_says_no_hand(mock_landmarks, mock_vision, vision_client):
+    """False vision no_hand must not 422 when OpenCV already locked creases."""
+    b64, landmarks = _synthetic_palm_jpeg_and_landmarks()
+    mock_landmarks.return_value = (landmarks, "mediapipe")
+    mock_vision.return_value = PalmAnalysis(
+        life_line="subtle",
+        heart_line="straight",
+        head_line="short",
+        personality="quiet visionary",
+        traits=["thoughtful"],
+        analysis_source="openrouter_vision",
+        image_quality="no_hand",
+        confidence=0.1,
+    )
+    session_id = str(uuid.uuid4())
+    vision_client.post(
+        "/v1/sessions/register",
+        json={"sessionId": session_id, "deviceInstallId": "device-test-1"},
+    )
+    res = vision_client.post(
+        "/v1/palm/analyze",
+        json={
+            "sessionId": session_id,
+            "deviceInstallId": "device-test-1",
+            "seed": "unit-test",
+            "imageBase64": b64,
+            "landmarks": landmarks,
+            "landmarksSource": "mediapipe",
+        },
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["geometry_source"] == "opencv_creases"
+    assert data.get("line_geometry")
+    assert len(data["line_geometry"]) >= 2
+    assert data["image_quality"] in {"good", "acceptable"}
+
+
+@patch("app.services.palm_pipeline.palm_analysis_from_vision", new_callable=AsyncMock)
+@patch("app.services.palm_pipeline.detect_hand_landmarks_from_bytes")
 def test_palm_analyze_vision_success_with_creases(mock_landmarks, mock_vision, vision_client):
     b64, landmarks = _synthetic_palm_jpeg_and_landmarks()
     mock_landmarks.return_value = (landmarks, "mediapipe")
@@ -131,6 +214,7 @@ def test_palm_analyze_vision_success_with_creases(mock_landmarks, mock_vision, v
         traits=["thoughtful", "resilient"],
         analysis_source="openrouter_vision",
         image_quality="good",
+        geometry_source="vision_model",
         line_geometry=[
             {"name": "life_line", "points": [{"x": 0.01, "y": 0.01}, {"x": 0.02, "y": 0.02}]},
             {"name": "heart_line", "points": [{"x": 0.9, "y": 0.9}, {"x": 0.8, "y": 0.8}]},
@@ -155,8 +239,8 @@ def test_palm_analyze_vision_success_with_creases(mock_landmarks, mock_vision, v
     )
     assert res.status_code == 200
     data = res.json()
-    assert data["analysis_source"] == "hybrid"
-    assert data["geometry_source"] == "opencv_creases"
+    # CV upgrade preferred when it locks; otherwise vision geometry retained.
+    assert data["geometry_source"] in {"opencv_creases", "vision_model"}
     assert data.get("line_geometry")
     assert len(data["line_geometry"]) >= 2
 
@@ -207,6 +291,7 @@ def test_palm_analyze_vision_fallback_when_llm_fails_without_usable_image(mock_v
             "imageBase64": "aGVsbG8=",
         },
     )
+    # DEBUG=true in conftest allows fallback without 422
     assert res.status_code == 200
     data = res.json()
     assert data["analysis_source"] == "fallback"

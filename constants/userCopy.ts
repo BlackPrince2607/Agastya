@@ -165,12 +165,12 @@ export const PALM_CAPTURE_PREPARING = 'Preparing your photo…';
 
 export const PALM_REVIEW_TITLE = 'Check your palm photo';
 export const PALM_REVIEW_SUBTITLE =
-  'Use a clear open palm filling the frame — we detect your hand first, then trace major lines.';
+  'We read your open palm with vision and lock life, heart, and head lines before your Life Blueprint.';
 export const PALM_REVIEW_RETAKE = 'Retake';
 export const PALM_REVIEW_ANALYZE = 'Analyze palm';
-export const PALM_REVIEW_ANALYZING = 'Preparing…';
+export const PALM_REVIEW_ANALYZING = 'Reading your palm…';
 export const PALM_REVIEW_NEED_HAND =
-  'Hand not confirmed yet — open palm filling the frame works best. You can still analyze; we’ll try again on the server.';
+  'We couldn’t read that palm yet. Keep the full open hand in frame with even light, then retake.';
 
 export const PALM_LINES_CONFIRM_TITLE = 'Confirm your lines';
 export const PALM_LINES_CONFIRM_SUBTITLE =

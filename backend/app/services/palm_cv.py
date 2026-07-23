@@ -146,6 +146,11 @@ def apply_crease_result(
     if geom:
         data["line_geometry"] = geom
         data["geometry_source"] = crease.geometry_source or "opencv_creases"
+        # CV lock means the palm was usable — don't keep a false LLM "poor"/"no_hand".
+        if crease.image_quality in {"good", "acceptable"}:
+            data["image_quality"] = crease.image_quality
+        elif data.get("image_quality") in {None, "poor", "no_hand"}:
+            data["image_quality"] = "acceptable"
         if prefer_cv_motifs:
             data["life_line"] = crease.life_line
             data["heart_line"] = crease.heart_line

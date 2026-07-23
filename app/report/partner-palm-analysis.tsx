@@ -50,7 +50,9 @@ export default function PartnerPalmAnalysisScreen() {
     let cancelled = false;
 
     setPct(0);
+    setSampleBadge(false);
 
+    // Fixed 0 → 100 over ANALYSIS_MIN_DURATION_MS; never cut short by a fast API.
     const progressTick = setInterval(() => {
       const elapsed = Date.now() - started;
       const next = analysisProgressPct(elapsed, runMs);
@@ -66,7 +68,7 @@ export default function PartnerPalmAnalysisScreen() {
 
       let needsRetake = false;
 
-      const pipeline = async () => {
+      const analyzeOnly = async () => {
         await bootstrapIdentity();
         const snap = useSessionStore.getState();
         if (!snap.sessionId || !snap.deviceInstallId) {
@@ -77,6 +79,19 @@ export default function PartnerPalmAnalysisScreen() {
         const capture = captureRaw ? trimBase64Payload(captureRaw) : null;
         const landmarksSnapshot = snap.partnerPalmCaptureLandmarks;
         const landmarksSourceSnapshot = snap.partnerPalmLandmarksSource;
+
+        // Review already locked a live reading — reuse and skip re-analyze.
+        const prelocked = snap.partnerPalmAnalysis;
+        if (prelocked && !palmNeedsRetake(prelocked) && isLivePalmAnalysis(prelocked)) {
+          setPartnerPalmAnalysis(prelocked);
+          useSessionStore.setState({
+            partnerPalmCaptureBase64: null,
+            partnerPalmCaptureLandmarks: null,
+            partnerPalmLandmarksSource: null,
+          });
+          return;
+        }
+
         let palm: PalmAnalysisDto = FALLBACK_PALM;
         try {
           palm = await withApiRetry(() =>
@@ -105,7 +120,9 @@ export default function PartnerPalmAnalysisScreen() {
               needsRetake = true;
               return;
             }
-            throw err;
+            // Live API configured — never invent a partner palm for match scoring.
+            needsRetake = true;
+            return;
           }
           palm = FALLBACK_PALM;
           setSampleBadge(true);
@@ -120,32 +137,36 @@ export default function PartnerPalmAnalysisScreen() {
       };
 
       try {
-        await Promise.all([waitForPresentation(), pipeline()]);
+        await Promise.all([waitForPresentation(), analyzeOnly()]);
       } catch {
         if (cancelled) return;
-        setSampleBadge(true);
-        setPartnerPalmAnalysis(FALLBACK_PALM);
-        useSessionStore.setState({
-          partnerPalmCaptureBase64: null,
-          partnerPalmCaptureLandmarks: null,
-          partnerPalmLandmarksSource: null,
-        });
-      } finally {
-        if (cancelled) return;
-        clearInterval(progressTick);
-        setPct(100);
-        await delay(ANALYSIS_SETTLE_MS);
-        if (cancelled) return;
-        if (needsRetake) {
-          Alert.alert(
-            'Try again',
-            "We couldn't read that palm clearly. Choose a brighter, open-palm photo.",
-            [{ text: 'OK', onPress: () => deferRouterReplace('/report/partner-palm-scan' as never) }],
-          );
-          return;
+        if (isApiConfigured()) {
+          needsRetake = true;
+        } else {
+          setSampleBadge(true);
+          setPartnerPalmAnalysis(FALLBACK_PALM);
+          useSessionStore.setState({
+            partnerPalmCaptureBase64: null,
+            partnerPalmCaptureLandmarks: null,
+            partnerPalmLandmarksSource: null,
+          });
         }
-        deferRouterReplace('/report/compatibility' as never);
       }
+
+      if (cancelled) return;
+      clearInterval(progressTick);
+      setPct(100);
+      await delay(ANALYSIS_SETTLE_MS);
+      if (cancelled) return;
+      if (needsRetake) {
+        Alert.alert(
+          'Try again',
+          "We couldn't read that palm clearly. Choose a brighter, open-palm photo.",
+          [{ text: 'OK', onPress: () => deferRouterReplace('/report/partner-palm-scan' as never) }],
+        );
+        return;
+      }
+      deferRouterReplace('/report/compatibility' as never);
     })();
 
     return () => {
@@ -169,7 +190,7 @@ export default function PartnerPalmAnalysisScreen() {
               <Text className="font-body text-[12px] text-amber-200/90">{SAMPLE_READING_BADGE}</Text>
             ) : null}
             <View className="relative items-center justify-center">
-              <AnalyzingSeal diameter={220} hideCenterGlyph />
+              <AnalyzingSeal diameter={220} hideCenterGlyph progress={pct} />
               <View className="pointer-events-none absolute items-center justify-center gap-1">
                 <Text className="font-label text-[28px] font-semibold text-on-surface/95">{pct}%</Text>
                 <Text className="font-label text-[10px] uppercase tracking-[0.35em] text-on-surface-variant">

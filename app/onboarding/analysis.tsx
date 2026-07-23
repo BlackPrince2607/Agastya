@@ -32,7 +32,7 @@ import { AnalyticsEvent, track } from '@/services/analytics';
 import { buildSimulatedReading } from '@/services/simulatedReading';
 import { isApiConfigured } from '@/services/env';
 import type { PalmAnalysisDto } from '@/types/palmAnalysis';
-import { isLivePalmAnalysis, palmNeedsRetake } from '@/types/palmAnalysis';
+import { hasPalmLineOverlay, isLivePalmAnalysis, palmNeedsRetake } from '@/types/palmAnalysis';
 import { useSessionStore } from '@/store/sessionStore';
 import {
   ANALYSIS_PHRASE_MS,
@@ -147,6 +147,12 @@ export default function AnalysisScreen() {
         );
         setPreviewReading(normalizeFullReport(previewPayload));
       } catch {
+        if (isApiConfigured()) {
+          // Live backend failed — don't invent a frontend Life Blueprint.
+          goRetake(PALM_RETAKE_DEFAULT);
+          setConfirmBusy(false);
+          return;
+        }
         setPreviewReading(buildSimulatedReading(resolvedSeed, snap.focusTopics, palm));
       }
 
@@ -160,7 +166,7 @@ export default function AnalysisScreen() {
         params: { seed: resolvedSeed },
       });
     },
-    [setPreviewReading],
+    [setPreviewReading, goRetake],
   );
 
   const runIdRef = useRef(0);
@@ -175,6 +181,9 @@ export default function AnalysisScreen() {
     setPct(0);
     setSyncPulse(0);
     setPalmResult(null);
+    setApiPalm(null);
+    apiPalmRef.current = null;
+    setSampleBadge(false);
     setFlowPhase('analyzing');
     setConfirmBusy(false);
 
@@ -187,6 +196,7 @@ export default function AnalysisScreen() {
 
     let cancelled = false;
 
+    // Fixed 0 → 100 over ANALYSIS_MIN_DURATION_MS; never restart mid-run.
     const progressTick = setInterval(() => {
       const elapsed = Date.now() - started;
       const next = analysisProgressPct(elapsed, runMs);
@@ -201,8 +211,10 @@ export default function AnalysisScreen() {
       let retakeReason = PALM_RETAKE_DEFAULT;
       let resolvedPalm: PalmAnalysisDto = FALLBACK_PALM;
       let awaitConfirm = false;
+      let capture: string | null = null;
 
-      const pipeline = async () => {
+      /** API work only — must not navigate or finish the report (that would cut the 5.5s bar short). */
+      const analyzeOnly = async () => {
         await bootstrapIdentity();
         await syncProfileRemote();
         const snap = useSessionStore.getState();
@@ -210,12 +222,23 @@ export default function AnalysisScreen() {
           throw new Error('missing_session');
         }
 
-        const capture = captureSnapshot ? trimBase64Payload(captureSnapshot) : null;
+        capture = captureSnapshot ? trimBase64Payload(captureSnapshot) : null;
         if (isApiConfigured() && !capture) {
           needsRetake = true;
           retakeReason = 'The palm photo was lost before upload. Please scan again.';
           return;
         }
+
+        // Review screen already locked lines (vision or CV) — reuse, skip re-analyze / re-confirm.
+        const prelocked = snap.palmAnalysis;
+        if (prelocked && !palmNeedsRetake(prelocked) && isLivePalmAnalysis(prelocked)) {
+          resolvedPalm = prelocked;
+          setApiPalm(prelocked);
+          setPalmAnalysis(prelocked);
+          awaitConfirm = false;
+          return;
+        }
+
         let palm: PalmAnalysisDto = FALLBACK_PALM;
         try {
           palm = await withApiRetry(() =>
@@ -249,7 +272,10 @@ export default function AnalysisScreen() {
               retakeReason = msg;
               return;
             }
-            throw err;
+            // Live API is configured — never invent a frontend palm reading.
+            needsRetake = true;
+            retakeReason = PALM_RETAKE_DEFAULT;
+            return;
           }
           palm = FALLBACK_PALM;
           setSampleBadge(true);
@@ -259,19 +285,10 @@ export default function AnalysisScreen() {
         setApiPalm(palm);
         setPalmAnalysis(palm);
 
-        // Live crease scan → user confirms overlay before Blueprint generation.
-        if (
-          capture &&
-          palm.geometry_source === 'opencv_creases' &&
-          palm.line_geometry &&
-          palm.line_geometry.length >= 2
-        ) {
+        // Only re-confirm if review didn't already show lines.
+        if (capture && hasPalmLineOverlay(palm)) {
           awaitConfirm = true;
-          return;
         }
-
-        // Offline / sample path: no confirm overlay — generate immediately.
-        await finishReport(palm, resolvedSeed);
       };
 
       const waitForPresentation = async () => {
@@ -280,9 +297,19 @@ export default function AnalysisScreen() {
       };
 
       try {
-        await Promise.all([waitForPresentation(), pipeline()]);
+        await Promise.all([waitForPresentation(), analyzeOnly()]);
       } catch {
         if (cancelled || runId !== runIdRef.current) return;
+        clearInterval(progressTick);
+        setPct(100);
+        setSyncPulse(1);
+        await delay(ANALYSIS_SETTLE_MS);
+        if (cancelled || runId !== runIdRef.current) return;
+        // Live API configured → retake; offline-only may use a sample reading.
+        if (isApiConfigured()) {
+          goRetake(PALM_RETAKE_DEFAULT);
+          return;
+        }
         const snap = useSessionStore.getState();
         setSampleBadge(true);
         resolvedPalm = FALLBACK_PALM;
@@ -291,34 +318,33 @@ export default function AnalysisScreen() {
         setPreviewReading(buildSimulatedReading(resolvedSeed, snap.focusTopics, FALLBACK_PALM));
         track(AnalyticsEvent.REPORT_GENERATED, { mode: 'preview', fallback: true });
         useSessionStore.getState().setSkipCloudRestore(false);
-        clearInterval(progressTick);
         setPalmResult(resolvedPalm);
-        setPct(100);
-        setSyncPulse(1);
-        await delay(ANALYSIS_SETTLE_MS);
-        if (cancelled || runId !== runIdRef.current) return;
         useSessionStore.getState().setPalmCaptureLandmarks(null, null);
         deferRouterReplace({
           pathname: '/onboarding/report-preview',
           params: { seed: resolvedSeed },
         });
         return;
-      } finally {
-        if (cancelled || runId !== runIdRef.current) return;
-        clearInterval(progressTick);
-        setPalmResult(resolvedPalm);
-        setPct(100);
-        setSyncPulse(1);
       }
 
       if (cancelled || runId !== runIdRef.current) return;
+      clearInterval(progressTick);
+      setPalmResult(resolvedPalm);
+      setPct(100);
+      setSyncPulse(1);
+      await delay(ANALYSIS_SETTLE_MS);
+      if (cancelled || runId !== runIdRef.current) return;
+
       if (needsRetake) {
         goRetake(retakeReason);
         return;
       }
       if (awaitConfirm) {
         setFlowPhase('confirm');
+        return;
       }
+      // Only after the full 0→100 window — generate preview / navigate.
+      await finishReport(resolvedPalm, resolvedSeed);
     })();
 
     return () => {
@@ -337,9 +363,7 @@ export default function AnalysisScreen() {
 
   const checklist: ChecklistItem[] = useMemo(() => {
     const p = palmResult;
-    const lineDone = Boolean(
-      p?.geometry_source === 'opencv_creases' && p?.life_line && p?.heart_line && p?.head_line,
-    );
+    const lineDone = Boolean(hasPalmLineOverlay(p) && p?.life_line && p?.heart_line && p?.head_line);
     const mountsDone = Boolean(p?.mounts && Object.keys(p.mounts).length > 0);
     const shapeDone = Boolean(p?.hand_shape);
     const fingersDone = Boolean(p?.line_details || p?.fate_line);
@@ -443,7 +467,7 @@ export default function AnalysisScreen() {
               </Text>
             ) : null}
             <View className="relative items-center justify-center">
-              <AnalyzingSeal diameter={244} hideCenterGlyph />
+              <AnalyzingSeal diameter={244} hideCenterGlyph progress={pct} />
               <View className="pointer-events-none absolute items-center justify-center gap-1">
                 <Text className="font-label text-[28px] font-semibold text-on-surface/95">{pct}%</Text>
                 <Text className="font-label text-[10px] uppercase tracking-[0.35em] text-on-surface-variant">

@@ -24,6 +24,7 @@ import { LoadingBlock } from '@/components/feedback';
 import { triggerLightTap } from '@/hooks/useHapticTap';
 import type { PalmScanHand } from '@/store/sessionStore';
 import { useSessionStore } from '@/store/sessionStore';
+import type { PalmAnalysisDto } from '@/types/palmAnalysis';
 import { pickPalmImage } from '@/utils/pickPalmImage';
 import { deferRouterPush } from '@/utils/routerDefer';
 
@@ -68,7 +69,8 @@ export default function PartnerPalmScanScreen() {
 
   const confirmReview = (
     landmarks: Array<[number, number]>,
-    source: 'mediapipe' | 'roi_estimate',
+    source: 'mediapipe',
+    palm: PalmAnalysisDto,
   ) => {
     if (!previewBase64 || confirming) return;
     setConfirming(true);
@@ -76,6 +78,7 @@ export default function PartnerPalmScanScreen() {
     setPartnerPalmScanHand(hand);
     setPartnerPalmCaptureBase64(previewBase64);
     setPartnerPalmCaptureLandmarks(landmarks, source);
+    useSessionStore.getState().setPartnerPalmAnalysis(palm);
     deferRouterPush({
       pathname: '/report/partner-palm-analysis' as never,
       params: { seed },

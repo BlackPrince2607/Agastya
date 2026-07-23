@@ -82,6 +82,7 @@ export function isPalmRetakeError(message: string): boolean {
   return (
     d.includes('retake') ||
     d.includes('no clear palm') ||
+    d.includes('creases not detected') ||
     d.includes('no_hand') ||
     d.includes('palm image required')
   );

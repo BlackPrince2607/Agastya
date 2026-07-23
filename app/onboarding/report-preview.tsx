@@ -28,6 +28,7 @@ import type { FocusTopic } from '@/store/sessionStore';
 import { useSessionStore } from '@/store/sessionStore';
 import { enterMainApp } from '@/utils/navigationFlow';
 import { headlineNeedsPalmFix } from '@/utils/palmInsights';
+import { hasPalmLineOverlay } from '@/types/palmAnalysis';
 import { hasPremiumAccess } from '@/utils/premiumAccess';
 
 const FOCUS_LABEL: Record<FocusTopic, string> = {
@@ -98,9 +99,7 @@ export default function ReportPreviewScreen() {
   const previewSections = reading.sections.slice(0, 2);
   const motifChips = palmAnalysis ? palmReadingChips(palmAnalysis) : null;
   const insets = useSafeAreaInsets();
-  const hasScannedLines = Boolean(
-    palmAnalysis?.geometry_source === 'opencv_creases' && palmAnalysis?.line_geometry?.length,
-  );
+  const hasScannedLines = hasPalmLineOverlay(palmAnalysis);
 
   return (
     <CosmicScreen variant="stitch">
@@ -211,10 +210,12 @@ export default function ReportPreviewScreen() {
                 </View>
               </View>
             </GlassCard>
-          ) : palmAnalysis && palmAnalysis.geometry_source === 'unavailable' ? (
+          ) : palmAnalysis &&
+            palmAnalysis.geometry_source === 'unavailable' &&
+            !palmAnalysis.life_line ? (
             <GlassCard className="border-amber-200/20 p-4">
               <Text className="font-body text-[14px] leading-6 text-on-surface/85">
-                We couldn&apos;t lock your palm creases from this photo. Retake with an open palm and even light for a personalized line map.
+                We couldn&apos;t read your palm creases from this photo. Retake with an open palm and even light for a personalized line map.
               </Text>
               <View className="mt-3">
                 <CosmicButton

@@ -10,6 +10,7 @@ import { CosmicButton } from '@/components/primitives';
 import { PAGE_PADDING } from '@/constants/layout';
 import type { PalmScanHand } from '@/store/sessionStore';
 import { useSessionStore } from '@/store/sessionStore';
+import type { PalmAnalysisDto } from '@/types/palmAnalysis';
 import { pickPalmImage } from '@/utils/pickPalmImage';
 import { deferRouterPush } from '@/utils/routerDefer';
 
@@ -45,7 +46,8 @@ export default function PartnerPalmScanWebScreen() {
 
   const confirmReview = (
     landmarks: Array<[number, number]>,
-    source: 'mediapipe' | 'roi_estimate',
+    source: 'mediapipe',
+    palm: PalmAnalysisDto,
   ) => {
     if (!previewBase64 || confirming) return;
     setConfirming(true);
@@ -53,6 +55,7 @@ export default function PartnerPalmScanWebScreen() {
     setPartnerPalmScanHand(hand);
     setPartnerPalmCaptureBase64(previewBase64);
     setPartnerPalmCaptureLandmarks(landmarks, source);
+    useSessionStore.getState().setPartnerPalmAnalysis(palm);
     deferRouterPush({
       pathname: '/report/partner-palm-analysis' as never,
       params: { seed },

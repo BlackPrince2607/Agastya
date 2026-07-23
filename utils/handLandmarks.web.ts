@@ -1,15 +1,17 @@
 /**
  * Web hand landmarks via MediaPipe Tasks Vision (static palm photo).
+ * Falls back to backend MediaPipe. Never invents ROI landmarks.
  */
 import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
 
+import { detectPalmLandmarks } from '@/services/agastyaApi';
+import { isApiConfigured } from '@/services/env';
 import type { HandLandmark } from '@/utils/palmLandmarks';
-import { estimateLandmarksFromRoi } from '@/utils/palmLandmarks';
 
-export type LandmarkSource = 'mediapipe' | 'roi_estimate';
+export type LandmarkSource = 'mediapipe' | 'not_found';
 
 export type HandLandmarkResult = {
-  landmarks: HandLandmark[];
+  landmarks: HandLandmark[] | null;
   source: LandmarkSource;
 };
 
@@ -28,9 +30,9 @@ async function getHandLandmarker(): Promise<HandLandmarker | null> {
         baseOptions: { modelAssetPath: MODEL_URL },
         runningMode: 'IMAGE',
         numHands: 2,
-        minHandDetectionConfidence: 0.2,
-        minHandPresenceConfidence: 0.2,
-        minTrackingConfidence: 0.2,
+        minHandDetectionConfidence: 0.12,
+        minHandPresenceConfidence: 0.12,
+        minTrackingConfidence: 0.12,
       });
     } catch (err) {
       if (__DEV__) console.warn('[Agastya palm] MediaPipe init failed', err);
@@ -76,7 +78,6 @@ function pickHandIndex(
 
 type CanvasVariant = {
   canvas: HTMLCanvasElement;
-  /** Map normalized crop coords → full image coords; then optional mirror undo. */
   remap: (pts: HandLandmark[]) => HandLandmark[];
 };
 
@@ -114,6 +115,45 @@ function drawImageToCanvas(
   return canvas;
 }
 
+function letterbox(
+  image: HTMLImageElement,
+  padRatio: number,
+  mirror = false,
+): CanvasVariant {
+  const fullW = image.naturalWidth || image.width;
+  const fullH = image.naturalHeight || image.height;
+  const padX = Math.floor(fullW * padRatio);
+  const padY = Math.floor(fullH * padRatio);
+  const canvasW = fullW + padX * 2;
+  const canvasH = fullH + padY * 2;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvasW;
+  canvas.height = canvasH;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.fillStyle = '#303030';
+    ctx.fillRect(0, 0, canvasW, canvasH);
+    if (mirror) {
+      ctx.translate(canvasW, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(image, padX, padY, fullW, fullH);
+    } else {
+      ctx.drawImage(image, padX, padY, fullW, fullH);
+    }
+  }
+  const unmirror = (pts: HandLandmark[]) => pts.map(([x, y]) => [1 - x, y] as HandLandmark);
+  const remapPad = (pts: HandLandmark[]): HandLandmark[] =>
+    pts.map(([x, y]) => {
+      const nx = (x * canvasW - padX) / fullW;
+      const ny = (y * canvasH - padY) / fullH;
+      return [Math.max(0, Math.min(1, nx)), Math.max(0, Math.min(1, ny))] as HandLandmark;
+    });
+  return {
+    canvas,
+    remap: mirror ? (pts) => remapPad(unmirror(pts)) : remapPad,
+  };
+}
+
 function buildVariants(image: HTMLImageElement): CanvasVariant[] {
   const fullW = image.naturalWidth || image.width;
   const fullH = image.naturalHeight || image.height;
@@ -121,6 +161,11 @@ function buildVariants(image: HTMLImageElement): CanvasVariant[] {
   const unmirror = (pts: HandLandmark[]) => pts.map(([x, y]) => [1 - x, y] as HandLandmark);
 
   const variants: CanvasVariant[] = [
+    // Letterbox first — fill-frame palms are the most common miss.
+    letterbox(image, 0.22),
+    letterbox(image, 0.22, true),
+    letterbox(image, 0.35),
+    letterbox(image, 0.35, true),
     { canvas: drawImageToCanvas(image, fullW, fullH), remap: identity },
     { canvas: drawImageToCanvas(image, fullW, fullH, { mirror: true }), remap: unmirror },
     {
@@ -133,67 +178,101 @@ function buildVariants(image: HTMLImageElement): CanvasVariant[] {
     },
   ];
 
-  const mx = Math.floor(fullW * 0.12);
-  const my = Math.floor(fullH * 0.1);
-  const cropW = fullW - mx * 2;
-  const cropH = fullH - my * 2;
-  if (cropW >= 64 && cropH >= 64) {
+  const cropMargins = [
+    { mx: 0.12, my: 0.1 },
+    { mx: 0.18, my: 0.14 },
+  ];
+  for (const { mx: mxRatio, my: myRatio } of cropMargins) {
+    const mx = Math.floor(fullW * mxRatio);
+    const my = Math.floor(fullH * myRatio);
+    const cropW = fullW - mx * 2;
+    const cropH = fullH - my * 2;
+    if (cropW < 64 || cropH < 64) continue;
     const cropCanvas = document.createElement('canvas');
     cropCanvas.width = cropW;
     cropCanvas.height = cropH;
     const ctx = cropCanvas.getContext('2d');
-    if (ctx) {
-      ctx.drawImage(image, mx, my, cropW, cropH, 0, 0, cropW, cropH);
-      const remapCrop = (pts: HandLandmark[]): HandLandmark[] =>
-        pts.map(
-          ([x, y]) =>
-            [(x * cropW + mx) / fullW, (y * cropH + my) / fullH] as HandLandmark,
-        );
-      variants.push({ canvas: cropCanvas, remap: remapCrop });
-      variants.push({
-        canvas: drawImageToCanvas(cropCanvas, cropW, cropH, { mirror: true }),
-        remap: (pts) => remapCrop(unmirror(pts)),
-      });
-    }
+    if (!ctx) continue;
+    ctx.drawImage(image, mx, my, cropW, cropH, 0, 0, cropW, cropH);
+    const remapCrop = (pts: HandLandmark[]): HandLandmark[] =>
+      pts.map(
+        ([x, y]) =>
+          [(x * cropW + mx) / fullW, (y * cropH + my) / fullH] as HandLandmark,
+      );
+    variants.push({ canvas: cropCanvas, remap: remapCrop });
+    variants.push({
+      canvas: drawImageToCanvas(cropCanvas, cropW, cropH, { mirror: true }),
+      remap: (pts) => remapCrop(unmirror(pts)),
+    });
   }
 
   return variants;
+}
+
+async function detectViaApi(
+  base64: string,
+  hand: 'left' | 'right',
+): Promise<HandLandmarkResult | null> {
+  if (!isApiConfigured()) return null;
+  try {
+    const api = await detectPalmLandmarks({
+      imageBase64: base64,
+      dominantHand: hand,
+    });
+    if (api.landmarks && api.landmarks.length >= 21 && api.source === 'mediapipe') {
+      return { landmarks: api.landmarks.slice(0, 21), source: 'mediapipe' };
+    }
+  } catch (err) {
+    if (__DEV__) console.warn('[Agastya palm] API landmark fallback failed', err);
+  }
+  return null;
 }
 
 export async function detectHandLandmarksFromBase64(
   base64: string,
   hand: 'left' | 'right' = 'right',
 ): Promise<HandLandmarkResult> {
-  const fallback = (): HandLandmarkResult => ({
-    landmarks: estimateLandmarksFromRoi(0.5, 0.52, 0.24, hand),
-    source: 'roi_estimate',
-  });
+  const handOrder: Array<'left' | 'right'> = [hand, hand === 'right' ? 'left' : 'right'];
 
   try {
     const landmarker = await getHandLandmarker();
-    if (!landmarker) return fallback();
+    if (landmarker) {
+      const image = await base64ToImage(base64);
+      const variants = buildVariants(image);
 
-    const image = await base64ToImage(base64);
-    const variants = buildVariants(image);
+      for (const variant of variants) {
+        const result = landmarker.detect(variant.canvas);
+        if (!result.landmarks?.length) continue;
 
-    for (const variant of variants) {
-      const result = landmarker.detect(variant.canvas);
-      if (!result.landmarks?.length) continue;
+        for (const tryHand of handOrder) {
+          const handIdx = pickHandIndex(result, tryHand);
+          const detected = mediapipeToLandmarks(result.landmarks[handIdx]);
+          if (!detected) continue;
 
-      const handIdx = pickHandIndex(result, hand);
-      const detected = mediapipeToLandmarks(result.landmarks[handIdx]);
-      if (!detected) continue;
-
-      const landmarks = variant.remap(detected);
-      if (__DEV__) {
-        console.log('[Agastya palm] MediaPipe landmarks detected', landmarks.length, 'hand=', hand);
+          const landmarks = variant.remap(detected);
+          if (__DEV__) {
+            console.log('[Agastya palm] MediaPipe landmarks detected', landmarks.length, tryHand);
+          }
+          return { landmarks, source: 'mediapipe' };
+        }
       }
-      return { landmarks, source: 'mediapipe' };
     }
 
-    return fallback();
+    for (const tryHand of handOrder) {
+      const api = await detectViaApi(base64, tryHand);
+      if (api) {
+        if (__DEV__) console.log('[Agastya palm] API MediaPipe landmarks (web fallback)', tryHand);
+        return api;
+      }
+    }
+
+    return { landmarks: null, source: 'not_found' };
   } catch (err) {
-    if (__DEV__) console.warn('[Agastya palm] MediaPipe detect failed, using ROI estimate', err);
-    return fallback();
+    if (__DEV__) console.warn('[Agastya palm] MediaPipe detect failed, trying API', err);
+    for (const tryHand of handOrder) {
+      const api = await detectViaApi(base64, tryHand);
+      if (api) return api;
+    }
+    return { landmarks: null, source: 'not_found' };
   }
 }
