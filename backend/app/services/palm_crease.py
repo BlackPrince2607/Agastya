@@ -143,8 +143,10 @@ def _palm_src_quad(
     return quad
 
 
-def _warp_palm(bgr: np.ndarray, landmarks: list[list[float]]) -> tuple[np.ndarray, np.ndarray] | None:
-    """Return (warped gray ROI, inverse 3x3 homography ROI→full)."""
+def _warp_palm(
+    bgr: np.ndarray, landmarks: list[list[float]]
+) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
+    """Return (warped gray ROI, forward M full→ROI, inverse M_inv ROI→full)."""
     try:
         import cv2
     except ImportError:
@@ -159,7 +161,7 @@ def _warp_palm(bgr: np.ndarray, landmarks: list[list[float]]) -> tuple[np.ndarra
     M_inv = cv2.getPerspectiveTransform(dst, src)
     warped = cv2.warpPerspective(bgr, M, (ROI_W, ROI_H), flags=cv2.INTER_LINEAR)
     gray = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
-    return gray, M_inv
+    return gray, M, M_inv
 
 
 def _enhance_creases(gray: np.ndarray) -> np.ndarray:
@@ -178,6 +180,17 @@ def _enhance_creases(gray: np.ndarray) -> np.ndarray:
     return score.astype(np.float32)
 
 
+def _relative_score_floor(band: np.ndarray) -> float:
+    """Reject points below a soft floor derived from band contrast (not a fixed absolute)."""
+    flat = band.reshape(-1)
+    if flat.size == 0:
+        return 4.0
+    p70 = float(np.percentile(flat, 70))
+    p90 = float(np.percentile(flat, 90))
+    # Need some crease contrast; floor sits between mid and high percentile.
+    return max(2.5, min(12.0, p70 * 0.55 + p90 * 0.15))
+
+
 def _trace_horizontal_corridor(
     score: np.ndarray,
     *,
@@ -185,7 +198,7 @@ def _trace_horizontal_corridor(
     y_hi: float,
     x_start: float = 0.05,
     x_end: float = 0.95,
-    steps: int = 28,
+    steps: int = 36,
 ) -> list[tuple[float, float]]:
     """Trace darkest path left→right inside a vertical band (normalized ROI coords)."""
     h, w = score.shape
@@ -195,6 +208,7 @@ def _trace_horizontal_corridor(
         return []
 
     band = score[ys_lo : ys_hi + 1, :]
+    floor = _relative_score_floor(band)
     xs = np.linspace(x_start * (w - 1), x_end * (w - 1), steps)
     points: list[tuple[float, float]] = []
     prev_y: int | None = None
@@ -210,8 +224,7 @@ def _trace_horizontal_corridor(
             yi_rel = int(np.argmax(col))
         yi = ys_lo + yi_rel
         prev_y = yi
-        # Reject flat bands (no crease contrast)
-        if float(col[yi_rel]) < 4.0:
+        if float(col[yi_rel]) < floor:
             continue
         points.append((xi / (w - 1), yi / (h - 1)))
     return points
@@ -224,7 +237,7 @@ def _trace_arc_corridor(
     x_hi: float,
     y_start: float,
     y_end: float,
-    steps: int = 24,
+    steps: int = 32,
 ) -> list[tuple[float, float]]:
     """Trace darkest path top→bottom inside a horizontal band (life line thenar arc)."""
     h, w = score.shape
@@ -234,6 +247,7 @@ def _trace_arc_corridor(
         return []
 
     band = score[:, xs_lo : xs_hi + 1]
+    floor = _relative_score_floor(band)
     ys = np.linspace(y_start * (h - 1), y_end * (h - 1), steps)
     points: list[tuple[float, float]] = []
     prev_x: int | None = None
@@ -248,10 +262,109 @@ def _trace_arc_corridor(
             xi_rel = int(np.argmax(row))
         xi = xs_lo + xi_rel
         prev_x = xi
-        if float(row[xi_rel]) < 4.0:
+        if float(row[xi_rel]) < floor:
             continue
         points.append((xi / (w - 1), yi / (h - 1)))
     return points
+
+
+def _landmarks_in_roi(
+    landmarks: list[list[float]],
+    M: np.ndarray,
+    img_w: int,
+    img_h: int,
+) -> dict[int, tuple[float, float]]:
+    """Map selected MediaPipe landmarks into normalized ROI coords via forward warp."""
+    import cv2
+
+    idxs = [_WRIST, _THUMB_CMC, _INDEX_MCP, _MIDDLE_MCP, _RING_MCP, _PINKY_MCP]
+    pts = []
+    keep: list[int] = []
+    for i in idxs:
+        p = _pt(landmarks, i)
+        if p is None:
+            continue
+        pts.append([p[0] * img_w, p[1] * img_h])
+        keep.append(i)
+    if len(pts) < 4:
+        return {}
+    arr = np.float32([pts]).reshape(-1, 1, 2)
+    mapped = cv2.perspectiveTransform(arr, M)
+    out: dict[int, tuple[float, float]] = {}
+    for idx, pt in zip(keep, mapped):
+        x = _clamp01(float(pt[0][0]) / max(1, ROI_W - 1))
+        y = _clamp01(float(pt[0][1]) / max(1, ROI_H - 1))
+        out[idx] = (x, y)
+    return out
+
+
+def _adaptive_corridors(
+    landmarks: list[list[float]],
+    M: np.ndarray,
+    img_w: int,
+    img_h: int,
+) -> dict[str, dict[str, float]]:
+    """
+    Derive heart/head/life corridor bands from warped landmark positions.
+    Falls back to anatomic defaults when mapping is weak.
+    """
+    defaults = {
+        "heart": {"y_lo": 0.10, "y_hi": 0.28, "x_start": 0.08, "x_end": 0.92},
+        "head": {"y_lo": 0.32, "y_hi": 0.52, "x_start": 0.10, "x_end": 0.88},
+        "life": {"x_lo": 0.05, "x_hi": 0.42, "y_start": 0.12, "y_end": 0.88},
+    }
+    lm = _landmarks_in_roi(landmarks, M, img_w, img_h)
+    if len(lm) < 4:
+        return defaults
+
+    index = lm.get(_INDEX_MCP)
+    middle = lm.get(_MIDDLE_MCP)
+    pinky = lm.get(_PINKY_MCP)
+    wrist = lm.get(_WRIST)
+    thumb = lm.get(_THUMB_CMC)
+    if not all([index, middle, pinky, wrist]):
+        return defaults
+
+    assert index and middle and pinky and wrist
+    mcp_y = float(np.median([index[1], middle[1], pinky[1]]))
+    palm_span_y = max(0.35, wrist[1] - mcp_y)
+
+    heart_c = mcp_y + palm_span_y * 0.08
+    head_c = mcp_y + palm_span_y * 0.28
+    heart_half = max(0.05, palm_span_y * 0.09)
+    head_half = max(0.06, palm_span_y * 0.10)
+
+    life_x_hi = 0.42
+    if thumb is not None:
+        life_x_hi = _clamp01(max(0.28, min(0.52, (thumb[0] + index[0]) / 2 + 0.12)))
+
+    return {
+        "heart": {
+            "y_lo": _clamp01(heart_c - heart_half),
+            "y_hi": _clamp01(heart_c + heart_half),
+            "x_start": 0.06,
+            "x_end": 0.94,
+        },
+        "head": {
+            "y_lo": _clamp01(head_c - head_half),
+            "y_hi": _clamp01(head_c + head_half),
+            "x_start": 0.08,
+            "x_end": 0.90,
+        },
+        "life": {
+            "x_lo": 0.04,
+            "x_hi": life_x_hi,
+            "y_start": _clamp01(mcp_y + 0.02),
+            "y_end": _clamp01(min(0.92, wrist[1] + 0.02)),
+        },
+    }
+
+
+def _downsample(pts: list[tuple[float, float]], max_pts: int = 14) -> list[tuple[float, float]]:
+    if len(pts) <= max_pts:
+        return pts
+    idxs = np.linspace(0, len(pts) - 1, max_pts)
+    return [pts[int(round(i))] for i in idxs]
 
 
 def _polyline_length(pts: list[tuple[float, float]]) -> float:
@@ -313,13 +426,6 @@ def _mean_depth(pts: list[tuple[float, float]], score: np.ndarray) -> float:
         yi = int(round(_clamp01(y) * (h - 1)))
         vals.append(float(score[yi, xi]))
     return float(np.mean(vals)) if vals else 0.0
-
-
-def _downsample(pts: list[tuple[float, float]], max_pts: int = 8) -> list[tuple[float, float]]:
-    if len(pts) <= max_pts:
-        return pts
-    idxs = np.linspace(0, len(pts) - 1, max_pts)
-    return [pts[int(round(i))] for i in idxs]
 
 
 def _roi_to_full(
@@ -423,14 +529,36 @@ def extract_creases_from_image(
         result.image_quality = "poor"
         return result
 
-    gray, M_inv = warped
+    gray, M, M_inv = warped
     score = _enhance_creases(gray)
 
-    # Anatomic corridors in normalized ROI space (index on left after warp for either hand:
-    # our quad puts index→pinky as TL→TR so heart/head run left→right).
-    heart_pts = _trace_horizontal_corridor(score, y_lo=0.10, y_hi=0.28, x_start=0.08, x_end=0.92)
-    head_pts = _trace_horizontal_corridor(score, y_lo=0.32, y_hi=0.52, x_start=0.10, x_end=0.88)
-    life_pts = _trace_arc_corridor(score, x_lo=0.05, x_hi=0.42, y_start=0.12, y_end=0.88)
+    corridors = _adaptive_corridors(landmarks, M, img_w, img_h)
+    heart_c = corridors["heart"]
+    head_c = corridors["head"]
+    life_c = corridors["life"]
+
+    # Corridors in normalized ROI space (index→pinky as TL→TR after warp).
+    heart_pts = _trace_horizontal_corridor(
+        score,
+        y_lo=heart_c["y_lo"],
+        y_hi=heart_c["y_hi"],
+        x_start=heart_c["x_start"],
+        x_end=heart_c["x_end"],
+    )
+    head_pts = _trace_horizontal_corridor(
+        score,
+        y_lo=head_c["y_lo"],
+        y_hi=head_c["y_hi"],
+        x_start=head_c["x_start"],
+        x_end=head_c["x_end"],
+    )
+    life_pts = _trace_arc_corridor(
+        score,
+        x_lo=life_c["x_lo"],
+        x_hi=life_c["x_hi"],
+        y_start=life_c["y_start"],
+        y_end=life_c["y_end"],
+    )
 
     heart_pts = _downsample(heart_pts)
     head_pts = _downsample(head_pts)
@@ -454,7 +582,7 @@ def extract_creases_from_image(
         if feat["depth_score"] < 5.0 or feat["length"] < 0.12:
             warnings.append(f"{name} too faint to lock")
             continue
-        full_pts = _roi_to_full(_downsample(pts, max_pts=8), M_inv, img_w, img_h)
+        full_pts = _roi_to_full(_downsample(pts, max_pts=14), M_inv, img_w, img_h)
         if len(full_pts) < 2:
             continue
         geometry.append({"name": name, "points": full_pts})

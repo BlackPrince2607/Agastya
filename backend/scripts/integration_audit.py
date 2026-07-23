@@ -154,16 +154,19 @@ def main() -> int:
 
     checks.append(
         (
-            "POST /v1/billing/checkout",
+            "POST /v1/billing/razorpay/create-payment-link",
             *req(
                 "POST",
-                "/v1/billing/checkout",
+                "/v1/billing/razorpay/create-payment-link",
                 {
                     "sessionId": SID,
                     "deviceInstallId": DID,
                     "billingPeriod": "monthly",
                     "successUrl": "http://localhost:8081/success",
                     "cancelUrl": "http://localhost:8081/cancel",
+                    "platform": "android",
+                    "externalTransactionToken": "test_token",
+                    "administrativeArea": "KA",
                 },
             ),
         )
@@ -174,8 +177,8 @@ def main() -> int:
         if name.endswith("expect 401)"):
             if code != 401:
                 failures.append(f"{name} expected 401 got {code}")
-        elif "billing/checkout" in name and code == 503:
-            print("  -> Stripe not configured (expected in local dev)")
+        elif "billing/razorpay" in name and code == 503:
+            print("  -> Razorpay not configured (expected in local dev)")
         elif code >= 400:
             failures.append(f"{name} failed with {code}: {str(body)[:200]}")
             print(f"  -> {str(body)[:400]}")

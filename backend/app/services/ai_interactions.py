@@ -22,9 +22,9 @@ _SUGGESTION_LINE = re.compile(r"^\s*SUGGESTIONS:\s*(\[.*\])\s*$", re.IGNORECASE 
 logger = logging.getLogger(__name__)
 
 _FALLBACK_SUGGESTIONS = [
-    "Tell me more about my future",
-    "What should I focus on?",
-    "How can I grow from here?",
+    "What should I focus on today?",
+    "Help me think this through",
+    "Remind me what my Blueprint says",
 ]
 
 
@@ -49,16 +49,7 @@ def _split_suggestions(text: str) -> tuple[str, list[str]]:
 
 
 def _heuristic_chat(body: ChatRequest) -> str:
-    last_user = next((m.content for m in reversed(body.messages) if m.role == "user"), "")
-    if len(last_user.strip()) < 12:
-        return (
-            "You hide uncertainty behind precision more often than you admit.\n\n"
-            "Say the sentence you keep editing out — Agastya answers from there."
-        )
-    return (
-        "Quiet conviction arrives before language catches up.\n\n"
-        "Let one vulnerable detail surface; I'll mirror the pattern underneath."
-    )
+    return "I couldn't reach the guide just now — try again in a moment."
 
 
 def _chat_fallback(settings: Settings, body: ChatRequest) -> tuple[str, list[str]]:
@@ -87,21 +78,30 @@ async def generate_chat_reply(
 
     if not is_premium and effective_user_count > 5:
         return (
-            "You've reached the luminous preview ceiling—unlock unlimited guide transmissions "
-            "to continue this thread without interruption.",
-            ["Show me upgrade options", "What do I get with premium?"],
+            "You've hit the free chat limit for now. Unlock Pro to keep talking with Agastya about your Blueprint.",
+            ["Show me upgrade options", "What do I get with Pro?"],
         )
 
     palm_json = json.dumps(body.palm_analysis.model_dump())
     memory_block = ""
+    today_focus = ""
     if bkt is not None:
         from app.services.user_memory import format_memory_block
 
         memory_block = format_memory_block(bkt)
+        ctx = bkt.daily_context or {}
+        theme = ctx.get("focusTheme")
+        if isinstance(theme, str) and theme.strip():
+            today_focus = f"TODAY_FOCUS:\n{theme.strip()}\n\n"
+        weekly = bkt.weekly_context or {}
+        chapter = weekly.get("currentChapter")
+        if isinstance(chapter, str) and chapter.strip():
+            today_focus += f"CURRENT_CHAPTER:\n{chapter.strip()}\n\n"
     context = (
         f"USER_PROFILE:\n{body.profile_summary}\n\n"
         f"PALM_JSON:\n{palm_json}\n\n"
         + (f"{memory_block}\n\n" if memory_block else "")
+        + today_focus
         + "Answer as Agastya."
     )
 
@@ -123,8 +123,8 @@ async def generate_chat_reply(
         settings,
         model=settings.openrouter_chat_model,
         messages=msgs,
-        temperature=0.75,
-        max_tokens=400,
+        temperature=0.5,
+        max_tokens=220,
     )
     if completion is None:
         if settings.llm_enabled:
@@ -308,7 +308,7 @@ async def generate_daily_tasks(
             {"role": "system", "content": TASK_SYSTEM},
             {"role": "user", "content": json.dumps(payload)},
         ],
-        temperature=0.85,
+        temperature=0.65,
     )
     if completion is None:
         logger.warning("llm_fallback_reason=daily_tasks llm_enabled=%s", settings.llm_enabled)

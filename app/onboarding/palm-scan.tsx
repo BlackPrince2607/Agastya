@@ -217,7 +217,7 @@ export default function PalmScanScreen() {
     try {
       const photo = await camRef.current?.takePictureAsync({
         base64: true,
-        quality: 0.72,
+        quality: 0.85,
       });
       if (!photo?.base64) {
         Alert.alert("Couldn't capture palm", PALM_CAPTURE_FAILED);

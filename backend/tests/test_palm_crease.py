@@ -149,3 +149,31 @@ def test_landmark_heuristic_gate(heuristic: bool):
     else:
         assert merged.line_geometry is None
         assert merged.geometry_source == "unavailable"
+
+
+def test_merge_does_not_invent_overlay_when_creases_fail_with_image():
+    """Honesty gate: a real photo must not get landmark_heuristic overlays by default."""
+    # Blank skin tone — no creases; MediaPipe-shaped landmarks still present.
+    h, w = 480, 360
+    img = np.full((h, w, 3), (180, 140, 120), dtype=np.uint8)
+    ok, buf = cv2.imencode(".jpg", img, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
+    assert ok
+    b64 = base64.b64encode(buf.tobytes()).decode("ascii")
+    landmarks = [[0.5, 0.5] for _ in range(21)]
+    landmarks[0] = [0.50, 0.88]
+    landmarks[1] = [0.28, 0.70]
+    landmarks[5] = [0.22, 0.22]
+    landmarks[9] = [0.45, 0.18]
+    landmarks[13] = [0.65, 0.20]
+    landmarks[17] = [0.82, 0.26]
+    palm = PalmAnalysis(
+        life_line="strong",
+        heart_line="curved",
+        head_line="long",
+        personality="quiet visionary",
+        traits=["thoughtful"],
+        analysis_source="openrouter_vision",
+    )
+    merged = merge_cv_into_analysis(palm, landmarks, image_base64=b64, allow_landmark_heuristic=False)
+    assert merged.geometry_source == "unavailable"
+    assert merged.line_geometry is None

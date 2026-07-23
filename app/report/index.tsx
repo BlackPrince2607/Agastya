@@ -21,7 +21,7 @@ import type { PalmAnalysisDto } from '@/types/palmAnalysis';
 import { PREDICTION_PERIODS, type PredictionPeriod } from '@/types/predictions';
 import { buildLocalPredictions } from '@/utils/localPredictions';
 import { withApiRetry } from '@/utils/apiRetry';
-import { palmLineInsights, personalityProfile, headlineNeedsPalmFix } from '@/utils/palmInsights';
+import { palmLineInsights, personalityProfile, headlineNeedsPalmFix, mountSummaries } from '@/utils/palmInsights';
 import { paywallRouteParams } from '@/utils/paywallNavigation';
 
 type ReportTab = 'overview' | 'lines' | 'personality' | 'predictions';
@@ -231,6 +231,11 @@ export default function ReportScreen() {
                   <Text className="font-headline-md text-[18px] text-on-surface">
                     {Math.round(palm.confidence * 100)}%
                   </Text>
+                  {palm.geometry_source === 'opencv_creases' ? (
+                    <Text className="font-body text-[13px] text-cyan/90">
+                      Lines locked from your photo scan
+                    </Text>
+                  ) : null}
                   {palm.fate_line ? (
                     <Text className="font-body text-[14px] text-on-surface-variant">
                       Fate line: {palm.fate_line}
@@ -247,7 +252,19 @@ export default function ReportScreen() {
                   ) : null}
                 </GlassCard>
               ) : null}
-              {palm.line_geometry?.length ? (
+              {mountSummaries(palm).length > 0 ? (
+                <GlassCard muted className="w-full p-4" innerClassName="gap-2">
+                  <Text className="font-label text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">
+                    Mounts
+                  </Text>
+                  <View className="flex-row flex-wrap gap-2">
+                    {mountSummaries(palm).map((m) => (
+                      <AuraChip key={m.name} label={`${m.name}: ${m.level}`} tint={colors.growth} />
+                    ))}
+                  </View>
+                </GlassCard>
+              ) : null}
+              {palm.line_geometry?.length && palm.geometry_source === 'opencv_creases' ? (
                 <View className="gap-2">
                   <Text className="font-label text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">
                     Your palm lines
@@ -316,6 +333,11 @@ export default function ReportScreen() {
                 <Text className="text-center font-body text-[15px] leading-7 text-on-surface-variant">
                   {persona.description}
                 </Text>
+                {persona.handShape ? (
+                  <Text className="text-center font-label text-[11px] uppercase tracking-[0.14em] text-cyan/90">
+                    Hand shape · {persona.handShape}
+                  </Text>
+                ) : null}
               </GlassCard>
 
               <GlassCard muted className="w-full p-5" innerClassName="gap-3">
@@ -413,7 +435,7 @@ function UpgradeBanner() {
     <GlassCard glow className="w-full p-5" innerClassName="items-center gap-3">
       <Text className="text-center font-headline-md text-[18px] text-on-surface">Preview mode</Text>
       <Text className="text-center font-body text-[14px] text-on-surface-variant">
-        Upgrade for full scores, every chapter, and deeper forecasts.
+        Upgrade for every chapter, measured line detail, and longer-range forecasts.
       </Text>
       <PrimaryButton
         variant="cta"

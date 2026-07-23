@@ -244,6 +244,10 @@ async def build_report_payload(
     mode: Literal["preview", "full"],
     display_name: str | None,
     gender: str | None,
+    life_journey: list[str] | None = None,
+    temporary_context: list[str] | None = None,
+    recent_chapters: list[dict] | None = None,
+    current_chapter: str | None = None,
 ) -> FullReport:
     """Return enriched report JSON, falling back if OpenRouter unavailable or errors."""
     fallback = deterministic_report(
@@ -251,7 +255,7 @@ async def build_report_payload(
     )
     if not settings.llm_enabled:
         return fallback
-    payload = {
+    payload: dict = {
         "seed": seed,
         "mode": mode,
         "displayName": display_name,
@@ -259,6 +263,14 @@ async def build_report_payload(
         "focusTopics": topics,
         "palm": palm.model_dump(),
     }
+    if life_journey:
+        payload["lifeJourney"] = life_journey[:5]
+    if temporary_context:
+        payload["temporaryContext"] = temporary_context[:6]
+    if recent_chapters:
+        payload["recentChapters"] = recent_chapters[:4]
+    if current_chapter:
+        payload["currentChapter"] = current_chapter
     try:
         completion = await llm_chat_completion(
             settings,
@@ -268,7 +280,7 @@ async def build_report_payload(
                 {"role": "system", "content": REPORT_SYSTEM},
                 {"role": "user", "content": json.dumps(payload)},
             ],
-            temperature=0.85,
+            temperature=0.6,
         )
         if completion is None:
             logger.warning("llm_fallback_reason=report llm_enabled=%s", settings.llm_enabled)

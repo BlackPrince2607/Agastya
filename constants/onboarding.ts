@@ -21,10 +21,10 @@ export const ONBOARDING_PAYWALL_DISPLAY_STEP = 7;
 export const PALM_SCAN_PROCESSING_MS = 0;
 
 /** Fixed time for the analysis loading screen progress (0 → 100%). */
-export const ANALYSIS_MIN_DURATION_MS = 5000;
+export const ANALYSIS_MIN_DURATION_MS = 5500;
 
 /** How long each analysis loading phrase stays visible. */
 export const ANALYSIS_PHRASE_MS = 1600;
 
 /** Brief pause at 100% so the bar does not cut away abruptly. */
-export const ANALYSIS_SETTLE_MS = 400;
+export const ANALYSIS_SETTLE_MS = 700;

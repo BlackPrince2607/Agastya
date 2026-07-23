@@ -11,10 +11,9 @@ export type ChatMessage = {
 };
 
 const DEFAULT_SUGGESTIONS = [
-  'Tell me about my future',
-  'Why do I overthink so much?',
-  'Will I find true love?',
-  'Career advice please',
+  'What should I focus on today?',
+  'Help me think something through',
+  'What does my reading say about me?',
 ];
 
 /** Topic snippet for Home "Continue conversation" — avoids full-message subscriptions. */

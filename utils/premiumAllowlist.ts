@@ -1,6 +1,6 @@
 /**
  * Comma-separated emails in EXPO_PUBLIC_PREMIUM_EMAIL_ALLOWLIST get free premium
- * (founder / tester accounts) without RevenueCat or Stripe.
+ * (founder / tester accounts) without a paid subscription.
  */
 
 import { useSessionStore } from '@/store/sessionStore';

@@ -39,9 +39,9 @@ const FOCUS_LABEL: Record<FocusTopic, string> = {
 };
 
 const LOCKED_PERKS = [
-  'All life scores and your full aura',
-  'Your complete bold prediction',
-  'Unlimited Guide chats',
+  'Every Blueprint chapter with measured line detail',
+  'Your full outlook and aura profile',
+  'Unlimited Agastya chat',
 ];
 
 function toImageUri(base64: string): string {
@@ -98,7 +98,9 @@ export default function ReportPreviewScreen() {
   const previewSections = reading.sections.slice(0, 2);
   const motifChips = palmAnalysis ? palmReadingChips(palmAnalysis) : null;
   const insets = useSafeAreaInsets();
-  const hasScannedLines = Boolean(palmAnalysis?.line_geometry?.length);
+  const hasScannedLines = Boolean(
+    palmAnalysis?.geometry_source === 'opencv_creases' && palmAnalysis?.line_geometry?.length,
+  );
 
   return (
     <CosmicScreen variant="stitch">

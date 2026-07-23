@@ -1,6 +1,5 @@
 import { useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { MotiView } from 'moti';
 import { useEffect, useRef, useState } from 'react';
 import {
   Keyboard,
@@ -85,6 +84,17 @@ export default function ChatScreen() {
     if (prompt) setInput(prompt);
   }, [icebreaker]);
 
+  // Seed intro into the store once so it doesn't vanish on first send.
+  useEffect(() => {
+    const state = useChatStore.getState();
+    if (state.messages.length > 0) return;
+    const name = displayName?.trim() || 'there';
+    const intro = `Hi ${name}! ${GUIDE_INTRO}`;
+    for (const part of splitIntoTextBubbles(intro)) {
+      state.addMessage('guide', part);
+    }
+  }, [displayName]);
+
   useEffect(() => {
     const id = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
     return () => clearTimeout(id);
@@ -100,18 +110,26 @@ export default function ChatScreen() {
   const deliverGuideBubbles = async (text: string, nextSuggestions: string[]) => {
     const gen = ++deliveryGenRef.current;
     const parts = splitIntoTextBubbles(text);
+    // Typing already shown during API wait — deliver promptly with a short beat only.
     for (let i = 0; i < parts.length; i++) {
       if (gen !== deliveryGenRef.current) return;
-      setTyping(true);
-      await delay(typingDelayForBubble(parts[i], i));
+      if (i === 0) {
+        setTyping(false);
+        await delay(typingDelayForBubble(parts[i], i));
+      } else {
+        setTyping(true);
+        await delay(typingDelayForBubble(parts[i], i));
+        if (gen !== deliveryGenRef.current) return;
+        setTyping(false);
+      }
       if (gen !== deliveryGenRef.current) return;
-      setTyping(false);
       addMessage('guide', parts[i]);
       if (i < parts.length - 1) {
         await delay(pauseBetweenBubblesMs());
       }
     }
     if (gen !== deliveryGenRef.current) return;
+    setTyping(false);
     setSuggestions(nextSuggestions);
   };
 
@@ -165,7 +183,7 @@ export default function ChatScreen() {
   const tabBarInset = Math.max(insets.bottom, Platform.OS === 'web' ? 14 : 10);
   const dockBottom = TAB_BAR_CLEARANCE + tabBarInset;
   const inputRowHeight = 52;
-  const empty = messages.length === 0;
+  const empty = messages.length === 0 || (messages.length > 0 && !messages.some((m) => m.role === 'you'));
   const keyboardOpen = keyboardHeight > 0;
   // Lift composer only while keyboard is visible. Android resize handles layout; iOS needs explicit inset.
   const composerBottom = keyboardOpen
@@ -177,16 +195,11 @@ export default function ChatScreen() {
   if (!premium) {
     return (
       <PremiumLockGate
-        title="Ask Agastya is a Pro feature"
+        title="Guide is a Pro feature"
         body="Unlock unlimited conversations about your reading, focus areas, and what comes next."
       />
     );
   }
-
-  const introName = displayName?.trim() || 'there';
-  const introBubbles = empty
-    ? splitIntoTextBubbles(`Hi ${introName}! ${GUIDE_INTRO}`)
-    : [];
 
   return (
     <CosmicScreen variant="stitch">
@@ -200,10 +213,7 @@ export default function ChatScreen() {
                 <Icon name="auto_awesome" size={20} color={colors.primary} />
               </View>
               <View className="min-w-0 flex-1">
-                <Text className="font-headline text-[20px] leading-7 text-on-surface">Ask Agastya</Text>
-                <Text className="font-body text-[13px] leading-5 text-on-surface-variant">
-                  Your guide for reading, purpose, and what comes next
-                </Text>
+                <Text className="font-headline text-[20px] leading-7 text-on-surface">Guide</Text>
               </View>
             </View>
 
@@ -214,38 +224,28 @@ export default function ChatScreen() {
               keyboardDismissMode="on-drag"
               showsVerticalScrollIndicator={false}
               contentContainerStyle={{ gap: 0, paddingHorizontal: 8, paddingTop: 12, paddingBottom: 16 }}>
-              {empty ? (
-                <View className="w-full">
-                  {introBubbles.map((text, i) => (
-                    <ChatBubble
-                      key={`intro-${i}`}
-                      role="guide"
-                      text={text}
-                      stacked={i > 0}
-                      stacksNext={i < introBubbles.length - 1}
-                    />
-                  ))}
-                  <View className="mt-5 items-center">
-                    <AuraOrb />
-                  </View>
+              {messages.map((m, i) => {
+                const prev = messages[i - 1];
+                const next = messages[i + 1];
+                const stacked = Boolean(prev && prev.role === m.role);
+                const stacksNext = Boolean(next && next.role === m.role);
+                return (
+                  <ChatBubble
+                    key={m.id}
+                    role={m.role}
+                    text={m.text}
+                    stacked={stacked}
+                    stacksNext={stacksNext}
+                  />
+                );
+              })}
+              {empty && messages.length <= 2 ? (
+                <View className="mt-6 items-center px-4">
+                  <Text className="text-center font-body text-[13px] leading-5 text-on-surface-variant/80">
+                    Start with a suggestion below, or type whatever is on your mind.
+                  </Text>
                 </View>
-              ) : (
-                messages.map((m, i) => {
-                  const prev = messages[i - 1];
-                  const next = messages[i + 1];
-                  const stacked = Boolean(prev && prev.role === m.role);
-                  const stacksNext = Boolean(next && next.role === m.role);
-                  return (
-                    <ChatBubble
-                      key={m.id}
-                      role={m.role}
-                      text={m.text}
-                      stacked={stacked}
-                      stacksNext={stacksNext}
-                    />
-                  );
-                })
-              )}
+              ) : null}
               {isTyping ? (
                 <View style={{ marginTop: 10 }}>
                   <TypingIndicator />
@@ -289,7 +289,7 @@ export default function ChatScreen() {
                   onSubmitEditing={() => void dispatch()}
                   returnKeyType="send"
                   blurOnSubmit
-                  accessibilityLabel="Message to Guide"
+                  accessibilityLabel="Message to Agastya"
                 />
                 <Pressable
                   onPress={() => void dispatch()}
@@ -316,30 +316,5 @@ export default function ChatScreen() {
         </View>
       </View>
     </CosmicScreen>
-  );
-}
-
-/** Rotating dashed aura rings with a nebula core (Stitch mystic presence). */
-function AuraOrb() {
-  return (
-    <View className="h-44 w-44 items-center justify-center">
-      <MotiView
-        from={{ rotate: '0deg' }}
-        animate={{ rotate: '360deg' }}
-        transition={{ type: 'timing', duration: 20000, loop: true, repeatReverse: false }}
-        className="absolute h-44 w-44 rounded-full border-2 border-dashed border-primary/20"
-      />
-      <MotiView
-        from={{ rotate: '360deg' }}
-        animate={{ rotate: '0deg' }}
-        transition={{ type: 'timing', duration: 15000, loop: true, repeatReverse: false }}
-        className="absolute h-32 w-32 rounded-full border border-secondary/20"
-      />
-      <LinearGradient
-        colors={[...gradients.nebula]}
-        style={{ width: 88, height: 88, borderRadius: 44, alignItems: 'center', justifyContent: 'center' }}>
-        <Icon name="visibility" size={40} color={colors.onPrimary} />
-      </LinearGradient>
-    </View>
   );
 }

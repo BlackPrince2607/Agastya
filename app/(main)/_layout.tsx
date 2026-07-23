@@ -36,7 +36,7 @@ export default function MainTabsLayout() {
   });
   const tasksTabBadge = palmAnalysis && tasksRemaining > 0 ? tasksRemaining : undefined;
   const gate = canEnterMainAppSync();
-  const canShowTabs = entered || gate === 'ok';
+  const canShowTabs = gate === 'ok' || (entered && gate !== 'need_sign_in');
   const authPending = authLoading && !isSignedIn && !storeUserId;
 
   useEffect(() => {

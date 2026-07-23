@@ -38,7 +38,7 @@ cp env.example .env
 Fill in:
 - `EXPO_PUBLIC_AGASTYA_API_URL` — your deployed backend URL (e.g. `https://api.agastya.app`)
 - `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` — from Supabase Dashboard → Project Settings → API
-- `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY` and `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY` — from RevenueCat Dashboard
+- `EXPO_PUBLIC_PLAY_PRODUCT_MONTHLY` and `EXPO_PUBLIC_PLAY_PRODUCT_ANNUAL` — Google Play subscription SKUs
 - `EXPO_PUBLIC_SENTRY_DSN` — from Sentry → React Native project → Client Keys
 - `EXPO_PUBLIC_POSTHOG_KEY` or `EXPO_PUBLIC_MIXPANEL_TOKEN` — from your analytics provider
 
@@ -49,7 +49,7 @@ cp backend/.env.example backend/.env
 Fill in:
 - `OPENROUTER_API_KEY` — from [openrouter.ai/keys](https://openrouter.ai/keys)
 - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` — from Supabase (user JWTs verified via JWKS)
-- `REVENUECAT_WEBHOOK_SECRET` — from RevenueCat → Integrations → Webhooks → Authorization header value
+- `RAZORPAY_WEBHOOK_SECRET`, `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` — Razorpay billing (see §6)
 - `SENTRY_DSN` — from Sentry → Python project → Client Keys
 
 ---
@@ -169,28 +169,45 @@ Login is **optional** — users complete the ritual without signing in.
 
 ---
 
-## 6. RevenueCat Setup
+## 6. Billing — Razorpay + Google Play User Choice (Android India)
 
-1. Create two apps in RevenueCat Dashboard (iOS + Android)
-2. Create an entitlement named `premium`
-3. Create monthly ($9.99) and annual ($59.99) products in App Store Connect and Google Play Console, then map them to offerings in RevenueCat
-4. Under **Integrations → Webhooks**, add your backend URL: `https://api.agastya.app/v1/webhooks/revenuecat`
-   - Set the Authorization header to a secret string, then set `REVENUECAT_WEBHOOK_SECRET` in your backend `.env`
-5. RevenueCat App User ID is set automatically to the anonymous `sessionId` at bootstrap; after sign-in it switches to `supabaseUserId` so webhooks match the correct row.
+This branch uses **Razorpay-only** alternative billing with **direct Google Play** for the Play-choice path. RevenueCat and Stripe are removed.
 
----
+### Architecture
 
-## 6b. Stripe Setup (web billing only)
+1. Paywall → **Unlock Premium** → Google User Choice dialog.
+2. **Alternative billing:** `POST /v1/billing/razorpay/create-payment-link` → Razorpay hosted page → webhook → `is_premium=true` → ExternalTransactions report.
+3. **Google Play:** native purchase → `POST /v1/billing/google-play/verify-purchase` → RTDN webhook for lifecycle.
 
-Mobile subscriptions stay on RevenueCat + App Store / Play Billing. Stripe is for **web** Checkout only.
+See [`docs/billing-razorpay-only.md`](docs/billing-razorpay-only.md).
 
-1. Create monthly and annual subscription products in Stripe Dashboard → Products
-2. Copy Price IDs to backend env: `STRIPE_PRICE_MONTHLY`, `STRIPE_PRICE_ANNUAL`
-3. Set `STRIPE_SECRET_KEY` in backend `.env`
-4. Add webhook endpoint: `https://api.agastya.app/v1/webhooks/stripe`
-   - Events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`
-   - Copy signing secret to `STRIPE_WEBHOOK_SECRET`
-5. Frontend (production web): set `EXPO_PUBLIC_STRIPE_CHECKOUT_ENABLED=true` and `EXPO_PUBLIC_WEB_DEMO=false`
+### Play Console (required)
+
+1. Enroll in **Billing Choice / User Choice Billing — India**.
+2. Create subscription products (`premium_monthly`, `premium_annual`) matching `EXPO_PUBLIC_PLAY_*` env vars.
+3. Configure **Real-Time Developer Notifications** (Pub/Sub) → `POST https://api.agastya.app/v1/webhooks/google-play?token=YOUR_RTDN_TOKEN`
+4. Service account with Android Publisher API access → `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`.
+
+### Backend env
+
+| Variable | Purpose |
+|----------|---------|
+| `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` | Razorpay Payment Links + webhooks |
+| `RAZORPAY_AMOUNT_MONTHLY_PAISE`, `RAZORPAY_AMOUNT_ANNUAL_PAISE` | INR pricing |
+| `BILLING_RAZORPAY_ENABLED`, `BILLING_RAZORPAY_ANDROID_ENABLED` | Feature flags |
+| `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`, `PLAY_PACKAGE_NAME` | Play verify + ExternalTransactions |
+| `GOOGLE_PLAY_RTDN_VERIFICATION_TOKEN` | RTDN webhook auth |
+| `CHECKOUT_ALLOWED_RETURN_ORIGINS` | Include `agastya://` for deep links |
+
+Webhooks:
+- Razorpay: `https://api.agastya.app/v1/webhooks/razorpay` — `payment.captured`, `payment_link.paid`, refunds
+- Google Play RTDN: `https://api.agastya.app/v1/webhooks/google-play?token=...`
+
+### Monitoring
+
+- Razorpay webhook 401s / grant failures in logs / Sentry
+- Play report pending: `python -m scripts.retry_play_reports` (cron)
+- Unlock pending rate (paywall "Check subscription status" after checkout)
 
 ---
 
@@ -205,7 +222,8 @@ fly secrets set \
   OPENROUTER_API_KEY=sk-or-v1-... \
   SUPABASE_URL=https://xxx.supabase.co \
   SUPABASE_SERVICE_ROLE_KEY=ey... \
-  REVENUECAT_WEBHOOK_SECRET=... \
+  RAZORPAY_WEBHOOK_SECRET=... \
+  GOOGLE_PLAY_RTDN_VERIFICATION_TOKEN=... \
   SENTRY_DSN=https://... \
   DEBUG=false \
   CORS_ORIGINS=https://agastya.app
@@ -230,7 +248,7 @@ Pushes to `main` that touch `backend/**` auto-redeploy.
 
 **Via CLI:** `railway login && railway init && npm run deploy:railway`
 
-Required Railway variables: `OPENROUTER_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DEBUG=false`, `REVENUECAT_WEBHOOK_SECRET`, non-wildcard `CORS_ORIGINS`. Recommended: `REDIS_URL`, `SENTRY_DSN`.
+Required Railway variables: `OPENROUTER_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DEBUG=false`, `RAZORPAY_*` (when billing enabled), non-wildcard `CORS_ORIGINS`. Recommended: `REDIS_URL`, `SENTRY_DSN`.
 
 **Production must run with `DEBUG=false`.** When `DEBUG=true`, webhook signature checks and startup secret validation are skipped — never ship beta that way.
 
@@ -304,8 +322,8 @@ Add these secrets in GitHub → Settings → Secrets → Actions:
 | `EXPO_PUBLIC_AGASTYA_API_URL` | Your deployed backend URL |
 | `EXPO_PUBLIC_SUPABASE_URL` | Supabase project URL |
 | `EXPO_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key |
-| `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY` | RevenueCat iOS key |
-| `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY` | RevenueCat Android key |
+| `EXPO_PUBLIC_PLAY_PRODUCT_MONTHLY` | Google Play monthly SKU |
+| `EXPO_PUBLIC_PLAY_PRODUCT_ANNUAL` | Google Play annual SKU |
 | `EXPO_PUBLIC_SENTRY_DSN` | Sentry client DSN |
 | `EXPO_PUBLIC_POSTHOG_KEY` | PostHog key (optional) |
 | `RAILWAY_TOKEN` | Railway → Account Settings → Tokens (only if using GitHub Actions deploy; not needed for Railway native GitHub integration) |
@@ -343,5 +361,5 @@ npx expo install expo-notifications expo-updates @sentry/react-native
 
 - Monitor crashes in Sentry
 - Monitor events in PostHog / Mixpanel
-- Monitor subscription events in RevenueCat Dashboard
+- Monitor Razorpay webhooks and Google Play RTDN in backend logs / Sentry
 - Set up Fly.io or Railway auto-scaling as user base grows

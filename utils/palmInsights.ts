@@ -46,12 +46,13 @@ function lineDetailFields(
 ): Pick<PalmLineInsight, 'length' | 'depth' | 'breaks' | 'notes'> {
   const key = LINE_DETAIL_KEYS[lineName];
   const detail = key ? palm.line_details?.[key] : undefined;
-  if (!detail) return {};
+  const feat = key && palm.line_features?.[key] ? palm.line_features[key] : undefined;
+  if (!detail && !feat) return {};
   return {
-    length: detail.length,
-    depth: detail.depth,
-    breaks: detail.breaks,
-    notes: detail.notes,
+    length: detail?.length ?? feat?.length_label,
+    depth: detail?.depth ?? feat?.depth,
+    breaks: detail?.breaks ?? feat?.breaks,
+    notes: detail?.notes ?? feat?.notes,
   };
 }
 
@@ -94,6 +95,8 @@ export type PersonalityProfile = {
   shadowTraits: string[];
   strengths: { label: string; value: number }[];
   description: string;
+  handShape?: string | null;
+  mounts?: Record<string, string> | null;
 };
 
 const SHADOW_POOL = ['Overthinking', 'Perfectionist', 'Restless', 'Guarded', 'Impatient'];
@@ -208,7 +211,32 @@ export function personalityProfile(palm: PalmAnalysisDto, seed: string): Persona
   ];
 
   const persona = capitalize(palm.personality || 'visionary');
-  const description = `You are ${traits.slice(0, 3).map((t) => t.toLowerCase()).join(', ')} and highly intuitive. You value freedom but also deeply care for the people around you. Your ${persona.toLowerCase()} nature is a strong inner voice. Trust it.`;
+  const shape = palm.hand_shape ? capitalize(palm.hand_shape.replace(/_/g, ' ')) : null;
+  const mountBits = palm.mounts
+    ? Object.entries(palm.mounts)
+        .filter(([, v]) => v && v !== 'flat')
+        .slice(0, 3)
+        .map(([k, v]) => `${capitalize(k)} (${v})`)
+    : [];
+  const mountFrag =
+    mountBits.length > 0 ? ` Mounts of note: ${mountBits.join(', ')}.` : '';
+  const shapeFrag = shape ? ` Your ${shape.toLowerCase()} hand shape frames how this energy shows up.` : '';
+  const description = `You are ${traits
+    .slice(0, 3)
+    .map((t) => t.toLowerCase())
+    .join(', ')} and highly intuitive. You value freedom but also deeply care for the people around you. Your ${persona.toLowerCase()} nature is a strong inner voice.${shapeFrag}${mountFrag} Trust it.`;
 
-  return { traits, shadowTraits, strengths, description };
+  return { traits, shadowTraits, strengths, description, handShape: shape, mounts: palm.mounts ?? null };
+}
+
+export type MountSummary = { name: string; level: string };
+
+export function mountSummaries(palm: PalmAnalysisDto): MountSummary[] {
+  if (!palm.mounts) return [];
+  return Object.entries(palm.mounts)
+    .filter(([, level]) => Boolean(level))
+    .map(([name, level]) => ({
+      name: capitalize(name.replace(/_/g, ' ')),
+      level: String(level),
+    }));
 }

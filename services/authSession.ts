@@ -9,7 +9,7 @@ import { getSupabase, isSupabaseEnabled } from '@/services/supabase';
 import { useChatStore } from '@/store/chatStore';
 import { useSessionStore } from '@/store/sessionStore';
 import { setPremiumAllowlistEmail } from '@/utils/premiumAllowlist';
-import { resetAppNavigation } from '@/utils/routerDefer';
+import { deferAfterNavigation, resetAppNavigationSync } from '@/utils/routerDefer';
 
 export type AuthSessionSnapshot = {
   isSignedIn: boolean;
@@ -120,9 +120,10 @@ export async function signOutAndReturnToWelcome(): Promise<void> {
   }
   syncAuthUserToStore(null);
   useSessionStore.getState().setSyncNotice(null);
-  leaveMainAppForOnboarding();
   track('auth_signed_out');
-  resetAppNavigation('/welcome');
+  // Replace before flipping hasEnteredMain — main layout Redirect races deferred replace.
+  resetAppNavigationSync('/welcome');
+  deferAfterNavigation(() => leaveMainAppForOnboarding());
 }
 
 export async function signInFromProfile(): Promise<void> {
@@ -140,11 +141,11 @@ export async function resetLocalAndSignOut(): Promise<void> {
       /* ignore */
     }
   }
+  resetAppNavigationSync('/welcome');
   useSessionStore.getState().resetDemo();
   useChatStore.getState().clear();
   track('local_reset');
   await bootstrapIdentity();
-  resetAppNavigation('/welcome');
 }
 
 /** Permanently delete the signed-in account, cloud data, and local state. */
@@ -170,9 +171,9 @@ export async function deleteAccountAndReset(): Promise<void> {
   }
 
   syncAuthUserToStore(null);
+  resetAppNavigationSync('/welcome');
   useSessionStore.getState().resetDemo();
   useChatStore.getState().clear();
   track('account_deleted');
   await bootstrapIdentity();
-  resetAppNavigation('/welcome');
 }

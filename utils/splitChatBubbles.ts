@@ -1,11 +1,11 @@
 /**
  * Split a guide reply into SMS-style bubbles.
- * Only breaks on blank lines or complete sentences — never mid-sentence / hard-wrap.
+ * Prefer a single bubble; only split when the model used blank lines.
  */
 
-const MAX_BUBBLES = 4;
+const MAX_BUBBLES = 2;
 /** Prefer packing another full sentence while under this length. */
-const PACK_SOFT = 160;
+const PACK_SOFT = 280;
 
 function normalizeWhitespace(text: string): string {
   return text
@@ -33,8 +33,7 @@ function packSentences(sentences: string[]): string[] {
       continue;
     }
     const joined = `${current} ${sentence}`;
-    // Keep 1–2 sentences together when they still feel like one text.
-    if (joined.length <= PACK_SOFT && current.split(/(?<=[.!?…])\s+/).length < 2) {
+    if (joined.length <= PACK_SOFT && current.split(/(?<=[.!?…])\s+/).length < 3) {
       current = joined;
     } else {
       packed.push(current);
@@ -53,8 +52,8 @@ function mergeOverflow(bubbles: string[]): string[] {
 }
 
 /**
- * Prefer author blank-line paragraphs (complete thoughts).
- * Fall back to sentence packing — never cut a sentence in half.
+ * Prefer a single bubble. Only split on author blank-line paragraphs (max 2).
+ * Never cut a sentence in half.
  */
 export function splitIntoTextBubbles(text: string): string[] {
   const cleaned = normalizeWhitespace(text);
@@ -65,25 +64,26 @@ export function splitIntoTextBubbles(text: string): string[] {
     .map((p) => p.replace(/\n/g, ' ').trim())
     .filter(Boolean);
 
-  // Model followed the blank-line format → one bubble per paragraph (keeps thoughts intact).
   if (paragraphs.length >= 2) {
     return mergeOverflow(paragraphs);
   }
 
+  // Default: keep one coherent reply as a single bubble.
   const sole = paragraphs[0] ?? cleaned;
+  if (sole.length <= PACK_SOFT) return [sole];
+
   const sentences = splitSentences(sole);
   if (sentences.length <= 1) return [sole];
 
   return mergeOverflow(packSentences(sentences));
 }
 
-/** Delay before showing a bubble — longer for longer text, still snappy. */
+/** Brief pause before showing a bubble after the API reply arrives. Keep snappy. */
 export function typingDelayForBubble(text: string, index: number): number {
-  const base = index === 0 ? 420 : 320;
-  const perChar = Math.min(700, Math.round(text.length * 8));
-  return Math.min(1400, base + perChar);
+  if (index === 0) return Math.min(280, 120 + Math.round(text.length * 2));
+  return Math.min(220, 80 + Math.round(text.length * 2));
 }
 
 export function pauseBetweenBubblesMs(): number {
-  return 260;
+  return 120;
 }

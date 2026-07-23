@@ -105,11 +105,7 @@ export default function HomeDashboardScreen() {
 
   const fallbackInsight = useMemo(() => buildDailyInsight(palmAnalysis), [palmAnalysis]);
   const [guidance, setGuidance] = useState<{ title: string; body: string } | null>(null);
-  const [weekly, setWeekly] = useState<{
-    title: string;
-    body: string;
-    currentChapter?: string | null;
-  } | null>(null);
+  const [weekly, setWeekly] = useState<{ title: string; body: string } | null>(null);
   const [guidanceLoading, setGuidanceLoading] = useState(false);
   const [weeklyLoading, setWeeklyLoading] = useState(false);
   const [guidanceError, setGuidanceError] = useState(false);
@@ -212,11 +208,7 @@ export default function HomeDashboardScreen() {
       const local = await readThisWeeksLocalSummary();
       if (!active) return;
       if (local) {
-        setWeekly({
-          title: local.title,
-          body: local.body,
-          currentChapter: local.currentChapter ?? null,
-        });
+        setWeekly({ title: local.title, body: local.body });
         trackOnce(`weekly_summary_viewed:${local.weekKey}`, AnalyticsEvent.WEEKLY_SUMMARY_VIEWED, {
           source: 'home',
           week_key: local.weekKey,
@@ -234,11 +226,7 @@ export default function HomeDashboardScreen() {
           }),
         );
         if (!active || !res.title || !res.body) return;
-        setWeekly({
-          title: res.title,
-          body: res.body,
-          currentChapter: res.currentChapter ?? null,
-        });
+        setWeekly({ title: res.title, body: res.body });
         trackOnce(`weekly_summary_viewed:${res.weekKey}`, AnalyticsEvent.WEEKLY_SUMMARY_VIEWED, {
           source: 'home',
           week_key: res.weekKey,
@@ -377,11 +365,11 @@ export default function HomeDashboardScreen() {
               animate={{ opacity: 1, translateY: 0 }}
               transition={{ type: 'timing', duration: 480, delay: 90 }}>
               <InsightCard
-                eyebrow="Current Chapter"
-                title={weekly.currentChapter?.trim() || weekly.title}
+                eyebrow="This Week's Guidance"
+                title={weekly.title}
                 body={weekly.body}
-                ctaLabel="See your journey"
-                onPress={() => router.push('/profile')}
+                ctaLabel={HOME_CTA_READING}
+                onPress={() => router.push('/report')}
               />
             </MotiView>
           </HomeSection>
@@ -400,7 +388,15 @@ export default function HomeDashboardScreen() {
 
         {continueTopic ? (
           <HomeSection>
-            <ContinueConversationCard topic={continueTopic} onContinue={() => router.push('/chat')} />
+            <ContinueConversationCard
+              topic={continueTopic}
+              onContinue={() =>
+                router.push({
+                  pathname: '/chat',
+                  params: { icebreaker: continueTopic },
+                })
+              }
+            />
           </HomeSection>
         ) : null}
 
@@ -412,9 +408,9 @@ export default function HomeDashboardScreen() {
                 onPress={() => router.push(paywallRouteParams('/(main)/home'))}
                 accessibilityRole="button"
                 accessibilityLabel="Upgrade to Pro">
-                <Text className="font-headline-md text-[16px] text-on-surface">Unlock your full reading</Text>
+                <Text className="font-headline-md text-[16px] text-on-surface">Unlock your full Life Blueprint</Text>
                 <Text className="mt-1 font-body text-[13px] leading-5 text-on-surface-variant">
-                  Full report, predictions, compatibility, and unlimited chat.
+                  Full report chapters, long-range forecasts, compatibility, and unlimited chat.
                 </Text>
               </Pressable>
               <Pressable onPress={() => setDismissedUpgrade(true)} hitSlop={12} accessibilityLabel="Dismiss upgrade">

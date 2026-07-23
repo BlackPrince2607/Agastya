@@ -40,25 +40,29 @@ export default function PartnerPalmAnalysisScreen() {
   const runMs = analysisPresentationMs(ANALYSIS_LOADING_PHRASES.length);
 
   useEffect(() => {
-    const started = Date.now();
-    const tick = setInterval(() => {
-      const elapsed = Date.now() - started;
-      setPct(analysisProgressPct(elapsed, runMs));
-    }, 80);
-    return () => clearInterval(tick);
-  }, [runMs]);
-
-  useEffect(() => {
     const id = setInterval(() => setPhase((p) => (p + 1) % ANALYSIS_LOADING_PHRASES.length), ANALYSIS_PHRASE_MS);
     return () => clearInterval(id);
   }, []);
 
   useEffect(() => {
     const resolvedSeed = seed ?? `partner-${Date.now()}`;
+    const started = Date.now();
     let cancelled = false;
 
+    setPct(0);
+
+    const progressTick = setInterval(() => {
+      const elapsed = Date.now() - started;
+      const next = analysisProgressPct(elapsed, runMs);
+      setPct(next);
+      if (next >= 100) clearInterval(progressTick);
+    }, 50);
+
     void (async () => {
-      const minDelay = delay(runMs);
+      const waitForPresentation = async () => {
+        const remaining = runMs - (Date.now() - started);
+        if (remaining > 0) await delay(remaining);
+      };
 
       let needsRetake = false;
 
@@ -116,7 +120,7 @@ export default function PartnerPalmAnalysisScreen() {
       };
 
       try {
-        await Promise.all([minDelay, pipeline()]);
+        await Promise.all([waitForPresentation(), pipeline()]);
       } catch {
         if (cancelled) return;
         setSampleBadge(true);
@@ -128,6 +132,7 @@ export default function PartnerPalmAnalysisScreen() {
         });
       } finally {
         if (cancelled) return;
+        clearInterval(progressTick);
         setPct(100);
         await delay(ANALYSIS_SETTLE_MS);
         if (cancelled) return;
@@ -145,6 +150,7 @@ export default function PartnerPalmAnalysisScreen() {
 
     return () => {
       cancelled = true;
+      clearInterval(progressTick);
     };
   }, [seed, setPartnerPalmAnalysis, runMs]);
 

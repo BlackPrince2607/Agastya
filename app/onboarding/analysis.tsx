@@ -1,21 +1,28 @@
 import { useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Image, Text, useWindowDimensions, View } from 'react-native';
 
 import { MotiView } from '@/components/moti/MotiView';
 import { CosmicDotGrid } from '@/components/layout/CosmicDotGrid';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { OnboardingHeader } from '@/components/onboarding/OnboardingHeader';
 import { ReadingChecklist, type ChecklistItem } from '@/components/onboarding/ReadingChecklist';
-import { AnalyzingSeal, GradientText } from '@/components/primitives';
+import { PalmLineOverlay, palmLineLegend } from '@/components/report/PalmLineOverlay';
+import { AnalyzingSeal, CosmicButton, GradientText } from '@/components/primitives';
 import {
   ANALYSIS_LOADING_PHRASES,
   ANALYSIS_SEAL_STATUS,
   ANALYSIS_STATUS_ALMOST,
   ANALYSIS_STATUS_READY,
+  PALM_LINES_BUILDING,
+  PALM_LINES_CONFIRM_CTA,
+  PALM_LINES_CONFIRM_RETAKE,
+  PALM_LINES_CONFIRM_SUBTITLE,
+  PALM_LINES_CONFIRM_TITLE,
   PALM_RETAKE_DEFAULT,
   SAMPLE_READING_BADGE,
 } from '@/constants/userCopy';
+import { PAGE_PADDING } from '@/constants/layout';
 import { isPalmRetakeError } from '@/services/apiErrors';
 import { analyzePalm, generateReport } from '@/services/agastyaApi';
 import { bootstrapIdentity, syncProfileRemote } from '@/services/identity';
@@ -53,11 +60,20 @@ const FALLBACK_PALM: PalmAnalysisDto = {
   analysis_source: 'fallback',
 };
 
+type FlowPhase = 'analyzing' | 'confirm' | 'reporting';
+
+function toImageUri(base64: string): string {
+  if (base64.startsWith('data:')) return base64;
+  return `data:image/jpeg;base64,${base64}`;
+}
+
 export default function AnalysisScreen() {
   const { seed } = useLocalSearchParams<{ seed?: string }>();
   const setReadingSeed = useSessionStore((s) => s.setReadingSeed);
   const setPalmAnalysis = useSessionStore((s) => s.setPalmAnalysis);
   const setPreviewReading = useSessionStore((s) => s.setPreviewReading);
+  const palmCaptureBase64 = useSessionStore((s) => s.palmCaptureBase64);
+  const { width: windowWidth } = useWindowDimensions();
 
   const [phase, setPhase] = useState(0);
   const [pct, setPct] = useState(0);
@@ -65,35 +81,103 @@ export default function AnalysisScreen() {
   const [sampleBadge, setSampleBadge] = useState(false);
   const [palmResult, setPalmResult] = useState<PalmAnalysisDto | null>(null);
   const [apiPalm, setApiPalm] = useState<PalmAnalysisDto | null>(null);
+  const [flowPhase, setFlowPhase] = useState<FlowPhase>('analyzing');
+  const [confirmBusy, setConfirmBusy] = useState(false);
+  const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(null);
+  const apiPalmRef = useRef<PalmAnalysisDto | null>(null);
+  const resolvedSeedRef = useRef(`trace-${Date.now()}`);
 
   const runMs = analysisPresentationMs(ANALYSIS_LOADING_PHRASES.length);
+  const overlayWidth = Math.min(windowWidth - PAGE_PADDING * 2, 320);
+  const overlayHeight = Math.round(overlayWidth * 1.28);
 
   useEffect(() => {
-    const started = Date.now();
-    const tick = setInterval(() => {
-      const elapsed = Date.now() - started;
-      const next = analysisProgressPct(elapsed, runMs);
-      setPct(next);
-      setSyncPulse(next / 100);
-      setPalmResult(palmFieldsVisibleAt(elapsed, apiPalm));
-    }, 80);
-    return () => clearInterval(tick);
-  }, [runMs, apiPalm]);
+    apiPalmRef.current = apiPalm;
+  }, [apiPalm]);
 
   useEffect(() => {
+    if (!palmCaptureBase64) {
+      setImageSize(null);
+      return;
+    }
+    Image.getSize(
+      toImageUri(palmCaptureBase64),
+      (w, h) => setImageSize({ width: w, height: h }),
+      () => setImageSize(null),
+    );
+  }, [palmCaptureBase64]);
+
+  useEffect(() => {
+    if (flowPhase !== 'analyzing') return;
     const id = setInterval(() => setPhase((p) => (p + 1) % ANALYSIS_LOADING_PHRASES.length), ANALYSIS_PHRASE_MS);
     return () => clearInterval(id);
+  }, [flowPhase]);
+
+  const goRetake = useCallback((reason: string) => {
+    useSessionStore.getState().setPalmCaptureBase64(null);
+    useSessionStore.getState().setPalmCaptureLandmarks(null, null);
+    Alert.alert('Try again', reason, [
+      {
+        text: 'OK',
+        onPress: () =>
+          deferRouterReplace({
+            pathname: '/onboarding/palm-scan',
+            params: { retakeReason: encodeURIComponent(reason) },
+          }),
+      },
+    ]);
   }, []);
+
+  const finishReport = useCallback(
+    async (palm: PalmAnalysisDto, resolvedSeed: string) => {
+      setFlowPhase('reporting');
+      setConfirmBusy(true);
+      const snap = useSessionStore.getState();
+      try {
+        const previewPayload = await withApiRetry(() =>
+          generateReport({
+            sessionId: snap.sessionId!,
+            seed: resolvedSeed,
+            palmAnalysis: palm,
+            focusTopics: snap.focusTopics,
+            mode: 'preview',
+            displayName: snap.userDisplayName,
+            gender: snap.userGender,
+          }),
+        );
+        setPreviewReading(normalizeFullReport(previewPayload));
+      } catch {
+        setPreviewReading(buildSimulatedReading(resolvedSeed, snap.focusTopics, palm));
+      }
+
+      track(AnalyticsEvent.REPORT_GENERATED, { mode: 'preview' });
+      useSessionStore.getState().setSkipCloudRestore(false);
+      void scheduleReadyNotification();
+      useSessionStore.getState().setPalmCaptureLandmarks(null, null);
+      await delay(ANALYSIS_SETTLE_MS);
+      deferRouterReplace({
+        pathname: '/onboarding/report-preview',
+        params: { seed: resolvedSeed },
+      });
+    },
+    [setPreviewReading],
+  );
 
   const runIdRef = useRef(0);
 
   useEffect(() => {
     const runId = ++runIdRef.current;
     const resolvedSeed = seed ?? `trace-${Date.now()}`;
+    resolvedSeedRef.current = resolvedSeed;
+    const started = Date.now();
 
     setReadingSeed(resolvedSeed);
+    setPct(0);
+    setSyncPulse(0);
+    setPalmResult(null);
+    setFlowPhase('analyzing');
+    setConfirmBusy(false);
 
-    // Snapshot before any await — cloud restore / merge after sign-in can race with a second pipeline.
     const snap0 = useSessionStore.getState();
     const captureSnapshot = snap0.palmCaptureBase64;
     const landmarksSnapshot = snap0.palmCaptureLandmarks;
@@ -101,14 +185,22 @@ export default function AnalysisScreen() {
     const genderSnapshot = snap0.userGender;
     const handSnapshot = snap0.palmScanHand ?? palmHandForGender(genderSnapshot);
 
-    const minDelay = delay(runMs);
-
     let cancelled = false;
+
+    const progressTick = setInterval(() => {
+      const elapsed = Date.now() - started;
+      const next = analysisProgressPct(elapsed, runMs);
+      setPct(next);
+      setSyncPulse(next / 100);
+      setPalmResult(palmFieldsVisibleAt(elapsed, apiPalmRef.current, runMs));
+      if (next >= 100) clearInterval(progressTick);
+    }, 50);
 
     void (async () => {
       let needsRetake = false;
       let retakeReason = PALM_RETAKE_DEFAULT;
       let resolvedPalm: PalmAnalysisDto = FALLBACK_PALM;
+      let awaitConfirm = false;
 
       const pipeline = async () => {
         await bootstrapIdentity();
@@ -167,30 +259,28 @@ export default function AnalysisScreen() {
         setApiPalm(palm);
         setPalmAnalysis(palm);
 
-        try {
-          const previewPayload = await withApiRetry(() =>
-            generateReport({
-              sessionId: snap.sessionId!,
-              seed: resolvedSeed,
-              palmAnalysis: palm,
-              focusTopics: snap.focusTopics,
-              mode: 'preview',
-              displayName: snap.userDisplayName,
-              gender: snap.userGender,
-            }),
-          );
-          setPreviewReading(normalizeFullReport(previewPayload));
-        } catch {
-          setPreviewReading(buildSimulatedReading(resolvedSeed, snap.focusTopics, palm));
+        // Live crease scan → user confirms overlay before Blueprint generation.
+        if (
+          capture &&
+          palm.geometry_source === 'opencv_creases' &&
+          palm.line_geometry &&
+          palm.line_geometry.length >= 2
+        ) {
+          awaitConfirm = true;
+          return;
         }
 
-        track(AnalyticsEvent.REPORT_GENERATED, { mode: 'preview' });
-        useSessionStore.getState().setSkipCloudRestore(false);
-        void scheduleReadyNotification();
+        // Offline / sample path: no confirm overlay — generate immediately.
+        await finishReport(palm, resolvedSeed);
+      };
+
+      const waitForPresentation = async () => {
+        const remaining = runMs - (Date.now() - started);
+        if (remaining > 0) await delay(remaining);
       };
 
       try {
-        await Promise.all([minDelay, pipeline()]);
+        await Promise.all([waitForPresentation(), pipeline()]);
       } catch {
         if (cancelled || runId !== runIdRef.current) return;
         const snap = useSessionStore.getState();
@@ -201,57 +291,140 @@ export default function AnalysisScreen() {
         setPreviewReading(buildSimulatedReading(resolvedSeed, snap.focusTopics, FALLBACK_PALM));
         track(AnalyticsEvent.REPORT_GENERATED, { mode: 'preview', fallback: true });
         useSessionStore.getState().setSkipCloudRestore(false);
-      } finally {
-        if (cancelled || runId !== runIdRef.current) return;
+        clearInterval(progressTick);
         setPalmResult(resolvedPalm);
         setPct(100);
         setSyncPulse(1);
         await delay(ANALYSIS_SETTLE_MS);
         if (cancelled || runId !== runIdRef.current) return;
-        if (needsRetake) {
-          useSessionStore.getState().setPalmCaptureBase64(null);
-          useSessionStore.getState().setPalmCaptureLandmarks(null, null);
-          Alert.alert('Try again', retakeReason, [
-            {
-              text: 'OK',
-              onPress: () =>
-                deferRouterReplace({
-                  pathname: '/onboarding/palm-scan',
-                  params: { retakeReason: encodeURIComponent(retakeReason) },
-                }),
-            },
-          ]);
-          return;
-        }
-        // Keep palmCaptureBase64 so report-preview can overlay scanned lines on the photo.
         useSessionStore.getState().setPalmCaptureLandmarks(null, null);
         deferRouterReplace({
           pathname: '/onboarding/report-preview',
           params: { seed: resolvedSeed },
         });
+        return;
+      } finally {
+        if (cancelled || runId !== runIdRef.current) return;
+        clearInterval(progressTick);
+        setPalmResult(resolvedPalm);
+        setPct(100);
+        setSyncPulse(1);
+      }
+
+      if (cancelled || runId !== runIdRef.current) return;
+      if (needsRetake) {
+        goRetake(retakeReason);
+        return;
+      }
+      if (awaitConfirm) {
+        setFlowPhase('confirm');
       }
     })();
 
     return () => {
       cancelled = true;
+      clearInterval(progressTick);
     };
-  }, [seed, setPalmAnalysis, setPreviewReading, setReadingSeed, runMs]);
+  }, [seed, setPalmAnalysis, setPreviewReading, setReadingSeed, runMs, finishReport, goRetake]);
+
+  const onConfirmLines = useCallback(async () => {
+    const palm = apiPalm ?? palmResult;
+    if (!palm || confirmBusy) return;
+    await finishReport(palm, resolvedSeedRef.current);
+  }, [apiPalm, palmResult, confirmBusy, finishReport]);
 
   const caption = ANALYSIS_LOADING_PHRASES[phase] ?? ANALYSIS_LOADING_PHRASES[0];
 
   const checklist: ChecklistItem[] = useMemo(() => {
     const p = palmResult;
-    const lineDone = Boolean(p?.life_line && p?.heart_line && p?.head_line);
+    const lineDone = Boolean(
+      p?.geometry_source === 'opencv_creases' && p?.life_line && p?.heart_line && p?.head_line,
+    );
     const mountsDone = Boolean(p?.mounts && Object.keys(p.mounts).length > 0);
     const shapeDone = Boolean(p?.hand_shape);
     const fingersDone = Boolean(p?.line_details || p?.fate_line);
+    // Only mark done from real API fields — never fake progress from timer alone.
     return [
       { label: 'Major lines', state: lineDone ? 'done' : pct > 30 ? 'active' : 'pending' },
       { label: 'Mounts', state: mountsDone ? 'done' : pct > 55 ? 'active' : 'pending' },
       { label: 'Hand shape', state: shapeDone ? 'done' : pct > 78 ? 'active' : 'pending' },
-      { label: 'Fine details', state: fingersDone ? 'done' : pct >= 100 ? 'active' : 'pending' },
+      { label: 'Fine details', state: fingersDone ? 'done' : pct >= 100 && p ? 'active' : 'pending' },
     ];
   }, [palmResult, pct]);
+
+  if (flowPhase === 'confirm' || flowPhase === 'reporting') {
+    const geom = (apiPalm ?? palmResult)?.line_geometry ?? [];
+    return (
+      <CosmicScreen>
+        <View className="flex-1">
+          <CosmicDotGrid />
+          <View className="flex-1 justify-between px-7 pb-10 pt-2">
+            <OnboardingHeader step={ONBOARDING_STEPS.analysis} total={ONBOARDING_TOTAL_STEPS} showBack={false} />
+
+            <View className="gap-3">
+              <GradientText className="font-label text-[12px] uppercase tracking-[0.12em] text-cyan">
+                {flowPhase === 'reporting' ? PALM_LINES_BUILDING : PALM_LINES_CONFIRM_TITLE}
+              </GradientText>
+              <Text className="font-body text-[14px] leading-6 text-on-surface-variant">
+                {PALM_LINES_CONFIRM_SUBTITLE}
+              </Text>
+            </View>
+
+            <View className="items-center">
+              <View
+                className="relative overflow-hidden rounded-3xl border border-white/15 bg-black/40"
+                style={{ width: overlayWidth, height: overlayHeight }}>
+                {palmCaptureBase64 ? (
+                  <Image
+                    source={{ uri: toImageUri(palmCaptureBase64) }}
+                    style={{ width: overlayWidth, height: overlayHeight }}
+                    resizeMode="cover"
+                  />
+                ) : null}
+                {geom.length > 0 ? (
+                  <PalmLineOverlay
+                    geometry={geom}
+                    width={overlayWidth}
+                    height={overlayHeight}
+                    imageWidth={imageSize?.width}
+                    imageHeight={imageSize?.height}
+                    resizeMode="cover"
+                  />
+                ) : null}
+                <View className="absolute bottom-3 left-3 flex-row flex-wrap gap-2">
+                  {palmLineLegend().map((item) => (
+                    <View
+                      key={item.key}
+                      className="flex-row items-center gap-1 rounded-full border border-white/15 bg-black/55 px-2 py-1">
+                      <View className="h-2 w-2 rounded-full" style={{ backgroundColor: item.color }} />
+                      <Text className="font-label text-[8px] uppercase tracking-[0.18em] text-white/80">
+                        {item.label}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            </View>
+
+            <View className="gap-3">
+              <CosmicButton
+                gradient="nebulaMd3"
+                label={flowPhase === 'reporting' ? PALM_LINES_BUILDING : PALM_LINES_CONFIRM_CTA}
+                disabled={confirmBusy || flowPhase === 'reporting'}
+                onPress={() => void onConfirmLines()}
+              />
+              <CosmicButton
+                variant="ghost"
+                label={PALM_LINES_CONFIRM_RETAKE}
+                disabled={confirmBusy || flowPhase === 'reporting'}
+                onPress={() => goRetake(PALM_RETAKE_DEFAULT)}
+              />
+            </View>
+          </View>
+        </View>
+      </CosmicScreen>
+    );
+  }
 
   return (
     <CosmicScreen>

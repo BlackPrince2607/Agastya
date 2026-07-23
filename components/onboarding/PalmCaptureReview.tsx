@@ -12,6 +12,7 @@ import {
   PARTNER_PALM_REVIEW_TITLE,
   PALM_REVIEW_ANALYZE,
   PALM_REVIEW_ANALYZING,
+  PALM_REVIEW_NEED_HAND,
   PALM_REVIEW_RETAKE,
   PALM_REVIEW_SUBTITLE,
   PALM_REVIEW_TITLE,
@@ -75,7 +76,8 @@ export function PalmCaptureReview({
   const analyzeLabel =
     confirming || detecting ? PALM_REVIEW_ANALYZING : variant === 'partner' ? PARTNER_PALM_REVIEW_ANALYZE : PALM_REVIEW_ANALYZE;
   const handReady = Boolean(landmarks && landmarkSource === 'mediapipe');
-  const canAnalyze = Boolean(landmarks && landmarkSource);
+  // Prefer MediaPipe, but still allow analyze — the server re-detects from the photo.
+  const canAnalyze = Boolean(landmarks) && !detecting;
 
   return (
     <View className="flex-1 bg-black">
@@ -115,11 +117,10 @@ export function PalmCaptureReview({
                   </Text>
                 </View>
               ) : null}
-              {!detecting && !handReady && canAnalyze ? (
+              {!detecting && !handReady ? (
                 <View className="absolute bottom-3 left-3 right-3 rounded-2xl border border-amber-200/30 bg-black/70 px-3.5 py-3">
                   <Text className="font-body text-[12px] leading-[18px] text-amber-100/95">
-                    Hand outline is approximate. You can still analyze — for sharper line tracing, retake with
-                    your open palm filling the frame and even light.
+                    {PALM_REVIEW_NEED_HAND}
                   </Text>
                 </View>
               ) : null}

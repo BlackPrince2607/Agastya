@@ -210,9 +210,9 @@ def merge_cv_into_analysis(
     """
     Attach line geometry from OpenCV crease extraction.
 
-    LLM/vision geometry is ignored. When crease scan fails, fall back to
-    landmark-derived major-line polylines (MediaPipe anatomy), or when
-    allow_landmark_heuristic=True for any landmark set.
+    LLM/vision geometry is ignored. When crease scan fails, landmark-derived
+    overlays are used only if allow_landmark_heuristic=True — never invent
+    creases from a photo by default.
     """
     try:
         # Never keep model-invented geometry
@@ -223,9 +223,9 @@ def merge_cv_into_analysis(
             if crease.geometry_source == "opencv_creases" and crease.line_geometry:
                 return apply_crease_result(stripped, crease, prefer_cv_motifs=True)
 
-        # Prefer anatomy-based overlays over an empty geometry field on real captures.
+        # Anatomy overlays only when explicitly enabled — never invent creases from a photo.
         geometry = extract_line_geometry(landmarks)
-        if geometry and (allow_landmark_heuristic or image_base64):
+        if geometry and allow_landmark_heuristic:
             data = stripped.model_dump()
             data["line_geometry"] = geometry
             data["geometry_source"] = "landmark_heuristic"

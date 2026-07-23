@@ -2,7 +2,6 @@ import { mergeSessions } from '@/services/agastyaApi';
 import { track } from '@/services/analytics';
 import { syncAuthUserToStore } from '@/services/authSession';
 import { ensureDeviceIdentity, syncProfileRemote } from '@/services/identity';
-import { linkRevenueCatUser } from '@/services/revenuecat';
 import { restoreSessionFromServer } from '@/services/sessionRestore';
 import { getSupabase, waitForSupabaseAccessToken } from '@/services/supabase';
 import { useSessionStore } from '@/store/sessionStore';
@@ -45,7 +44,6 @@ async function tryMergeSession(supabaseUserId: string) {
       });
       syncAuthUserToStore(supabaseUserId);
       track('session_merge', { linked: res.linked });
-      await linkRevenueCatUser(supabaseUserId);
       // Always force restore after a successful merge — the user's explicit sign-in intent
       // overrides any prior local `skipCloudRestore` flag from "Start fresh" / "Replay setup".
       await restoreSessionFromServer({ force: true });

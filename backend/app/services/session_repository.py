@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from typing import Any
 
 from app.config import Settings, get_settings
@@ -15,6 +16,21 @@ from app.services.supabase_rest import SupabaseRest, SupabaseUnavailableError, r
 logger = logging.getLogger(__name__)
 
 TABLE = "agastya_sessions"
+
+
+def _parse_expires_at(raw: Any) -> datetime | None:
+    if raw is None:
+        return None
+    if isinstance(raw, datetime):
+        return raw if raw.tzinfo else raw.replace(tzinfo=timezone.utc)
+    if isinstance(raw, str) and raw.strip():
+        try:
+            dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+        except ValueError:
+            return None
+    return None
+
 
 __all__ = [
     "SupabaseUnavailableError",
@@ -62,6 +78,8 @@ def bucket_to_row(session_id: str, bucket: SessionBucket) -> dict[str, Any]:
         else None,
         "chat_tail": bucket.chat_tail,
         "is_premium": bucket.is_premium,
+        "premium_source": bucket.premium_source,
+        "premium_expires_at": bucket.premium_expires_at.isoformat() if bucket.premium_expires_at else None,
         "user_memory": normalize_user_memory(bucket.user_memory),
         "daily_context": bucket.daily_context,
         "weekly_context": bucket.weekly_context,
@@ -109,6 +127,8 @@ def row_to_bucket(row: dict[str, Any]) -> SessionBucket:
         predictions=predictions,
         meta={k: v for k, v in meta.items() if v is not None},
         is_premium=bool(row.get("is_premium", False)),
+        premium_source=str(row["premium_source"]) if row.get("premium_source") else None,
+        premium_expires_at=_parse_expires_at(row.get("premium_expires_at")),
         user_memory=normalize_user_memory(memory_raw) if memory_raw is not None else empty_user_memory(),
         daily_context=daily_raw if isinstance(daily_raw, dict) else None,
         weekly_context=weekly_raw if isinstance(weekly_raw, dict) else None,
@@ -123,11 +143,19 @@ async def refresh_premium_from_db(
     """Reload is_premium from Supabase so multi-worker deploys stay consistent."""
     client = _client(settings)
     if client is None:
-        return bucket.is_premium
-    row = await client.select_one(TABLE, filters={"session_id": session_id}, columns="is_premium")
+        return bucket.effectively_premium()
+    row = await client.select_one(
+        TABLE,
+        filters={"session_id": session_id},
+        columns="is_premium,premium_source,premium_expires_at",
+    )
     if row is not None:
         bucket.is_premium = bool(row.get("is_premium", False))
-    return bucket.is_premium
+        bucket.premium_source = str(row["premium_source"]) if row.get("premium_source") else None
+        bucket.premium_expires_at = _parse_expires_at(row.get("premium_expires_at"))
+        if bucket.is_premium and not bucket.effectively_premium():
+            bucket.is_premium = False
+    return bucket.effectively_premium()
 
 
 async def load(session_id: str, settings: Settings | None = None) -> SessionBucket | None:
@@ -161,7 +189,9 @@ async def link_user(
     client = _client(settings)
     if client is None:
         return False
-    existing = await client.select_one(TABLE, filters={"session_id": anonymous_session_id}, columns="supabase_user_id")
+    existing = await client.select_one(
+        TABLE, filters={"session_id": anonymous_session_id}, columns="supabase_user_id"
+    )
     if existing:
         linked_user = existing.get("supabase_user_id")
         if linked_user and str(linked_user) != supabase_user_id:
@@ -180,7 +210,6 @@ async def list_sessions_for_user(
     client = _client(settings)
     if client is None:
         return []
-    # Prefer recent rows — restore scoring only needs the richest candidate, not every historical session.
     return await client.select_many(
         TABLE,
         filters={"supabase_user_id": supabase_user_id},
@@ -199,25 +228,75 @@ async def delete_sessions_for_user(
     return await client.delete_rows(TABLE, filters={"supabase_user_id": supabase_user_id})
 
 
+def _premium_patch_values(
+    is_premium: bool,
+    *,
+    premium_source: str | None = None,
+    premium_expires_at: datetime | None = None,
+    clear_expires: bool = False,
+) -> dict[str, Any]:
+    values: dict[str, Any] = {"is_premium": is_premium}
+    if premium_source is not None:
+        values["premium_source"] = premium_source
+    if clear_expires or (not is_premium and premium_expires_at is None):
+        values["premium_expires_at"] = None
+    elif premium_expires_at is not None:
+        values["premium_expires_at"] = premium_expires_at.isoformat()
+    return values
+
+
+def _apply_premium_to_bucket(
+    bkt: SessionBucket,
+    is_premium: bool,
+    *,
+    premium_source: str | None = None,
+    premium_expires_at: datetime | None = None,
+    clear_expires: bool = False,
+) -> None:
+    bkt.is_premium = is_premium
+    if premium_source is not None:
+        bkt.premium_source = premium_source
+    if clear_expires or (not is_premium and premium_expires_at is None):
+        bkt.premium_expires_at = None
+    elif premium_expires_at is not None:
+        bkt.premium_expires_at = premium_expires_at
+
+
 async def set_premium_by_user(
     supabase_user_id: str,
     is_premium: bool,
     settings: Settings | None = None,
+    *,
+    premium_source: str | None = None,
+    premium_expires_at: datetime | None = None,
+    clear_expires: bool = False,
 ) -> bool:
-    """Called by RevenueCat webhook to update premium status server-side."""
+    """Called by billing webhooks to update premium status server-side."""
     client = _client(settings)
     if client is None:
         return False
+    values = _premium_patch_values(
+        is_premium,
+        premium_source=premium_source,
+        premium_expires_at=premium_expires_at,
+        clear_expires=clear_expires,
+    )
     ok = await client.patch(
         TABLE,
         filters={"supabase_user_id": supabase_user_id},
-        values={"is_premium": is_premium},
+        values=values,
     )
-    # Also update the in-memory bucket if loaded.
     from app.services.bucket_store import _BUCKETS
+
     alias_key = f"user:{supabase_user_id}"
     if alias_key in _BUCKETS:
-        _BUCKETS[alias_key].is_premium = is_premium
+        _apply_premium_to_bucket(
+            _BUCKETS[alias_key],
+            is_premium,
+            premium_source=premium_source,
+            premium_expires_at=premium_expires_at,
+            clear_expires=clear_expires,
+        )
     return ok
 
 
@@ -225,17 +304,34 @@ async def set_premium_by_session(
     session_id: str,
     is_premium: bool,
     settings: Settings | None = None,
+    *,
+    premium_source: str | None = None,
+    premium_expires_at: datetime | None = None,
+    clear_expires: bool = False,
 ) -> bool:
-    """Called by RevenueCat webhook when the app_user_id is a session_id."""
+    """Called by billing webhooks when the app_user_id is a session_id."""
     client = _client(settings)
     if client is None:
         return False
+    values = _premium_patch_values(
+        is_premium,
+        premium_source=premium_source,
+        premium_expires_at=premium_expires_at,
+        clear_expires=clear_expires,
+    )
     ok = await client.patch(
         TABLE,
         filters={"session_id": session_id},
-        values={"is_premium": is_premium},
+        values=values,
     )
     from app.services.bucket_store import _BUCKETS
+
     if session_id in _BUCKETS:
-        _BUCKETS[session_id].is_premium = is_premium
+        _apply_premium_to_bucket(
+            _BUCKETS[session_id],
+            is_premium,
+            premium_source=premium_source,
+            premium_expires_at=premium_expires_at,
+            clear_expires=clear_expires,
+        )
     return ok

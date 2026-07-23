@@ -1,15 +1,11 @@
 /**
  * DEV / prototype unlock — delete with DevPremiumPanel when billing is live.
- * Available in __DEV__ or when RevenueCat/Stripe are not configured.
+ * Available in __DEV__ only on this branch (production uses Razorpay + Play).
  */
 
 import { generateReport } from '@/services/agastyaApi';
 import { isApiConfigured } from '@/services/env';
 import { normalizeFullReport } from '@/services/normalizeReport';
-import {
-  isRevenueCatConfigured,
-  isStripeCheckoutEnabled,
-} from '@/services/revenuecat';
 import { buildSimulatedReading } from '@/services/simulatedReading';
 import { useSessionStore } from '@/store/sessionStore';
 
@@ -19,11 +15,9 @@ export type DevPremiumStatus = {
   fullSections: number;
 };
 
-/** True when store billing is missing — prototype builds can unlock without IAP. */
+/** True in development builds for UI testing without real payments. */
 export function isPrototypePremiumUnlockEnabled(): boolean {
-  if (__DEV__) return true;
-  if (isStripeCheckoutEnabled()) return false;
-  return !isRevenueCatConfigured();
+  return __DEV__;
 }
 
 export function devPremiumStatus(): DevPremiumStatus {
@@ -66,7 +60,7 @@ async function materializeDevFullReading(): Promise<number> {
 /** Turn on premium locally and populate a full report for UI testing / prototype APKs. */
 export async function devUnlockPremium(): Promise<{ ok: true; sections: number } | { ok: false; reason: string }> {
   if (!isPrototypePremiumUnlockEnabled()) {
-    return { ok: false, reason: 'Prototype unlock is disabled when store billing is configured.' };
+    return { ok: false, reason: 'Prototype unlock is only available in development builds.' };
   }
 
   const snap = useSessionStore.getState();

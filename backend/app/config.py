@@ -110,14 +110,23 @@ class Settings(BaseSettings):
     openrouter_app_name: str = "Agastya"
     allow_llm_fallback: bool = True
 
-    # --- RevenueCat webhook (optional — skips signature verification when absent) ---
-    revenuecat_webhook_secret: str | None = None
-
-    # --- Stripe (web billing) ---
-    stripe_secret_key: str | None = None
-    stripe_webhook_secret: str | None = None
-    stripe_price_monthly: str | None = None
-    stripe_price_annual: str | None = None
+    # --- Razorpay (Payment Links; India User Choice alternative billing) ---
+    razorpay_key_id: str | None = None
+    razorpay_key_secret: str | None = None
+    razorpay_webhook_secret: str | None = None
+    razorpay_amount_monthly_paise: int | None = None
+    razorpay_amount_annual_paise: int | None = None
+    billing_razorpay_enabled: bool = False
+    billing_razorpay_android_enabled: bool = False
+    # DEBUG-only: skip Play User Choice token/area requirements so Razorpay can be E2E tested
+    # without a Play-enrolled Android build. Never enable when DEBUG=false.
+    billing_razorpay_test_bypass: bool = False
+    billing_razorpay_countries: str = "IN"
+    billing_force_country: str | None = None
+    play_package_name: str = "com.agastya.app"
+    google_play_service_account_json: str | None = None
+    google_play_rtdn_verification_token: str | None = None
+    checkout_allowed_return_origins: str = ""
 
     # Comma-separated emails that always receive is_premium (founder / testers).
     premium_email_allowlist: str = ""
@@ -133,6 +142,42 @@ class Settings(BaseSettings):
             for e in self.premium_email_allowlist.split(",")
             if e.strip()
         }
+
+    @property
+    def billing_razorpay_countries_set(self) -> set[str]:
+        return {
+            c.strip().upper()
+            for c in self.billing_razorpay_countries.split(",")
+            if c.strip()
+        }
+
+    @property
+    def checkout_allowed_return_origins_list(self) -> list[str]:
+        out: list[str] = []
+        for o in self.checkout_allowed_return_origins.split(","):
+            s = o.strip()
+            if not s:
+                continue
+            # Keep scheme prefixes (agastya://) intact — rstrip("/") would turn them into "agastya:".
+            if s.endswith("://"):
+                out.append(s)
+            else:
+                out.append(s.rstrip("/"))
+        return out
+
+    @property
+    def razorpay_configured(self) -> bool:
+        return bool(
+            self.razorpay_key_id
+            and self.razorpay_key_secret
+            and self.razorpay_amount_monthly_paise
+            and self.razorpay_amount_annual_paise
+        )
+
+    @property
+    def razorpay_test_bypass_active(self) -> bool:
+        """True only when DEBUG and explicit test bypass flag are both set."""
+        return bool(self.debug and self.billing_razorpay_test_bypass)
 
     @property
     def llm_enabled(self) -> bool:

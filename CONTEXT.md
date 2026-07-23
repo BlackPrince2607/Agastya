@@ -15,7 +15,7 @@ The app is entertainment/self-reflection only. User-facing copy repeatedly clari
 - Frontend: Expo SDK 54, React 19, React Native 0.81, Expo Router, NativeWind, Zustand.
 - Backend: FastAPI, Pydantic, Uvicorn, optional OpenRouter inference, optional Supabase persistence/storage/auth, optional Redis rate limiting.
 - Auth: Supabase client on the app, Supabase JWT verification on the backend.
-- Billing: RevenueCat on native, Stripe Checkout on web, server-side premium flags.
+- Billing: Razorpay (alternative) + Google Play User Choice (Android India); server-side premium flags.
 - Observability: Sentry on frontend and backend, optional PostHog/Mixpanel analytics.
 
 ## Important Commands
@@ -200,13 +200,13 @@ Auth and session orchestration lives in:
 
 ### Billing
 
-`services/revenuecat.ts` handles native RevenueCat setup and entitlement checks. The default entitlement is `premium`, configurable with `EXPO_PUBLIC_REVENUECAT_ENTITLEMENT`.
+`services/billing/BillingManager.ts` is the provider facade. Providers wrap RevenueCat (Play/App Store), Stripe Checkout (web), and Razorpay Payment Links.
 
-`services/stripeBilling.ts` starts Stripe Checkout for web when `EXPO_PUBLIC_STRIPE_CHECKOUT_ENABLED=true` and the API is configured.
+`GET /v1/billing/config?platform=` returns which providers to offer. Track 1 enables Razorpay for **web only** unless `BILLING_RAZORPAY_ANDROID_ENABLED=true` (after Track 1.5 spike). See `DEPLOY.md` §6c and `docs/billing-spike-memo.md`.
 
-`services/premiumUnlock.ts` coordinates purchase/restore/finalize flows and updates local premium state after successful native or web unlock.
+`services/premiumUnlock.ts` coordinates purchase/restore/finalize. User Choice Play path syncs RevenueCat (no second purchase sheet).
 
-Server-side premium is authoritative for protected backend features.
+Server-side premium is authoritative (`is_premium` + optional `premium_expires_at`).
 
 ### Notifications, Analytics, Errors
 

@@ -15,25 +15,31 @@ import { ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS } from '@/constants/onboarding
 import { stitchMd3 } from '@/constants/stitchWelcome';
 import { stitchSignal } from '@/constants/theme';
 import { AnalyticsEvent, track, trackOnce } from '@/services/analytics';
-import { unlockPremiumFromStore, finalizeStripeCheckout } from '@/services/premiumUnlock';
+import { getBillingConfig } from '@/services/billing/billingService';
+import type { BillingConfig } from '@/services/billing/billingService';
+import { isPlayUserChoiceAvailable } from '@/services/billing/playUserChoice';
 import { devUnlockPremium, isPrototypePremiumUnlockEnabled } from '@/services/devPremium';
-import { isRevenueCatConfigured, isStripeCheckoutEnabled, isWebPremiumUnlockAvailable } from '@/services/revenuecat';
+import {
+  unlockPremium,
+  checkPremiumStatus,
+  finalizeRazorpayCheckout,
+} from '@/services/premiumUnlock';
 import { useSessionStore } from '@/store/sessionStore';
 import { enterMainApp } from '@/utils/navigationFlow';
 import { goBack, normalizeRouteParams } from '@/utils/navigationBack';
 import { hasPremiumAccess } from '@/utils/premiumAccess';
 
 const TRUST_HIGHLIGHTS = [
-  'Palm insights tied to your focus areas',
-  'Unlimited Guide conversations about your reading',
-  'Full compatibility breakdowns and report chapters',
+  'Full Life Blueprint chapters grounded in your palm scan',
+  'Unlimited Agastya chat about your Blueprint and journey',
+  'Longer-range forecasts and compatibility insights',
 ];
 
 const FEATURES = [
   {
     icon: 'sparkles' as const,
     title: 'Your full palm report',
-    body: 'The complete reading across love, career, money, and growth.',
+    body: 'Deeper chapters across love, career, money, and growth — citing your measured lines.',
   },
   {
     icon: 'heart-outline' as const,
@@ -56,26 +62,73 @@ export default function PaywallScreen() {
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
   const segments = useSegments();
-  const searchParams = useLocalSearchParams<{ seed?: string; checkout?: string; returnTo?: string }>();
+  const searchParams = useLocalSearchParams<{
+    seed?: string;
+    checkout?: string;
+    provider?: string;
+    returnTo?: string;
+  }>();
   const { seed, checkout, returnTo } = searchParams;
   const routeParams = normalizeRouteParams(searchParams);
   const period = useSessionStore((s) => s.billingPeriod);
   const setPeriod = useSessionStore((s) => s.setBillingPeriod);
   const premium = useSessionStore((s) => s.hasUnlockedPremium);
   const [busy, setBusy] = useState(false);
+  const [billingConfig, setBillingConfig] = useState<BillingConfig | null>(null);
+
+  const testBypass =
+    (process.env.EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS || '').trim() === 'true';
+  const billingAvailable =
+    Platform.OS === 'android' && (testBypass || isPlayUserChoiceAvailable());
 
   useEffect(() => {
     trackOnce('paywall_viewed', AnalyticsEvent.PAYWALL_VIEWED);
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const config = await getBillingConfig();
+      if (!cancelled) setBillingConfig(config);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const mergedSeed = seed ?? useSessionStore.getState().readingSeed ?? 'stillness';
 
+  const formatPlanPrice = (key: 'monthly' | 'annual', fallback: string) => {
+    const plan = billingConfig?.plans?.[key];
+    if (!plan) return fallback;
+    const major = plan.amount / 100;
+    try {
+      return new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency: plan.currency,
+        maximumFractionDigits: plan.currency === 'INR' ? 0 : 2,
+      }).format(major);
+    } catch {
+      return `${plan.currency} ${major}`;
+    }
+  };
+
+  const subscribeLabel = () => {
+    if (busy) return 'Processing...';
+    if (isPrototypePremiumUnlockEnabled()) return 'Unlock full access';
+    return 'Unlock Premium';
+  };
+
   useEffect(() => {
+    if (checkout === 'cancelled') {
+      Alert.alert('Checkout cancelled', 'No charge was completed. You can try again when ready.');
+      return;
+    }
     if (checkout !== 'success') return;
     let cancelled = false;
     setBusy(true);
     void (async () => {
-      const result = await finalizeStripeCheckout(mergedSeed);
+      const result = await finalizeRazorpayCheckout(mergedSeed);
       if (cancelled) return;
       if (result.ok) {
         goToAccountSync();
@@ -83,8 +136,8 @@ export default function PaywallScreen() {
         Alert.alert(
           'Purchase pending',
           result.reason === 'report_failed'
-            ? 'Payment may have succeeded, but we could not load your full report yet. Try Restore or sign in and try again.'
-            : 'We could not confirm your subscription yet. Wait a moment and tap Restore purchases, or contact support if this continues.',
+            ? 'Payment may have succeeded, but we could not load your full report yet. Try checking subscription status or sign in again.'
+            : 'We could not confirm your payment yet. Wait a moment and tap Check subscription status, or contact support if this continues.',
         );
       }
       setBusy(false);
@@ -106,11 +159,11 @@ export default function PaywallScreen() {
       case 'cancelled':
         return 'Purchase was cancelled.';
       case 'unavailable':
-        return 'Subscriptions are not available right now. Check your connection and try again.';
+        return 'Billing is not available on this device. Use a production Android build enrolled in Google Play User Choice.';
       case 'not_entitled':
         return 'No active subscription was found for this account.';
       case 'report_failed':
-        return 'Purchase succeeded, but we could not generate your full report. Please try again or Restore purchases.';
+        return 'Purchase succeeded, but we could not generate your full report. Please try again.';
       default:
         return 'Something went wrong. Please try again.';
     }
@@ -136,7 +189,7 @@ export default function PaywallScreen() {
         return;
       }
 
-      const result = await unlockPremiumFromStore({ mode: 'purchase', seed: mergedSeed });
+      const result = await unlockPremium({ seed: mergedSeed });
 
       if (!result.ok) {
         if (result.reason !== 'cancelled') {
@@ -145,7 +198,7 @@ export default function PaywallScreen() {
         return;
       }
 
-      if (result.source === 'stripe') {
+      if (result.source === 'razorpay') {
         return;
       }
 
@@ -155,15 +208,15 @@ export default function PaywallScreen() {
     }
   };
 
-  const handleRestore = async () => {
+  const handleCheckStatus = async () => {
     if (busy) return;
     setBusy(true);
     try {
-      const result = await unlockPremiumFromStore({ mode: 'restore', seed: mergedSeed });
+      const result = await checkPremiumStatus({ seed: mergedSeed });
       if (result.ok) {
         goToAccountSync();
       } else if (result.reason !== 'cancelled') {
-        Alert.alert('Restore failed', unlockFailureMessage(result.reason));
+        Alert.alert('No subscription found', unlockFailureMessage(result.reason));
       }
     } finally {
       setBusy(false);
@@ -190,31 +243,33 @@ export default function PaywallScreen() {
 
           <View>
             <Text className="font-headline text-[30px] leading-9 tracking-tight text-on-surface">
-              Unlock your full reading
+              Unlock your full Life Blueprint
             </Text>
             <Text className="mt-4 font-body text-[15px] leading-6 text-on-surface-variant">
-              Get your complete palm report, daily guidance, and unlimited conversations with Agastya.
+              Deeper dossier chapters grounded in your palm scan, longer-range forecasts, unlimited chat, and daily
+              rituals. Today&apos;s guidance stays free.
             </Text>
             {premium ? (
               <View className="mt-4 rounded-2xl border border-cyan/35 bg-cyan/10 px-4 py-3">
                 <Text className="font-body text-[14px] text-cyan">You already have full access on this device.</Text>
               </View>
             ) : null}
-            {isWebPremiumUnlockAvailable() ? (
+            {!isPrototypePremiumUnlockEnabled() && billingAvailable ? (
               <Text className="mt-3 font-body text-[13px] leading-5 text-cyan">
-                {isStripeCheckoutEnabled()
-                  ? 'Subscribe securely with Stripe. Billing happens on the web and syncs to your account.'
-                  : 'Complete your purchase to unlock the full experience.'}
+                Google Play will show a secure payment choice — UPI/cards via Razorpay or Google Play billing.
               </Text>
             ) : null}
             {isPrototypePremiumUnlockEnabled() ? (
               <Text className="mt-3 font-body text-[13px] leading-5 text-cyan">
-                Store billing is not configured on this build. Tap below to unlock full access for testing.
+                Development build — tap below to unlock full access for testing.
               </Text>
-            ) : Platform.OS !== 'web' && !isRevenueCatConfigured() ? (
+            ) : !billingAvailable && Platform.OS === 'android' ? (
               <Text className="mt-3 font-body text-[13px] leading-5 text-on-surface-variant">
-                Subscriptions aren&apos;t available in this version yet. You can continue with the free preview from the
-                previous screen.
+                Premium unlock requires a production Android build with Google Play User Choice billing.
+              </Text>
+            ) : Platform.OS !== 'android' ? (
+              <Text className="mt-3 font-body text-[13px] leading-5 text-on-surface-variant">
+                Premium is available on Android (India). Continue with the free preview on this platform.
               </Text>
             ) : null}
           </View>
@@ -250,27 +305,27 @@ export default function PaywallScreen() {
             <PlanRow
               label="Yearly Access"
               badge="Most popular"
-              price="$59.99/year"
-              sub="only $4.99/mo"
+              price={`${formatPlanPrice('annual', '₹4,999')}/year`}
               tag="Save 50%"
               active={period === 'annual'}
               onPress={() => setPeriod('annual')}
             />
             <PlanRow
               label="Monthly Access"
-              price="$9.99/month"
+              price={`${formatPlanPrice('monthly', '₹799')}/month`}
               active={period === 'monthly'}
               onPress={() => setPeriod('monthly')}
             />
           </View>
 
           <View className="items-center gap-2 py-2">
-            <Text className="font-label text-[20px] font-bold tracking-wide text-on-surface">7-Day FREE Trial</Text>
-            <Text className="font-body text-[13px] text-on-surface-variant">Risk-free. Cancel anytime.</Text>
+            <Text className="font-body text-[13px] text-on-surface-variant text-center">
+              Period access after payment. Check subscription status if the app was closed during checkout.
+            </Text>
           </View>
 
-          <Pressable onPress={() => void handleRestore()} disabled={busy} className="items-center py-2 active:opacity-80">
-            <Text className="font-body text-[14px] font-medium text-cyan underline">Restore purchases</Text>
+          <Pressable onPress={() => void handleCheckStatus()} disabled={busy} className="items-center py-2 active:opacity-80">
+            <Text className="font-body text-[14px] font-medium text-cyan underline">Check subscription status</Text>
           </Pressable>
         </ScrollView>
 
@@ -292,15 +347,7 @@ export default function PaywallScreen() {
                 transition={{ type: 'timing', duration: 1100, loop: true, repeatReverse: true }}>
                 <CosmicButton
                   gradient="nebulaMd3"
-                  label={
-                    busy
-                      ? 'Processing...'
-                      : isPrototypePremiumUnlockEnabled()
-                        ? 'Unlock full access'
-                        : isStripeCheckoutEnabled()
-                          ? 'Subscribe with Stripe'
-                          : 'Start 7-Day Free Trial'
-                  }
+                  label={subscribeLabel()}
                   onPress={() => void handleSubscribe()}
                 />
               </MotiView>
@@ -309,7 +356,7 @@ export default function PaywallScreen() {
             <CosmicButton variant="ghost" label="Save & sign in" onPress={goToAccountSync} />
             <View className="mt-1 flex-row items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2.5">
               <Ionicons name="shield-checkmark" size={16} color="#4ade80" />
-              <Text className="font-body text-[12px] text-on-surface/85">Cancel anytime. Restore from Profile.</Text>
+              <Text className="font-body text-[12px] text-on-surface/85">Secure payment via Google Play or Razorpay.</Text>
             </View>
           </View>
         </BlurContainer>

@@ -1,5 +1,6 @@
 import type { FocusTopic } from '@/store/sessionStore';
 import { useSessionStore } from '@/store/sessionStore';
+import { useTaskStore } from '@/store/taskStore';
 import type { HandLandmark } from '@/utils/palmLandmarks';
 import type { PalmAnalysisDto } from '@/types/palmAnalysis';
 import type { PredictionPeriod, PredictionsResponse } from '@/types/predictions';
@@ -13,6 +14,8 @@ import { GUIDE_FINISH_PALM_FIRST } from '@/constants/userCopy';
 import { captureException } from '@/services/sentry';
 
 const DEFAULT_FETCH_TIMEOUT_MS = 8000;
+/** Skip chat health probe for 60s after a successful probe/chat. */
+let _chatHealthOkAt = 0;
 
 function wrapFetchError(path: string, err: unknown): Error {
   const raw = err instanceof Error ? err.message : String(err);
@@ -272,20 +275,52 @@ export async function mergeSessions(body: {
   );
 }
 
-export async function createStripeCheckoutSession(body: {
+export async function createRazorpayPaymentLink(body: {
   sessionId: string;
   deviceInstallId: string;
   billingPeriod: 'monthly' | 'annual';
   successUrl: string;
   cancelUrl: string;
+  externalTransactionToken?: string;
+  administrativeArea?: string;
+  platform?: 'android';
 }) {
-  return postJson<{ checkoutUrl: string }>('/v1/billing/checkout', {
-    sessionId: body.sessionId,
-    deviceInstallId: body.deviceInstallId,
-    billingPeriod: body.billingPeriod,
-    successUrl: body.successUrl,
-    cancelUrl: body.cancelUrl,
-  });
+  return postJson<{ checkoutUrl: string; checkoutIntentId: string }>(
+    '/v1/billing/razorpay/create-payment-link',
+    {
+      sessionId: body.sessionId,
+      deviceInstallId: body.deviceInstallId,
+      billingPeriod: body.billingPeriod,
+      successUrl: body.successUrl,
+      cancelUrl: body.cancelUrl,
+      externalTransactionToken: body.externalTransactionToken,
+      administrativeArea: body.administrativeArea,
+      platform: body.platform ?? 'android',
+    },
+  );
+}
+
+export async function verifyGooglePlayPurchase(body: {
+  sessionId: string;
+  deviceInstallId: string;
+  purchaseToken: string;
+  productId: string;
+}) {
+  return postJson<{ isPremium: boolean; source: 'google_play' }>(
+    '/v1/billing/google-play/verify-purchase',
+    {
+      sessionId: body.sessionId,
+      deviceInstallId: body.deviceInstallId,
+      purchaseToken: body.purchaseToken,
+      productId: body.productId,
+    },
+  );
+}
+
+export async function fetchBillingConfig(platform: 'android' | 'ios' | 'web' = 'android') {
+  return getJson<import('@/services/billing/billingService').BillingConfig>(
+    `/v1/billing/config?platform=${encodeURIComponent(platform)}`,
+  );
 }
 
 export async function analyzePalm(body: {
@@ -552,21 +587,30 @@ export async function requestGuideReply(
 
   await syncProfileRemote();
 
-  try {
-    await fetchApiHealth();
-  } catch (probeErr) {
-    captureException(probeErr, { apiRoot: AGASTYA_API_ROOT, phase: 'chat_health_probe' });
-    return {
-      ok: false,
-      error: `${ERRORS.network} (server: ${getApiHostLabel()})`,
-      offline: true,
-    };
+  // Skip health probe when we recently reached the API successfully (warm session).
+  const now = Date.now();
+  const lastOk = _chatHealthOkAt;
+  if (!lastOk || now - lastOk > 60_000) {
+    try {
+      await fetchApiHealth();
+      _chatHealthOkAt = Date.now();
+    } catch (probeErr) {
+      captureException(probeErr, { apiRoot: AGASTYA_API_ROOT, phase: 'chat_health_probe' });
+      return {
+        ok: false,
+        error: `${ERRORS.network} (server: ${getApiHostLabel()})`,
+        offline: true,
+      };
+    }
   }
+
+  const focusTheme = useTaskStore.getState().focusTheme;
 
   const profileSummary = [
     userDisplayName ? `Name: ${userDisplayName}` : '',
     userGender ? `Gender: ${userGender}` : '',
     focusTopics.length ? `Focus areas: ${focusTopics.join(', ')}` : '',
+    focusTheme ? `Today's focus: ${focusTheme}` : '',
     `Personality: ${palmAnalysis.personality}`,
     `Traits: ${palmAnalysis.traits.join(', ')}`,
     `Life line: ${palmAnalysis.life_line}`,
@@ -591,6 +635,7 @@ export async function requestGuideReply(
         profileSummary,
       }),
     );
+    _chatHealthOkAt = Date.now();
     if (__DEV__) {
       const frontendPlaceholder = reply.includes('You often think things through before you speak');
       console.log(

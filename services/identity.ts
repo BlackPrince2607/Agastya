@@ -7,7 +7,6 @@ import { diagnoseReachability, reachabilityDevHint } from '@/services/apiReachab
 import { AGASTYA_API_ROOT, isApiConfigured } from '@/services/env';
 import { track } from '@/services/analytics';
 import { getApiHealth, setApiHealth, setApiHealthFailed } from '@/services/connectivity';
-import { linkRevenueCatUser } from '@/services/revenuecat';
 import { restoreSessionFromServer } from '@/services/sessionRestore';
 import { useSessionStore } from '@/store/sessionStore';
 
@@ -159,8 +158,6 @@ async function runBootstrapRemote(): Promise<void> {
  */
 export async function bootstrapIdentity() {
   const { sessionId } = await ensureDeviceIdentity();
-
-  void linkRevenueCatUser(sessionId);
 
   if (bootstrapRemoteInFlight) {
     await bootstrapRemoteInFlight;

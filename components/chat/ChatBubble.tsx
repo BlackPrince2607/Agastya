@@ -50,7 +50,7 @@ export function ChatBubble({ role, text, stacked = false, stacksNext = false }: 
             <Icon name="auto_awesome" size={11} color={colors.primary} />
           </View>
           <Text className="font-label text-[9px] uppercase tracking-[0.12em] text-on-primary-container">
-            Guide
+            Agastya
           </Text>
         </View>
       ) : null}

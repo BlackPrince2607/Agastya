@@ -28,9 +28,9 @@ async function getHandLandmarker(): Promise<HandLandmarker | null> {
         baseOptions: { modelAssetPath: MODEL_URL },
         runningMode: 'IMAGE',
         numHands: 2,
-        minHandDetectionConfidence: 0.3,
-        minHandPresenceConfidence: 0.3,
-        minTrackingConfidence: 0.3,
+        minHandDetectionConfidence: 0.2,
+        minHandPresenceConfidence: 0.2,
+        minTrackingConfidence: 0.2,
       });
     } catch (err) {
       if (__DEV__) console.warn('[Agastya palm] MediaPipe init failed', err);
@@ -74,16 +74,90 @@ function pickHandIndex(
   return 0;
 }
 
-function flipImageHorizontal(image: HTMLImageElement): HTMLCanvasElement {
+type CanvasVariant = {
+  canvas: HTMLCanvasElement;
+  /** Map normalized crop coords → full image coords; then optional mirror undo. */
+  remap: (pts: HandLandmark[]) => HandLandmark[];
+};
+
+function drawImageToCanvas(
+  source: CanvasImageSource,
+  width: number,
+  height: number,
+  opts?: { mirror?: boolean; brightness?: number; contrast?: number },
+): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
-  canvas.width = image.naturalWidth || image.width;
-  canvas.height = image.naturalHeight || image.height;
+  canvas.width = width;
+  canvas.height = height;
   const ctx = canvas.getContext('2d');
   if (!ctx) return canvas;
-  ctx.translate(canvas.width, 0);
-  ctx.scale(-1, 1);
-  ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+  if (opts?.mirror) {
+    ctx.translate(width, 0);
+    ctx.scale(-1, 1);
+  }
+  ctx.drawImage(source, 0, 0, width, height);
+  if (opts?.brightness != null || opts?.contrast != null) {
+    const imgData = ctx.getImageData(0, 0, width, height);
+    const b = opts.brightness ?? 1;
+    const c = opts.contrast ?? 1;
+    const data = imgData.data;
+    for (let i = 0; i < data.length; i += 4) {
+      for (let ch = 0; ch < 3; ch++) {
+        let v = data[i + ch] / 255;
+        v = (v - 0.5) * c + 0.5;
+        v *= b;
+        data[i + ch] = Math.max(0, Math.min(255, Math.round(v * 255)));
+      }
+    }
+    ctx.putImageData(imgData, 0, 0);
+  }
   return canvas;
+}
+
+function buildVariants(image: HTMLImageElement): CanvasVariant[] {
+  const fullW = image.naturalWidth || image.width;
+  const fullH = image.naturalHeight || image.height;
+  const identity = (pts: HandLandmark[]) => pts;
+  const unmirror = (pts: HandLandmark[]) => pts.map(([x, y]) => [1 - x, y] as HandLandmark);
+
+  const variants: CanvasVariant[] = [
+    { canvas: drawImageToCanvas(image, fullW, fullH), remap: identity },
+    { canvas: drawImageToCanvas(image, fullW, fullH, { mirror: true }), remap: unmirror },
+    {
+      canvas: drawImageToCanvas(image, fullW, fullH, { brightness: 1.15, contrast: 1.12 }),
+      remap: identity,
+    },
+    {
+      canvas: drawImageToCanvas(image, fullW, fullH, { mirror: true, brightness: 1.15, contrast: 1.12 }),
+      remap: unmirror,
+    },
+  ];
+
+  const mx = Math.floor(fullW * 0.12);
+  const my = Math.floor(fullH * 0.1);
+  const cropW = fullW - mx * 2;
+  const cropH = fullH - my * 2;
+  if (cropW >= 64 && cropH >= 64) {
+    const cropCanvas = document.createElement('canvas');
+    cropCanvas.width = cropW;
+    cropCanvas.height = cropH;
+    const ctx = cropCanvas.getContext('2d');
+    if (ctx) {
+      ctx.drawImage(image, mx, my, cropW, cropH, 0, 0, cropW, cropH);
+      const remapCrop = (pts: HandLandmark[]): HandLandmark[] =>
+        pts.map(
+          ([x, y]) =>
+            [(x * cropW + mx) / fullW, (y * cropH + my) / fullH] as HandLandmark,
+        );
+      variants.push({ canvas: cropCanvas, remap: remapCrop });
+      variants.push({
+        canvas: drawImageToCanvas(cropCanvas, cropW, cropH, { mirror: true }),
+        remap: (pts) => remapCrop(unmirror(pts)),
+      });
+    }
+  }
+
+  return variants;
 }
 
 export async function detectHandLandmarksFromBase64(
@@ -100,35 +174,24 @@ export async function detectHandLandmarksFromBase64(
     if (!landmarker) return fallback();
 
     const image = await base64ToImage(base64);
-    let result = landmarker.detect(image);
-    let mirrored = false;
+    const variants = buildVariants(image);
 
-    if (!result.landmarks?.length) {
-      const flipped = flipImageHorizontal(image);
-      result = landmarker.detect(flipped);
-      mirrored = Boolean(result.landmarks?.length);
+    for (const variant of variants) {
+      const result = landmarker.detect(variant.canvas);
+      if (!result.landmarks?.length) continue;
+
+      const handIdx = pickHandIndex(result, hand);
+      const detected = mediapipeToLandmarks(result.landmarks[handIdx]);
+      if (!detected) continue;
+
+      const landmarks = variant.remap(detected);
+      if (__DEV__) {
+        console.log('[Agastya palm] MediaPipe landmarks detected', landmarks.length, 'hand=', hand);
+      }
+      return { landmarks, source: 'mediapipe' };
     }
 
-    if (!result.landmarks?.length) return fallback();
-
-    const handIdx = pickHandIndex(result, hand);
-    const detected = mediapipeToLandmarks(result.landmarks[handIdx]);
-    if (!detected) return fallback();
-
-    const landmarks = mirrored
-      ? (detected.map(([x, y]) => [1 - x, y] as HandLandmark))
-      : detected;
-
-    if (__DEV__) {
-      console.log(
-        '[Agastya palm] MediaPipe landmarks detected',
-        landmarks.length,
-        'hand=',
-        hand,
-        mirrored ? '(mirrored retry)' : '',
-      );
-    }
-    return { landmarks, source: 'mediapipe' };
+    return fallback();
   } catch (err) {
     if (__DEV__) console.warn('[Agastya palm] MediaPipe detect failed, using ROI estimate', err);
     return fallback();

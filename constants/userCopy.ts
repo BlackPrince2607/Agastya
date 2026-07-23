@@ -66,9 +66,9 @@ export const HOME_SHORTCUTS: HomeShortcut[] = [
   },
   {
     icon: 'comments-o',
-    label: 'Guide',
-    subtitle: 'AI spiritual guide',
-    hint: 'Ask questions about your reading',
+    label: 'Ask Agastya',
+    subtitle: 'Chat about your Blueprint',
+    hint: 'Ask questions about your reading and journey',
     action: 'guide',
   },
   {
@@ -156,7 +156,7 @@ export const PROFILE_WEEKLY_EMPTY = {
 export const CHAT_PLACEHOLDER_EMPTY = 'Ask about your reading…';
 export const CHAT_PLACEHOLDER_FOLLOW = 'Ask a follow-up…';
 export const GUIDE_INTRO =
-  'Ask me about your palm reading, your focus areas, or what today might hold. What is on your mind?';
+  "I'm here with your Life Blueprint — ask about today, a decision on your mind, or something from your reading.";
 
 export const PALM_CAPTURE_FAILED =
   "We couldn't capture your palm. Try again in better light with your hand steady.";
@@ -165,10 +165,19 @@ export const PALM_CAPTURE_PREPARING = 'Preparing your photo…';
 
 export const PALM_REVIEW_TITLE = 'Check your palm photo';
 export const PALM_REVIEW_SUBTITLE =
-  'Confirm a clear open palm — major lines are traced on the server after you analyze.';
+  'Use a clear open palm filling the frame — we detect your hand first, then trace major lines.';
 export const PALM_REVIEW_RETAKE = 'Retake';
 export const PALM_REVIEW_ANALYZE = 'Analyze palm';
 export const PALM_REVIEW_ANALYZING = 'Preparing…';
+export const PALM_REVIEW_NEED_HAND =
+  'Hand not confirmed yet — open palm filling the frame works best. You can still analyze; we’ll try again on the server.';
+
+export const PALM_LINES_CONFIRM_TITLE = 'Confirm your lines';
+export const PALM_LINES_CONFIRM_SUBTITLE =
+  'These are the major creases we locked from your photo. Confirm to continue your Life Blueprint.';
+export const PALM_LINES_CONFIRM_CTA = 'Looks good — continue';
+export const PALM_LINES_CONFIRM_RETAKE = 'Retake photo';
+export const PALM_LINES_BUILDING = 'Building your Life Blueprint…';
 
 export const PALM_CAMERA_COACHING =
   'Ask someone to hold the phone, or rest it and photograph your other hand.';

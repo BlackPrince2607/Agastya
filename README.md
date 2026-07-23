@@ -12,7 +12,7 @@ Users complete a guided onboarding ritual (profile, goals, palm scan, analysis, 
 |-------|--------|
 | **Mobile / web** | Expo SDK 54, React Native, Expo Router, NativeWind, Zustand |
 | **Backend** | FastAPI, OpenRouter (vision + chat), Supabase (auth, DB, storage) |
-| **Billing** | RevenueCat (iOS/Android), Stripe (web) |
+| **Billing** | Razorpay (alternative) + Google Play User Choice (Android India) |
 | **Observability** | Sentry, PostHog / Mixpanel (optional) |
 
 ---
@@ -107,7 +107,7 @@ npm start
 Agastya/
 ├── app/                  # Expo Router screens (onboarding, main tabs, auth, report)
 ├── components/           # UI primitives, layout, report cards, onboarding
-├── services/             # API client, auth, Supabase, RevenueCat, analytics
+├── services/             # API client, auth, Supabase, billing, analytics
 ├── hooks/                # Shared React hooks
 ├── constants/            # Theme, onboarding copy
 ├── utils/                # Navigation flow, local predictions, helpers
@@ -130,7 +130,7 @@ Login is **optional**. Users can complete the full onboarding ritual anonymously
 
 - **Anonymous**: local ritual data in `AsyncStorage`
 - **Signed in**: Supabase OAuth (Google, Apple) or email/password; session merge syncs cloud data
-- **Premium**: server `is_premium` flag + RevenueCat (mobile) or Stripe (web)
+- **Premium**: server `is_premium` flag; Razorpay webhooks or Google Play verify + RTDN
 
 Redirect URLs for auth must include `agastya://**` (native) and your web origin. Details in `DEPLOY.md` §5.
 

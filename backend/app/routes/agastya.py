@@ -206,6 +206,8 @@ async def _sync_premium(session_id: str, settings: Settings) -> SessionBucket:
     # Fresh DB hydrate already includes is_premium — skip the extra select.
     if was_cached:
         await session_repository.refresh_premium_from_db(session_id, bkt, settings)
+    elif bkt.is_premium and not bkt.effectively_premium():
+        bkt.is_premium = False
     return bkt
 
 
@@ -273,7 +275,7 @@ def _bootstrap_light_from_bucket(session_id: str, bkt: SessionBucket) -> Session
         palm_analysis=None,
         preview_report=None,
         full_report=None,
-        is_premium=bkt.is_premium,
+        is_premium=bkt.effectively_premium(),
         chat_tail=[],
         daily_context=_slim_daily_context(bkt),
         weekly_context=_slim_weekly_context(bkt),
@@ -294,7 +296,7 @@ def _bootstrap_from_bucket(session_id: str, bkt: SessionBucket) -> SessionBootst
         palm_analysis=bkt.palm.model_dump() if bkt.palm else None,
         preview_report=bkt.preview.model_dump(by_alias=True) if bkt.preview else None,
         full_report=bkt.full.model_dump(by_alias=True) if bkt.full else None,
-        is_premium=bkt.is_premium,
+        is_premium=bkt.effectively_premium(),
         chat_tail=bkt.chat_tail[-40:] if bkt.chat_tail else [],
         daily_context=_slim_daily_context(bkt),
         weekly_context=_slim_weekly_context(bkt),
@@ -508,11 +510,30 @@ async def reports_generate(
     bkt = bucket(body.session_id)
     _bind_device(bkt, body.session_id, body.device_install_id)
     bkt = await _sync_premium(body.session_id, settings)
-    if body.mode == "full" and not bkt.is_premium:
+    if body.mode == "full" and not bkt.effectively_premium():
         raise HTTPException(status_code=403, detail="Premium required for full report")
     palm = body.palm_analysis or bkt.palm
     if palm is None:
         raise HTTPException(status_code=400, detail="Run palm analysis before requesting a dossier.")
+
+    from app.services.user_memory import prompt_memory_snippets
+
+    journey, temporary = prompt_memory_snippets(bkt)
+    daily = bkt.daily_context or {}
+    weekly = bkt.weekly_context or {}
+    recent = daily.get("recentChapters") if isinstance(daily.get("recentChapters"), list) else []
+    slim_chapters = []
+    for ch in recent[:4]:
+        if isinstance(ch, dict):
+            slim_chapters.append(
+                {
+                    "title": ch.get("title"),
+                    "theme": ch.get("theme") or ch.get("focusTheme"),
+                    "date": ch.get("date") or ch.get("isoDate"),
+                }
+            )
+    current_chapter = weekly.get("currentChapter") if isinstance(weekly.get("currentChapter"), str) else None
+
     report = await build_report_payload(
         settings,
         seed=body.seed,
@@ -521,6 +542,10 @@ async def reports_generate(
         mode=body.mode,
         display_name=body.display_name,
         gender=body.gender,
+        life_journey=journey or None,
+        temporary_context=temporary or None,
+        recent_chapters=slim_chapters or None,
+        current_chapter=current_chapter,
     )
     if body.mode == "preview":
         bkt.preview = report
@@ -542,7 +567,7 @@ async def cosmic_chat(body: ChatRequest, settings: Annotated[Settings, Depends(g
         reply, suggestions = await generate_chat_reply(
             settings,
             body,
-            server_is_premium=bkt.is_premium,
+            server_is_premium=bkt.effectively_premium(),
             prior_chat_tail=bkt.chat_tail,
             bkt=bkt,
         )
@@ -642,7 +667,7 @@ async def daily_tasks(body: DailyTasksBody, settings: Annotated[Settings, Depend
     bkt = bucket(body.session_id)
     _bind_device(bkt, body.session_id, body.device_install_id)
     bkt = await _sync_premium(body.session_id, settings)
-    body = body.model_copy(update={"is_premium": bkt.is_premium})
+    body = body.model_copy(update={"is_premium": bkt.effectively_premium()})
     tasks, variant, focus_theme, changed = await generate_daily_tasks(settings, body, bkt)
     # tasksCache lives under daily_context but never overwrites Today's Focus / guidance.
     if changed:
@@ -663,7 +688,7 @@ async def predictions_generate(
     bkt = bucket(body.session_id)
     _bind_device(bkt, body.session_id, body.device_install_id)
     bkt = await _sync_premium(body.session_id, settings)
-    if body.period in {"3month", "year"} and not bkt.is_premium:
+    if body.period in {"3month", "year"} and not bkt.effectively_premium():
         raise HTTPException(status_code=403, detail="Premium required for this prediction period")
     palm = body.palm_analysis or bkt.palm
     if palm is None:

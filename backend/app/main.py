@@ -76,10 +76,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     elif not settings.debug:
         log.warning("REDIS_URL not set — using in-process rate limits (single worker recommended)")
 
-    if not settings.revenuecat_webhook_secret and not settings.debug:
-        log.warning(
-            "REVENUECAT_WEBHOOK_SECRET not set — premium webhooks disabled until RevenueCat is configured"
-        )
+    if settings.billing_razorpay_enabled and not settings.razorpay_webhook_secret and not settings.debug:
+        log.warning("RAZORPAY_WEBHOOK_SECRET not set — Razorpay premium webhooks disabled")
 
     yield
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any
 
 from app.schemas.palm import PalmAnalysis
@@ -35,14 +36,26 @@ class SessionBucket:
     # Cached predictions keyed by period ("month" | "3month" | "year").
     predictions: dict[str, PredictionsResponse] = field(default_factory=dict)
     meta: dict[str, Any] = field(default_factory=dict)
-    # Server-authoritative premium flag — set by RevenueCat webhook, not the client.
+    # Server-authoritative premium flag — set by billing webhooks, not the client.
     is_premium: bool = False
+    premium_source: str | None = None
+    premium_expires_at: datetime | None = None
     # Layered memory: Life Journey + Temporary Context (Permanent Identity stays on palm/reports).
     user_memory: dict[str, list[Any]] = field(default_factory=empty_user_memory)
     # Today's chapter cache: guidance, focusTheme, optional reflection.
     daily_context: dict[str, Any] | None = None
     # Weekly Journey Summary cache keyed by ISO week.
     weekly_context: dict[str, Any] | None = None
+
+    def effectively_premium(self) -> bool:
+        if not self.is_premium:
+            return False
+        if self.premium_expires_at is None:
+            return True
+        exp = self.premium_expires_at
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        return exp > datetime.now(timezone.utc)
 
 
 _BUCKETS: dict[str, SessionBucket] = {}
@@ -136,6 +149,12 @@ def merge_bucket_data(target: SessionBucket, source: SessionBucket) -> None:
         target.full = source.full
     if source.is_premium:
         target.is_premium = True
+        if source.premium_source:
+            target.premium_source = source.premium_source
+        if source.premium_expires_at and (
+            target.premium_expires_at is None or source.premium_expires_at > target.premium_expires_at
+        ):
+            target.premium_expires_at = source.premium_expires_at
     if len(source.chat_tail) > len(target.chat_tail):
         target.chat_tail = list(source.chat_tail)
     for period, pred in source.predictions.items():

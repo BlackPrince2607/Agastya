@@ -1,0 +1,20 @@
+plugins {
+  id("com.android.library")
+  id("expo-module-gradle-plugin")
+}
+
+group = "expo.modules.playuserchoice"
+version = "1.0.0"
+
+android {
+  namespace "expo.modules.playuserchoice"
+  defaultConfig {
+    versionCode 1
+    versionName "1.0.0"
+  }
+}
+
+dependencies {
+  // Required: Play Billing Library 7.x for India User Choice Billing (enableUserChoiceBilling).
+  implementation("com.android.billingclient:billing-ktx:7.1.1")
+}

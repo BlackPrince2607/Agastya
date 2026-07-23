@@ -29,7 +29,7 @@ import { useSessionStore } from '@/store/sessionStore';
 
 const SAVE_MESSAGES = [
   'Saving your profile...',
-  'Updating your spiritual journey...',
+  'Updating your journey...',
   'Almost ready...',
 ] as const;
 

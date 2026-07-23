@@ -31,7 +31,7 @@ import { signInFromProfile, signOutAndReturnToWelcome, resetLocalAndSignOut, del
 import { fetchJourneyTimeline, fetchWeeklySummary } from '@/services/agastyaApi';
 import { readThisWeeksLocalSummary, writeLocalWeekly } from '@/services/guidanceCache';
 import { AnalyticsEvent, trackOnce } from '@/services/analytics';
-import { unlockPremiumFromStore } from '@/services/premiumUnlock';
+import { checkPremiumStatus } from '@/services/premiumUnlock';
 import { isSupabaseEnabled } from '@/services/supabase';
 import { useChatStore } from '@/store/chatStore';
 import { useSessionStore } from '@/store/sessionStore';
@@ -196,12 +196,12 @@ export default function ProfileScreen() {
     if (restoreBusy) return;
     setRestoreBusy(true);
     try {
-      const result = await unlockPremiumFromStore({ mode: 'restore' });
+      const result = await checkPremiumStatus({});
       Alert.alert(
-        result.ok ? 'Subscription restored' : 'No subscription found',
+        result.ok ? 'Subscription active' : 'No subscription found',
         result.ok
           ? 'Pro is active on this account.'
-          : 'We couldn’t find an active subscription for this store account.',
+          : 'We could not find an active subscription. If you paid recently, wait a moment and try again.',
       );
     } finally {
       setRestoreBusy(false);
@@ -422,8 +422,8 @@ export default function ProfileScreen() {
         <SettingsSection index={2} title="Subscription" subtitle="Membership and billing">
           <SettingsRow
             icon="refresh"
-            title={restoreBusy ? 'Restoring…' : 'Restore purchases'}
-            subtitle="Recover Pro on this device"
+            title={restoreBusy ? 'Checking…' : 'Check subscription status'}
+            subtitle="Sync premium from your account"
             onPress={() => void handleRestorePurchases()}
             last={!manageSubsUrl || !premium}
           />

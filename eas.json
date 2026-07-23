@@ -10,6 +10,7 @@
     },
     "preview": {
       "distribution": "internal",
+      "environment": "preview",
       "ios": {
         "simulator": false
       },
@@ -24,18 +25,19 @@
     },
     "prototype": {
       "distribution": "internal",
+      "environment": "preview",
       "android": {
         "buildType": "apk"
       },
       "env": {
         "EXPO_PUBLIC_AGASTYA_API_URL": "https://agastya-production-eb56.up.railway.app",
-        "EXPO_PUBLIC_REVENUECAT_ENTITLEMENT": "premium",
         "EXPO_UPDATES_ENABLED": "false",
         "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       }
     },
     "production": {
       "autoIncrement": true,
+      "environment": "production",
       "env": {
         "EXPO_PUBLIC_AGASTYA_API_URL": "https://agastya-production-eb56.up.railway.app"
       }

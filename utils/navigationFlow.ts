@@ -103,10 +103,14 @@ export function resolveSignedInHrefSync(): Href {
 
 /** When main/report gates block access, pick a safe onboarding target. */
 export function resolveBlockedAppHref(isSignedIn: boolean): Href {
+  const gate = canEnterMainAppSync();
+  if (gate === 'need_sign_in') {
+    return isSignedIn && requiresSupabaseSignIn() ? resolveSignedInHrefSync() : '/onboarding/account';
+  }
   if (isSignedIn && requiresSupabaseSignIn()) {
     return resolveSignedInHrefSync();
   }
-  if (hasRitualReading()) {
+  if (gate === 'ok' && hasRitualReading()) {
     return '/(main)/home';
   }
   return resolveOnboardingHref();

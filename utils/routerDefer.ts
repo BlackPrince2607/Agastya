@@ -30,3 +30,17 @@ export function deferRouterReplace(href: ReplaceHref) {
 export function resetAppNavigation(href: Href) {
   deferRouterReplace(href as ReplaceHref);
 }
+
+/** Replace immediately — use when local store updates would race layout `<Redirect>`s. */
+export function resetAppNavigationSync(href: Href) {
+  try {
+    router.replace(href as ReplaceHref);
+  } catch {
+    deferRouterReplace(href as ReplaceHref);
+  }
+}
+
+/** Run after navigation is scheduled (next microtask). */
+export function deferAfterNavigation(run: () => void) {
+  scheduleNavigation(run);
+}

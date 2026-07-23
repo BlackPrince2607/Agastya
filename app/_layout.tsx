@@ -25,7 +25,6 @@ import { cosmicGradients } from '@/constants/theme';
 import { subscribeAuthDeepLinks } from '@/services/authCallback';
 import { subscribeSupabaseSessionMerge } from '@/services/authMerge';
 import { bootstrapIdentity } from '@/services/identity';
-import { configureRevenueCat } from '@/services/revenuecat';
 import { isServerEnvironment } from '@/services/persistentStorage';
 import { initSentry } from '@/services/sentry';
 import { useSessionStore } from '@/store/sessionStore';
@@ -93,10 +92,7 @@ export default function RootLayout() {
     if (isServerEnvironment()) return;
     const stopDeepLinks = subscribeAuthDeepLinks();
     const stopMerge = subscribeSupabaseSessionMerge();
-    void bootstrapIdentity().then(() => {
-      const id = useSessionStore.getState().sessionId;
-      if (id) void configureRevenueCat(id);
-    });
+    void bootstrapIdentity();
     return () => {
       stopDeepLinks();
       stopMerge();

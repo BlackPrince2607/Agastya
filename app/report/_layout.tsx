@@ -44,7 +44,7 @@ export default function ReportLayout() {
 
   if (!entered) {
     const resume = resolveBlockedAppHref(isSignedIn);
-    return <Redirect href={resume === '/(main)/home' ? '/welcome' : resume} />;
+    return <Redirect href={resume} />;
   }
 
   if (requiresSupabaseSignIn() && authLoading) {

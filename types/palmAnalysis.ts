@@ -46,5 +46,9 @@ export function isLivePalmAnalysis(palm: PalmAnalysisDto | null | undefined): bo
 
 export function palmNeedsRetake(palm: PalmAnalysisDto | null | undefined): boolean {
   if (!palm) return false;
-  return palm.image_quality === 'no_hand' || palm.image_quality === 'poor';
+  if (palm.image_quality === 'no_hand' || palm.image_quality === 'poor') return true;
+  // Invented anatomy overlays are not trustworthy — treat as retake.
+  if (palm.geometry_source === 'landmark_heuristic') return true;
+  if (palm.geometry_source === 'unavailable') return true;
+  return false;
 }

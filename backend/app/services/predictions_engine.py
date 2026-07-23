@@ -84,7 +84,7 @@ async def build_predictions_payload(
                 {"role": "system", "content": PREDICTIONS_SYSTEM},
                 {"role": "user", "content": json.dumps(payload)},
             ],
-            temperature=0.85,
+            temperature=0.65,
         )
         if completion is None:
             logger.warning("llm_fallback_reason=predictions llm_enabled=%s", settings.llm_enabled)

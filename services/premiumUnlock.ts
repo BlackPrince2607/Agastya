@@ -1,20 +1,20 @@
+import { Alert, Platform } from 'react-native';
+
 import { generateReport } from '@/services/agastyaApi';
 import { AnalyticsEvent, track } from '@/services/analytics';
+import {
+  isAndroidBillingAvailable,
+  startRazorpayCheckout,
+  verifyPlayPurchase,
+} from '@/services/billing/billingService';
+import { isPlayUserChoiceAvailable, launchPlayUserChoiceBilling } from '@/services/billing/playUserChoice';
 import { normalizeFullReport } from '@/services/normalizeReport';
 import { restoreSessionFromServer } from '@/services/sessionRestore';
-import {
-  isRevenueCatConfigured,
-  isStripeCheckoutEnabled,
-  purchasePremiumPlan,
-  refreshPremiumFromStore,
-  restorePurchasesFromStore,
-} from '@/services/revenuecat';
-import { startStripeCheckout } from '@/services/stripeBilling';
 import { useSessionStore } from '@/store/sessionStore';
 
 export type UnlockResult =
-  | { ok: true; source: 'purchase' | 'restore' | 'entitlement' | 'stripe' }
-  | { ok: false; reason: 'cancelled' | 'unavailable' | 'not_entitled' | 'report_failed' };
+  | { ok: true; source: 'purchase' | 'restore' | 'razorpay' | 'google_play' }
+  | { ok: false; reason: 'cancelled' | 'unavailable' | 'not_entitled' | 'report_failed' | 'failed' };
 
 async function syncPremiumFromServer(): Promise<boolean> {
   await restoreSessionFromServer({ force: true });
@@ -49,83 +49,184 @@ async function materializeFullReport(seed?: string): Promise<boolean> {
   }
 }
 
-/** Subscribe or restore — sets premium when store/webhook confirms entitlement. */
-export async function unlockPremiumFromStore(options: {
-  mode: 'purchase' | 'restore';
-  seed?: string;
-}): Promise<UnlockResult> {
-  const { mode, seed } = options;
+async function finalizeAfterEntitlement(
+  seed: string | undefined,
+  source: UnlockResult extends { ok: true } ? UnlockResult['source'] : never,
+  trackPurchase: boolean,
+): Promise<UnlockResult> {
   const setPremium = useSessionStore.getState().setPremium;
-
-  if (isStripeCheckoutEnabled() && mode === 'purchase') {
-    const checkout = await startStripeCheckout();
-    if (checkout.ok) {
-      return { ok: true, source: 'stripe' };
-    }
-    if (checkout.reason === 'cancelled') {
-      return { ok: false, reason: 'cancelled' };
-    }
-    return { ok: false, reason: 'unavailable' };
-  }
-
-  if (!isRevenueCatConfigured()) {
-    return { ok: false, reason: 'unavailable' };
-  }
-
-  let entitled = false;
-
-  if (mode === 'restore') {
-    entitled = await restorePurchasesFromStore();
-  } else {
-    const purchase = await purchasePremiumPlan(useSessionStore.getState().billingPeriod);
-    entitled = purchase.entitled;
-    if (!purchase.success && !entitled) {
-      return { ok: false, reason: 'cancelled' };
-    }
-  }
-
-  if (!entitled) {
-    entitled = await refreshPremiumFromStore();
-  }
-
-  if (!entitled) {
-    return { ok: false, reason: 'not_entitled' };
-  }
-
-  // Prefer server isPremium (webhook). Fall back to store entitlement if webhook lags.
   let serverPremium = await syncPremiumFromServer();
-  if (!serverPremium && entitled) {
-    // Brief wait for webhook, then re-check once.
+  if (!serverPremium) {
     await new Promise((r) => setTimeout(r, 1500));
     serverPremium = await syncPremiumFromServer();
   }
 
   const reportOk = await materializeFullReport(seed);
   if (!reportOk && !useSessionStore.getState().fullReading) {
-    setPremium(false);
+    if (!serverPremium) setPremium(false);
     return { ok: false, reason: 'report_failed' };
   }
 
-  setPremium(serverPremium || entitled);
-  if (mode === 'purchase') {
-    track(AnalyticsEvent.PURCHASE_COMPLETED, { source: 'purchase' });
+  setPremium(serverPremium || true);
+  if (trackPurchase) {
+    track(AnalyticsEvent.PURCHASE_COMPLETED, { source });
   }
-  return { ok: true, source: mode === 'restore' ? 'restore' : 'purchase' };
+  return { ok: true, source };
 }
 
-/** After Stripe Checkout success redirect — poll server for isPremium. */
-export async function finalizeStripeCheckout(seed?: string): Promise<UnlockResult> {
+function promptAdministrativeArea(): Promise<string | null> {
+  return new Promise((resolve) => {
+    const finish = (code: string | null) => resolve(code);
+    const envDefault = (process.env.EXPO_PUBLIC_BILLING_DEFAULT_ADMIN_AREA || '').trim().toUpperCase();
+    if (envDefault.length >= 2) {
+      finish(envDefault);
+      return;
+    }
+    Alert.alert(
+      'Select your state / UT',
+      'Required for Google Play alternative billing reporting in India.',
+      [
+        { text: 'Cancel', style: 'cancel', onPress: () => finish(null) },
+        { text: 'Karnataka (KA)', onPress: () => finish('KA') },
+        { text: 'Maharashtra (MH)', onPress: () => finish('MH') },
+        { text: 'Delhi (DL)', onPress: () => finish('DL') },
+        { text: 'Tamil Nadu (TN)', onPress: () => finish('TN') },
+        { text: 'Other (set EXPO_PUBLIC_BILLING_DEFAULT_ADMIN_AREA)', onPress: () => finish(null) },
+      ],
+    );
+  });
+}
+
+/** DEBUG-only: open Razorpay without Play User Choice (local E2E testing). */
+function isRazorpayTestBypassEnabled(): boolean {
+  return (process.env.EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS || '').trim() === 'true';
+}
+
+/** Unlock Premium — Android India User Choice → Razorpay or Google Play. */
+export async function unlockPremium(options: { seed?: string }): Promise<UnlockResult> {
+  const { seed } = options;
+
+  if (Platform.OS !== 'android' || !isAndroidBillingAvailable()) {
+    return { ok: false, reason: 'unavailable' };
+  }
+
+  const period = useSessionStore.getState().billingPeriod;
+
+  // Minimal test path: skip Play User Choice when explicitly enabled for local E2E.
+  if (isRazorpayTestBypassEnabled()) {
+    const rz = await startRazorpayCheckout({ period });
+    if (!rz.ok) {
+      return { ok: false, reason: rz.reason === 'cancelled' ? 'cancelled' : 'failed' };
+    }
+    if (rz.redirecting) {
+      return { ok: true, source: 'razorpay' };
+    }
+    return finalizeAfterEntitlement(seed, 'razorpay', true);
+  }
+
+  if (!isPlayUserChoiceAvailable()) {
+    return { ok: false, reason: 'unavailable' };
+  }
+
+  const productId =
+    period === 'annual'
+      ? process.env.EXPO_PUBLIC_PLAY_PRODUCT_ANNUAL || 'premium_annual'
+      : process.env.EXPO_PUBLIC_PLAY_PRODUCT_MONTHLY || 'premium_monthly';
+
+  const choice = await launchPlayUserChoiceBilling({ productId });
+
+  if (choice.outcome === 'cancelled') {
+    return { ok: false, reason: 'cancelled' };
+  }
+  if (choice.outcome === 'unavailable') {
+    return { ok: false, reason: 'unavailable' };
+  }
+
+  if (choice.outcome === 'alternative_billing') {
+    const area = await promptAdministrativeArea();
+    if (!area) {
+      return { ok: false, reason: 'cancelled' };
+    }
+    const rz = await startRazorpayCheckout({
+      period,
+      externalTransactionToken: choice.externalTransactionToken,
+      administrativeArea: area,
+    });
+    if (!rz.ok) {
+      return { ok: false, reason: rz.reason === 'cancelled' ? 'cancelled' : 'failed' };
+    }
+    if (rz.redirecting) {
+      return { ok: true, source: 'razorpay' };
+    }
+    return finalizeAfterEntitlement(seed, 'razorpay', true);
+  }
+
+  if (choice.outcome === 'play_billing') {
+    const verified = await verifyPlayPurchase({
+      purchaseToken: choice.purchaseToken,
+      productId: choice.productId,
+    });
+    if (!verified.ok) {
+      const serverPremium = await syncPremiumFromServer();
+      if (serverPremium) {
+        return finalizeAfterEntitlement(seed, 'google_play', true);
+      }
+      return { ok: false, reason: verified.reason === 'unavailable' ? 'unavailable' : 'failed' };
+    }
+    return finalizeAfterEntitlement(seed, 'google_play', true);
+  }
+
+  return { ok: false, reason: 'unavailable' };
+}
+
+/** Poll server for premium status (replaces store restore). */
+export async function checkPremiumStatus(options: { seed?: string }): Promise<UnlockResult> {
+  const { seed } = options;
+  const serverPremium = await syncPremiumFromServer();
+  if (serverPremium) {
+    return finalizeAfterEntitlement(seed, 'restore', false);
+  }
+  return { ok: false, reason: 'not_entitled' };
+}
+
+/** After Razorpay checkout success deep link — poll server for isPremium. */
+export async function finalizeRazorpayCheckout(seed?: string): Promise<UnlockResult> {
   const setPremium = useSessionStore.getState().setPremium;
-  const entitled = await syncPremiumFromServer();
+
+  const waits = [0, 1500, 2000, 3000, 4000, 5000, 6000, 8000, 10000];
+  let entitled = false;
+  for (const wait of waits) {
+    if (wait) await new Promise((r) => setTimeout(r, wait));
+    entitled = await syncPremiumFromServer();
+    if (entitled) break;
+  }
   if (!entitled) {
     return { ok: false, reason: 'not_entitled' };
   }
   const reportOk = await materializeFullReport(seed);
   if (!reportOk && !useSessionStore.getState().fullReading) {
-    setPremium(false);
     return { ok: false, reason: 'report_failed' };
   }
   setPremium(true);
-  track(AnalyticsEvent.PURCHASE_COMPLETED, { source: 'stripe' });
-  return { ok: true, source: 'stripe' };
+  track(AnalyticsEvent.PURCHASE_COMPLETED, { source: 'razorpay' });
+  return { ok: true, source: 'razorpay' };
+}
+
+/** @deprecated Use unlockPremium */
+export async function unlockPremiumFromStore(options: {
+  mode: 'purchase' | 'restore';
+  seed?: string;
+}): Promise<UnlockResult> {
+  if (options.mode === 'restore') {
+    return checkPremiumStatus({ seed: options.seed });
+  }
+  return unlockPremium({ seed: options.seed });
+}
+
+/** @deprecated Use finalizeRazorpayCheckout */
+export async function finalizeHostedCheckout(
+  seed?: string,
+  _provider: 'razorpay' = 'razorpay',
+): Promise<UnlockResult> {
+  return finalizeRazorpayCheckout(seed);
 }

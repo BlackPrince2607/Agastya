@@ -27,7 +27,7 @@ def _entropy_from_body(body: PalmAnalyzeBody) -> str:
 
 
 def _resolve_landmarks(body: PalmAnalyzeBody) -> tuple[list[list[float]] | None, str | None]:
-    """Prefer server MediaPipe; fall back to client landmarks when reliable."""
+    """Prefer server MediaPipe; accept client MediaPipe only. Never use roi_estimate for CV."""
     img = body.image_base64
     if img:
         decoded = decode_capture_bytes(img)
@@ -43,9 +43,7 @@ def _resolve_landmarks(body: PalmAnalyzeBody) -> tuple[list[list[float]] | None,
     if body.landmarks and body.landmarks_source == "mediapipe":
         return body.landmarks, body.landmarks_source
 
-    # roi_estimate is a client fake — only use if nothing else (and crease may fail)
-    if body.landmarks and body.landmarks_source in {"mediapipe", "roi_estimate"}:
-        return body.landmarks, body.landmarks_source
+    # roi_estimate is a client fake — unsuitable for crease warp; ignore entirely.
     return None, None
 
 
@@ -119,7 +117,19 @@ async def analyze_palm(settings: Settings, body: PalmAnalyzeBody) -> PalmAnalysi
         if crease is not None and crease.geometry_source == "opencv_creases":
             merged = apply_crease_result(inferred, crease, prefer_cv_motifs=True)
             return merged
-        return _attach_creases(inferred, body, landmarks, settings)
+        merged = _attach_creases(inferred, body, landmarks, settings)
+        # Honesty: real captures must lock creases or retake — no invented overlays.
+        if (
+            has_image
+            and not settings.debug
+            and not settings.palm_crease_fallback_heuristic
+            and merged.geometry_source in {None, "unavailable"}
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="Palm creases not detected — please retake with your open palm filling the frame and even light.",
+            )
+        return merged
 
     if has_image and settings.llm_enabled:
         logger.error("palm_fallback reason=openrouter_vision_failed seed=%s", body.seed[:32])
@@ -144,5 +154,15 @@ async def analyze_palm(settings: Settings, body: PalmAnalyzeBody) -> PalmAnalysi
     fallback = dummy_palm_analysis(entropy)
     fallback = fallback.model_copy(update={"analysis_source": "fallback"})
     if has_image:
-        return _attach_creases(fallback, body, landmarks, settings)
+        merged = _attach_creases(fallback, body, landmarks, settings)
+        if (
+            not settings.debug
+            and not settings.palm_crease_fallback_heuristic
+            and merged.geometry_source in {None, "unavailable"}
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="Palm creases not detected — please retake with your open palm filling the frame and even light.",
+            )
+        return merged
     return fallback

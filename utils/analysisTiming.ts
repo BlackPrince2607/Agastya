@@ -17,10 +17,15 @@ export function analysisProgressPct(elapsedMs: number, durationMs = ANALYSIS_MIN
 }
 
 /** Reveal palm fields gradually so the checklist does not complete instantly. */
-export function palmFieldsVisibleAt(elapsedMs: number, palm: PalmAnalysisDto | null): PalmAnalysisDto | null {
+export function palmFieldsVisibleAt(
+  elapsedMs: number,
+  palm: PalmAnalysisDto | null,
+  durationMs = ANALYSIS_MIN_DURATION_MS,
+): PalmAnalysisDto | null {
   if (!palm) return null;
 
-  const progress = Math.min(1, elapsedMs / ANALYSIS_MIN_DURATION_MS);
+  const windowMs = durationMs > 0 ? durationMs : ANALYSIS_MIN_DURATION_MS;
+  const progress = Math.min(1, elapsedMs / windowMs);
   const next: Partial<PalmAnalysisDto> = {};
 
   if (progress >= 0.18) {
