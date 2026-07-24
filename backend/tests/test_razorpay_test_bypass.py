@@ -51,7 +51,10 @@ def test_android_without_token_rejected_when_bypass_off(monkeypatch):
 
 
 def test_android_without_token_allowed_when_bypass_on(client, monkeypatch):
-    async def fake_create(*_a, **_k):
+    captured: dict = {}
+
+    async def fake_create(*_a, **kwargs):
+        captured["callback_url"] = kwargs.get("callback_url")
         return {"id": "plink_test", "short_url": "https://rzp.io/test"}
 
     async def fake_intent(*_a, **_k):
@@ -83,3 +86,22 @@ def test_android_without_token_allowed_when_bypass_on(client, monkeypatch):
     )
     assert res.status_code == 200
     assert "checkoutUrl" in res.json()
+    # Razorpay gets an HTTPS bridge, not the raw deep link.
+    assert captured["callback_url"].startswith("http")
+    assert "/v1/billing/razorpay/return?target=" in captured["callback_url"]
+
+
+def test_razorpay_return_bridge_redirects_to_allowlisted_deep_link(client):
+    res = client.get(
+        "/v1/billing/razorpay/return",
+        params={
+            "target": "agastya://onboarding/paywall?checkout=success",
+            "razorpay_payment_id": "pay_x",
+        },
+        follow_redirects=False,
+    )
+    assert res.status_code == 302
+    loc = res.headers["location"]
+    assert loc.startswith("agastya://onboarding/paywall")
+    assert "checkout=success" in loc
+    assert "razorpay_payment_id=pay_x" in loc

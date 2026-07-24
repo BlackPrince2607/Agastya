@@ -5,9 +5,10 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Literal
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, quote, urlencode, urlparse, urlunparse
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import RedirectResponse
 
 from app.config import Settings, get_settings
 from app.middleware.rate_limit import check_rate_limit
@@ -79,6 +80,26 @@ def _assert_return_url(url: str, settings: Settings) -> None:
     raise HTTPException(status_code=400, detail="Return URL not allowed")
 
 
+def _public_api_origin(request: Request, settings: Settings) -> str:
+    if settings.public_api_base_url:
+        return settings.public_api_base_url.rstrip("/")
+    proto = request.headers.get("x-forwarded-proto") or request.url.scheme
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+    if host:
+        return f"{proto}://{host.split(',')[0].strip()}".rstrip("/")
+    return str(request.base_url).rstrip("/")
+
+
+def _razorpay_callback_url(success_url: str, request: Request, settings: Settings) -> str:
+    """Razorpay rejects custom schemes (exp://, agastya://). Bridge via HTTPS redirect."""
+    parsed = urlparse(success_url)
+    if parsed.scheme in ("http", "https"):
+        return success_url
+    origin = _public_api_origin(request, settings)
+    target = quote(success_url, safe="")
+    return f"{origin}{settings.api_v1_prefix}/billing/razorpay/return?target={target}"
+
+
 @router.get("/billing/config", response_model=BillingConfigResponse, response_model_by_alias=True)
 async def billing_config(
     request: Request,
@@ -90,6 +111,24 @@ async def billing_config(
     return BillingConfigResponse.model_validate(raw)
 
 
+@router.get("/billing/razorpay/return")
+async def razorpay_return_bridge(
+    request: Request,
+    settings: Annotated[Settings, Depends(get_settings)],
+    target: Annotated[str, Query(min_length=1, max_length=2048)],
+) -> RedirectResponse:
+    """HTTPS callback Razorpay can hit; redirects into the app deep link."""
+    _assert_return_url(target, settings)
+    extra = [(k, v) for k, v in request.query_params.multi_items() if k != "target"]
+    if extra:
+        parsed = urlparse(target)
+        existing = dict(parse_qsl(parsed.query, keep_blank_values=True))
+        for k, v in extra:
+            existing[k] = v
+        target = urlunparse(parsed._replace(query=urlencode(existing)))
+    return RedirectResponse(url=target, status_code=302)
+
+
 @router.post(
     "/billing/razorpay/create-payment-link",
     response_model=RazorpayPaymentLinkResponse,
@@ -97,6 +136,7 @@ async def billing_config(
 )
 async def create_razorpay_payment_link(
     body: RazorpayPaymentLinkBody,
+    request: Request,
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> RazorpayPaymentLinkResponse:
     if not settings.billing_razorpay_enabled or not settings.razorpay_configured:
@@ -165,6 +205,7 @@ async def create_razorpay_payment_link(
     if body.external_transaction_token:
         notes["external_transaction_token"] = body.external_transaction_token
 
+    callback_url = _razorpay_callback_url(body.success_url, request, settings)
     try:
         link = await razorpay_client.create_payment_link(
             settings,
@@ -172,7 +213,7 @@ async def create_razorpay_payment_link(
             currency="INR",
             description=f"Agastya Premium ({body.billing_period})",
             customer_notes=notes,
-            callback_url=body.success_url,
+            callback_url=callback_url,
         )
     except Exception as exc:
         logger.warning("Razorpay payment link failed: %s", exc)

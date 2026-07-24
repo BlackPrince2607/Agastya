@@ -127,6 +127,9 @@ class Settings(BaseSettings):
     google_play_service_account_json: str | None = None
     google_play_rtdn_verification_token: str | None = None
     checkout_allowed_return_origins: str = ""
+    # Public HTTPS origin of this API (e.g. https://….up.railway.app). Used to build
+    # Razorpay callback bridges for app deep links (agastya:// / exp://).
+    public_api_base_url: str | None = None
 
     # Comma-separated emails that always receive is_premium (founder / testers).
     premium_email_allowlist: str = ""

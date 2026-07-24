@@ -28,6 +28,8 @@ BILLING_RAZORPAY_COUNTRIES=IN
 BILLING_FORCE_COUNTRY=IN
 BILLING_RAZORPAY_TEST_BYPASS=true
 CHECKOUT_ALLOWED_RETURN_ORIGINS=agastya://,exp://,https://agastya.app
+# Optional but recommended on Railway so Razorpay callbacks are always HTTPS:
+PUBLIC_API_BASE_URL=https://agastya-production-eb56.up.railway.app
 PLAY_PACKAGE_NAME=com.agastya.app
 ```
 
