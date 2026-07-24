@@ -163,6 +163,87 @@ def test_palm_analyze_vision_only_without_landmarks(mock_landmarks, mock_vision,
 
 @patch("app.services.palm_pipeline.palm_analysis_from_vision", new_callable=AsyncMock)
 @patch("app.services.palm_pipeline.detect_hand_landmarks_from_bytes")
+def test_palm_analyze_succeeds_with_motifs_without_geometry(mock_landmarks, mock_vision, vision_client):
+    """Report-first: motifs alone are enough — missing polylines must not 422."""
+    mock_landmarks.return_value = (None, "not_found")
+    mock_vision.return_value = PalmAnalysis(
+        life_line="moderate",
+        heart_line="curved",
+        head_line="medium",
+        personality="steady navigator",
+        traits=["grounded", "curious"],
+        analysis_source="openrouter_vision",
+        image_quality="acceptable",
+        geometry_source=None,
+        line_geometry=None,
+    )
+    b64, _ = _synthetic_palm_jpeg_and_landmarks()
+    session_id = str(uuid.uuid4())
+    vision_client.post(
+        "/v1/sessions/register",
+        json={"sessionId": session_id, "deviceInstallId": "device-test-1"},
+    )
+    res = vision_client.post(
+        "/v1/palm/analyze",
+        json={
+            "sessionId": session_id,
+            "deviceInstallId": "device-test-1",
+            "seed": "unit-test",
+            "imageBase64": b64,
+        },
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["life_line"] == "moderate"
+    assert data["heart_line"] == "curved"
+    assert data["head_line"] == "medium"
+    assert data.get("line_geometry") in (None, [])
+
+
+@patch("app.services.palm_pipeline.palm_analysis_from_vision", new_callable=AsyncMock)
+@patch("app.services.palm_pipeline.detect_hand_landmarks_from_bytes")
+def test_palm_analyze_structured_unreadable_when_no_hand(mock_landmarks, mock_vision, monkeypatch):
+    mock_landmarks.return_value = (None, "not_found")
+    mock_vision.return_value = PalmAnalysis(
+        life_line="",
+        heart_line="",
+        head_line="",
+        personality="unknown",
+        traits=["unknown"],
+        analysis_source="openrouter_vision",
+        image_quality="no_hand",
+        confidence=0.05,
+        line_geometry=None,
+    )
+    monkeypatch.setenv("PALM_ANALYSIS_MODE", "vision")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test-key")
+    monkeypatch.setenv("DEBUG", "false")
+    get_settings.cache_clear()
+    client = TestClient(create_app())
+    b64, _ = _synthetic_palm_jpeg_and_landmarks()
+    session_id = str(uuid.uuid4())
+    client.post(
+        "/v1/sessions/register",
+        json={"sessionId": session_id, "deviceInstallId": "device-test-1"},
+    )
+    res = client.post(
+        "/v1/palm/analyze",
+        json={
+            "sessionId": session_id,
+            "deviceInstallId": "device-test-1",
+            "seed": "unit-test",
+            "imageBase64": b64,
+        },
+    )
+    assert res.status_code == 422
+    detail = res.json()["detail"]
+    assert isinstance(detail, dict)
+    assert detail["code"] == "palm_unreadable"
+    assert isinstance(detail.get("reasons"), list) and len(detail["reasons"]) >= 1
+
+
+@patch("app.services.palm_pipeline.palm_analysis_from_vision", new_callable=AsyncMock)
+@patch("app.services.palm_pipeline.detect_hand_landmarks_from_bytes")
 def test_palm_analyze_prefers_cv_when_vision_says_no_hand(mock_landmarks, mock_vision, vision_client):
     """False vision no_hand must not 422 when OpenCV already locked creases."""
     b64, landmarks = _synthetic_palm_jpeg_and_landmarks()

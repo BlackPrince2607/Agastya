@@ -180,21 +180,38 @@ export const PALM_LINES_CONFIRM_RETAKE = 'Retake photo';
 export const PALM_LINES_BUILDING = 'Building your Life Blueprint…';
 
 export const PALM_CAMERA_COACHING =
-  'Ask someone to hold the phone, or rest it and photograph your other hand.';
+  'Fill the guide with your open palm — fingers slightly spread, soft even light, hold steady.';
 export const PALM_CAMERA_CAPTURING = 'Capturing…';
-export const PALM_CAMERA_CENTER = 'Center your hand inside the frame';
-export const PALM_CAMERA_AUTO_HOLD = 'Hold your open palm steady — capturing automatically…';
-export const PALM_CAMERA_MANUAL = 'Capture manually';
+export const PALM_CAMERA_CENTER = 'Center your open palm inside the frame';
+export const PALM_CAMERA_MANUAL = 'Capture palm';
+export const PALM_CAMERA_GUIDE_HINT =
+  'Keep the whole palm visible — fingers open, wrist in frame, no heavy shadows.';
 
 export const PALM_RETAKE_DEFAULT =
-  "We couldn't read that palm clearly. Try brighter light and an open palm.";
+  "We couldn't clearly analyze your palm.";
 
 export const PALM_RETAKE_BANNER_PREFIX = "Last photo wasn't clear enough —";
+
+export const PALM_RETRY_TITLE = "We couldn't clearly analyze your palm";
+export const PALM_RETRY_SUBTITLE = 'Possible reasons:';
+export const PALM_RETRY_REASONS_DEFAULT = [
+  'blurry image',
+  'low lighting',
+  'palm partially outside the frame',
+] as const;
+export const PALM_RETRY_CTA = 'Retake photo';
+
+export const ANALYSIS_STAGE_UPLOADING = 'Uploading image…';
+export const ANALYSIS_STAGE_ANALYZING = 'Analyzing palm…';
+export const ANALYSIS_STAGE_FEATURES = 'Identifying major features…';
+export const ANALYSIS_STAGE_BLUEPRINT = 'Generating Life Blueprint…';
+export const ANALYSIS_STAGE_PREPARING = 'Preparing your report…';
 
 export const PALM_SCAN_TIPS = [
   { icon: 'sunny-outline' as const, label: 'Good light' },
   { icon: 'hand-right-outline' as const, label: 'Open palm' },
   { icon: 'expand-outline' as const, label: 'Fill frame' },
+  { icon: 'body-outline' as const, label: 'Hold steady' },
 ] as const;
 
 export const PARTNER_PALM_REVIEW_TITLE = "Check your partner's palm";

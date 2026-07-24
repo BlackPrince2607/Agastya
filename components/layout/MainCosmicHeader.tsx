@@ -1,9 +1,8 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, usePathname } from 'expo-router';
 import { Image, Pressable, Text, View } from 'react-native';
-import { colors } from '@/constants/theme';
 
-import { BrandWordmark, Icon } from '@/components/ui';
+import { BrandWordmark } from '@/components/ui';
 import { getAvatarOption } from '@/constants/avatars';
 import { useSessionStore } from '@/store/sessionStore';
 import { initialsFor } from '@/utils/initials';
@@ -13,15 +12,16 @@ type MainCosmicHeaderProps = {
   /** Overrides store avatar when passed (e.g. profile preview). */
   avatarId?: string | null;
   onProfilePress?: () => void;
-  onMenuPress?: () => void;
 };
 
-/** Stitch top app bar: menu (left), Agastya wordmark (center), avatar (right). */
+/**
+ * Top app bar — Agastya wordmark (leading) + profile avatar (trailing).
+ * Account actions live on Profile; no hamburger / overflow menu.
+ */
 export function MainCosmicHeader({
   displayName,
   avatarId: avatarIdProp,
   onProfilePress,
-  onMenuPress,
 }: MainCosmicHeaderProps) {
   const pathname = usePathname();
   const onProfileTab = pathname.includes('/profile');
@@ -41,24 +41,13 @@ export function MainCosmicHeader({
   return (
     <View className="relative z-10 w-full px-2 pb-2 pt-1">
       <View className="min-h-[44px] flex-row items-center justify-between">
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Open menu"
-          onPress={onMenuPress ?? handleProfilePress}
-          className="z-10 h-11 w-11 items-center justify-center rounded-full active:opacity-80">
-          <Icon name="menu" size={24} color={colors.growth} />
-        </Pressable>
-
-        <View
-          pointerEvents="none"
-          className="absolute inset-x-0 items-center justify-center"
-          style={{ top: 0, bottom: 0 }}>
+        <View className="min-w-0 flex-1 items-start justify-center pr-3">
           <BrandWordmark />
         </View>
 
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Open profile"
+          accessibilityLabel={onProfileTab ? 'Your profile' : 'Open profile'}
           onPress={handleProfilePress}
           className="z-10 h-11 w-11 overflow-hidden rounded-full border active:opacity-90"
           style={{ borderColor: 'rgba(168,85,247,0.35)' }}>

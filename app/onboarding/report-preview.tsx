@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Image, ScrollView, Text, View, useWindowDimensions } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { MotiView } from '@/components/moti/MotiView';
@@ -16,7 +16,6 @@ import {
   ReportInsightCard,
   MetricDonut,
 } from '@/components/primitives';
-import { PalmLineOverlay, palmLineLegend } from '@/components/report/PalmLineOverlay';
 import { GlassCard } from '@/components/ui';
 import { PAGE_PADDING } from '@/constants/layout';
 import { ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS } from '@/constants/onboarding';
@@ -27,7 +26,6 @@ import type { FocusTopic } from '@/store/sessionStore';
 import { useSessionStore } from '@/store/sessionStore';
 import { enterMainApp } from '@/utils/navigationFlow';
 import { headlineNeedsPalmFix } from '@/utils/palmInsights';
-import { hasPalmLineOverlay } from '@/types/palmAnalysis';
 import { isEmailPremiumAllowlisted } from '@/utils/premiumAllowlist';
 
 const FOCUS_LABEL: Record<FocusTopic, string> = {
@@ -44,18 +42,12 @@ const LOCKED_PERKS = [
   'Unlimited Agastya chat',
 ];
 
-function toImageUri(base64: string): string {
-  if (base64.startsWith('data:')) return base64;
-  return `data:image/jpeg;base64,${base64}`;
-}
-
 export default function ReportPreviewScreen() {
   const { seed } = useLocalSearchParams<{ seed?: string }>();
   const previewReading = useSessionStore((s) => s.previewReading);
   const storeSeed = useSessionStore((s) => s.readingSeed);
   const focus = useSessionStore((s) => s.focusTopics);
   const palmAnalysis = useSessionStore((s) => s.palmAnalysis);
-  const palmCaptureBase64 = useSessionStore((s) => s.palmCaptureBase64);
   const displayName = useSessionStore((s) => s.userDisplayName);
   const fullReading = useSessionStore((s) => s.fullReading);
   const mergedSeed = seed ?? storeSeed ?? 'stillness';
@@ -65,11 +57,6 @@ export default function ReportPreviewScreen() {
   const allowlistPremium = isSignedIn && isEmailPremiumAllowlisted();
   const hasConfirmedPremium = allowlistPremium || Boolean(fullReading);
   const showUnlockCta = !hasConfirmedPremium;
-  const { width: windowWidth } = useWindowDimensions();
-  const overlayWidth = Math.min(windowWidth - 48, 320);
-  const overlayHeight = Math.round(overlayWidth * 0.55);
-
-  const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(null);
 
   // Drop leftover local unlocks when not signed in and not paid (no full report).
   useEffect(() => {
@@ -79,27 +66,6 @@ export default function ReportPreviewScreen() {
       snap.setPremium(false);
     }
   }, [isSignedIn]);
-
-  useEffect(() => {
-    if (!palmCaptureBase64) {
-      setImageSize(null);
-      return;
-    }
-    let cancelled = false;
-    const uri = toImageUri(palmCaptureBase64);
-    Image.getSize(
-      uri,
-      (width, height) => {
-        if (!cancelled) setImageSize({ width, height });
-      },
-      () => {
-        if (!cancelled) setImageSize({ width: 3, height: 4 });
-      },
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [palmCaptureBase64]);
 
   const reading = useMemo(() => {
     const base = previewReading ?? buildSimulatedReading(mergedSeed, focus, palmAnalysis);
@@ -111,7 +77,6 @@ export default function ReportPreviewScreen() {
   const previewSections = reading.sections.slice(0, 2);
   const motifChips = palmAnalysis ? palmReadingChips(palmAnalysis) : null;
   const insets = useSafeAreaInsets();
-  const hasScannedLines = hasPalmLineOverlay(palmAnalysis);
 
   return (
     <CosmicScreen variant="stitch">
@@ -186,62 +151,6 @@ export default function ReportPreviewScreen() {
                 </View>
               ))}
             </View>
-          ) : null}
-
-          {hasScannedLines ? (
-            <GlassCard className="overflow-hidden border-cyan/20 p-0">
-              <View
-                className="relative w-full overflow-hidden rounded-3xl bg-black/50"
-                style={{ height: overlayHeight }}>
-                {palmCaptureBase64 ? (
-                  <Image
-                    source={{ uri: toImageUri(palmCaptureBase64) }}
-                    style={{ width: overlayWidth, height: overlayHeight, alignSelf: 'center' }}
-                    resizeMode="cover"
-                  />
-                ) : null}
-                <PalmLineOverlay
-                  geometry={palmAnalysis!.line_geometry!}
-                  width={overlayWidth}
-                  height={overlayHeight}
-                  imageWidth={imageSize?.width}
-                  imageHeight={imageSize?.height}
-                  resizeMode="cover"
-                />
-                <View className="absolute bottom-3 left-3 flex-row gap-2">
-                  {palmLineLegend().map((item) => (
-                    <View
-                      key={item.key}
-                      className="flex-row items-center gap-1 rounded-full border border-white/15 bg-black/55 px-2 py-1">
-                      <View className="h-2 w-2 rounded-full" style={{ backgroundColor: item.color }} />
-                      <Text className="font-label text-[8px] uppercase tracking-[0.18em] text-white/80">
-                        {item.label}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            </GlassCard>
-          ) : palmAnalysis &&
-            palmAnalysis.geometry_source === 'unavailable' &&
-            !palmAnalysis.life_line ? (
-            <GlassCard className="border-amber-200/20 p-4">
-              <Text className="font-body text-[14px] leading-6 text-on-surface/85">
-                We couldn&apos;t read your palm creases from this photo. Retake with an open palm and even light for a personalized line map.
-              </Text>
-              <View className="mt-3">
-                <CosmicButton
-                  variant="ghost"
-                  label="Retake palm scan"
-                  onPress={() =>
-                    router.push({
-                      pathname: '/onboarding/palm-scan',
-                      params: { retakeReason: encodeURIComponent('Creases not detected — please retake.') },
-                    })
-                  }
-                />
-              </View>
-            </GlassCard>
           ) : null}
 
           {focus.length > 0 ? (

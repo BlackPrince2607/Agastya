@@ -151,7 +151,8 @@ async def palm_analysis_from_vision(
     else:
         media = "jpeg"
     try:
-        base64.standard_b64decode(payload, validate=True)
+        # Use b64decode (not standard_b64decode) — only b64decode accepts validate=.
+        base64.b64decode(payload, validate=True)
     except (binascii.Error, ValueError):
         logger.warning("Invalid palm image base64")
         return None

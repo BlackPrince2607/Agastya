@@ -76,8 +76,9 @@ export function PressableScale({
       onPress={handlePress}
       animate={({ pressed }) => ({
         scale: pressed && !disabled ? scaleTo : 1,
-        opacity: disabled ? 0.55 : 1,
+        opacity: disabled ? 0.55 : pressed ? 0.92 : 1,
       })}
+      transition={{ type: 'spring', damping: 18, stiffness: 280 }}
       style={style}>
       {children}
     </MotiPressable>

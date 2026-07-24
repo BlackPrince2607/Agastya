@@ -55,15 +55,9 @@ export function isLivePalmAnalysis(palm: PalmAnalysisDto | null | undefined): bo
 
 export function palmNeedsRetake(palm: PalmAnalysisDto | null | undefined): boolean {
   if (!palm) return false;
-  // Drawable lines from vision or CV — capture is usable.
+  // Motifs are enough for a Life Blueprint — never force retake for missing overlays.
+  if (palm.life_line && palm.heart_line && palm.head_line) return false;
   if (hasPalmLineOverlay(palm)) return false;
-  // Vision/CV returned a live reading for a visible palm — never loop retake.
-  if (isLivePalmAnalysis(palm) && palm.image_quality !== 'no_hand') {
-    return false;
-  }
-  // Motifs present even from a soft source — still usable for the report.
-  if (palm.life_line && palm.heart_line && palm.head_line && palm.image_quality !== 'no_hand') {
-    return false;
-  }
+  if (isLivePalmAnalysis(palm) && palm.image_quality !== 'no_hand') return false;
   return palm.image_quality === 'no_hand';
 }

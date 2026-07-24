@@ -1,10 +1,10 @@
-import { Pressable, Text, View } from 'react-native';
+import { Platform, Pressable, Text, View } from 'react-native';
 
 import { MotiView } from '@/components/moti/MotiView';
+import { ProfileActionCard } from '@/components/profile/ProfileActionCard';
 import { ProfileAvatar } from '@/components/profile/ProfileAvatar';
-import { Icon, PrimaryButton } from '@/components/ui';
 import { GlassCard } from '@/components/ui/GlassCard';
-import { colors } from '@/constants/theme';
+import { STACK_GAP } from '@/constants/layout';
 
 type ProfileHeroProps = {
   displayName: string;
@@ -13,11 +13,11 @@ type ProfileHeroProps = {
   premium: boolean;
   onAvatarPress: () => void;
   onEditPress: () => void;
+  onSharePress: () => void;
 };
 
 /**
- * Compact identity hero — horizontal layout, restrained glass, dominant name.
- * Membership lives in MembershipCard below (single indicator).
+ * Compact identity hero — photo + name, then equal Edit / Share action cards.
  */
 export function ProfileHero({
   displayName,
@@ -26,14 +26,18 @@ export function ProfileHero({
   premium,
   onAvatarPress,
   onEditPress,
+  onSharePress,
 }: ProfileHeroProps) {
+  const shareIcon = Platform.OS === 'ios' ? 'ios_share' : 'share';
+
   return (
     <MotiView
       from={{ opacity: 0, translateY: 10 }}
       animate={{ opacity: 1, translateY: 0 }}
       transition={{ type: 'timing', duration: 420 }}
-      className="w-full">
-      <GlassCard muted className="w-full px-4 py-4" innerClassName="gap-4">
+      className="w-full"
+      style={{ gap: STACK_GAP }}>
+      <GlassCard muted className="w-full px-4 py-4" innerClassName="gap-0">
         <View className="flex-row items-center gap-4">
           <Pressable
             onPress={onAvatarPress}
@@ -73,14 +77,27 @@ export function ProfileHero({
             </Text>
           </View>
         </View>
-
-        <PrimaryButton
-          label="Edit profile"
-          variant="ghost"
-          onPress={onEditPress}
-          icon={<Icon name="edit" size={16} color={colors.onSurface} />}
-        />
       </GlassCard>
+
+      <View className="w-full flex-row" style={{ gap: STACK_GAP }}>
+        <ProfileActionCard
+          title="Edit Profile"
+          subtitle="Name, photo & more"
+          icon="edit"
+          onPress={onEditPress}
+          accessibilityLabel="Edit Profile"
+          accessibilityHint="Opens edit profile"
+        />
+        <ProfileActionCard
+          title="Share"
+          subtitle="Spread wisdom"
+          icon={shareIcon}
+          featured
+          onPress={onSharePress}
+          accessibilityLabel="Share Agastya"
+          accessibilityHint="Opens the share sheet to invite a friend"
+        />
+      </View>
     </MotiView>
   );
 }

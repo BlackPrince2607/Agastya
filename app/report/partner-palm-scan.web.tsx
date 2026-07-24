@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Alert, Text, View } from 'react-native';
 
-import { PalmCaptureReview } from '@/components/onboarding/PalmCaptureReview';
 import { HandToggleRow } from '@/components/onboarding/HandToggle';
 import { PalmScanFrame } from '@/components/onboarding/PalmScanFrame';
 import { BackButton } from '@/components/layout/BackButton';
@@ -10,75 +9,46 @@ import { CosmicButton } from '@/components/primitives';
 import { PAGE_PADDING } from '@/constants/layout';
 import type { PalmScanHand } from '@/store/sessionStore';
 import { useSessionStore } from '@/store/sessionStore';
-import type { PalmAnalysisDto } from '@/types/palmAnalysis';
 import { pickPalmImage } from '@/utils/pickPalmImage';
+import { assessPalmCaptureQuality, confirmSoftQualityOrProceed } from '@/utils/palmCaptureQuality';
 import { deferRouterPush } from '@/utils/routerDefer';
 
-type ScanStep = 'upload' | 'review';
-
-/** Web: upload partner palm photo for compatibility matching. */
+/** Web: upload partner palm photo — goes straight to analysis. */
 export default function PartnerPalmScanWebScreen() {
   const partnerPalmScanHand = useSessionStore((s) => s.partnerPalmScanHand);
   const setPartnerPalmScanHand = useSessionStore((s) => s.setPartnerPalmScanHand);
   const setPartnerPalmCaptureBase64 = useSessionStore((s) => s.setPartnerPalmCaptureBase64);
   const setPartnerPalmCaptureLandmarks = useSessionStore((s) => s.setPartnerPalmCaptureLandmarks);
   const [uploadBusy, setUploadBusy] = useState(false);
-  const [confirming, setConfirming] = useState(false);
-  const [step, setStep] = useState<ScanStep>('upload');
-  const [previewBase64, setPreviewBase64] = useState<string | null>(null);
 
   const hand: PalmScanHand = partnerPalmScanHand ?? 'right';
 
-  const uploadAndReview = async () => {
-    if (uploadBusy || confirming) return;
+  const uploadAndAnalyze = async () => {
+    if (uploadBusy) return;
     setUploadBusy(true);
     try {
       const base64 = await pickPalmImage();
       if (!base64) return;
-      setPreviewBase64(base64);
-      setStep('review');
+
+      const quality = assessPalmCaptureQuality(base64);
+      const proceed = await confirmSoftQualityOrProceed(quality, Alert.alert);
+      if (!proceed) return;
+
+      const seed = `partner-${hand}-${Date.now()}`;
+      setPartnerPalmScanHand(hand);
+      setPartnerPalmCaptureBase64(base64);
+      setPartnerPalmCaptureLandmarks(null, null);
+      useSessionStore.getState().setPartnerPalmAnalysis(null);
+      deferRouterPush({
+        pathname: '/report/partner-palm-analysis' as never,
+        params: { seed },
+      });
     } catch {
       Alert.alert('Upload failed', 'We couldn’t read that image. Try a JPG or PNG of their open palm.');
     } finally {
       setUploadBusy(false);
     }
   };
-
-  const confirmReview = (
-    landmarks: Array<[number, number]>,
-    source: 'mediapipe',
-    palm: PalmAnalysisDto,
-  ) => {
-    if (!previewBase64 || confirming) return;
-    setConfirming(true);
-    const seed = `partner-${hand}-${Date.now()}`;
-    setPartnerPalmScanHand(hand);
-    setPartnerPalmCaptureBase64(previewBase64);
-    setPartnerPalmCaptureLandmarks(landmarks, source);
-    useSessionStore.getState().setPartnerPalmAnalysis(palm);
-    deferRouterPush({
-      pathname: '/report/partner-palm-analysis' as never,
-      params: { seed },
-    });
-  };
-
-  if (step === 'review' && previewBase64) {
-    return (
-      <PalmCaptureReview
-        base64={previewBase64}
-        hand={hand}
-        variant="partner"
-        showOnboardingHeader={false}
-        confirming={confirming}
-        onRetake={() => {
-          setPreviewBase64(null);
-          setConfirming(false);
-          setStep('upload');
-        }}
-        onConfirm={confirmReview}
-      />
-    );
-  }
 
   return (
     <CosmicScreen variant="stitch">
@@ -105,7 +75,7 @@ export default function PartnerPalmScanWebScreen() {
             gradient="nebulaMd3"
             label={uploadBusy ? 'Opening…' : 'Choose palm photo'}
             disabled={uploadBusy}
-            onPress={() => void uploadAndReview()}
+            onPress={() => void uploadAndAnalyze()}
           />
         </View>
       </View>

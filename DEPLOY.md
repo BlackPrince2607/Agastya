@@ -6,7 +6,7 @@ All code changes from the SaaS readiness pass are in place. This document covers
 
 ## 1. App icons
 
-Icons live in `assets/images/` (`icon.png`, `splash-icon.png`, `adaptive-icon.png`). Replace with 1024×1024 PNGs before store release if needed.
+Icons live in `assets/images/` (`icon.png`, `splash-icon.png`, `adaptive-icon.png`, `favicon.png`), generated from `screen.png` via `scripts/generate_app_icons.py`. Re-run that script after replacing the source logo.
 
 ---
 
@@ -250,7 +250,7 @@ Pushes to `main` that touch `backend/**` auto-redeploy.
 
 Required Railway variables: `OPENROUTER_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DEBUG=false`, `PALM_ANALYSIS_MODE=vision`, `RAZORPAY_*` (when billing enabled), non-wildcard `CORS_ORIGINS`. Recommended: `REDIS_URL`, `SENTRY_DSN`.
 
-**Palm scan (vision-first):** the app takes one HQ photo after a short hold, then `POST /v1/palm/analyze` uses OpenRouter vision. Without `OPENROUTER_API_KEY` on Railway, analyze returns **503** (“Palm vision not configured”) and the review screen will not unlock lines. After backend changes, redeploy Railway and reload the Expo app so single-capture + vision stay in sync.
+**Palm scan (reliability path):** the app captures once, shows staged analysis progress, then builds the Life Blueprint. Line overlays are not required. Redeploy Railway after backend palm-pipeline changes; confirm `OPENROUTER_API_KEY` and `PALM_ANALYSIS_MODE=vision`. Without the key, analyze returns **503**.
 
 **Production must run with `DEBUG=false`.** When `DEBUG=true`, webhook signature checks and startup secret validation are skipped — never ship beta that way.
 

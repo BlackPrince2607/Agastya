@@ -385,7 +385,7 @@ Backend `backend/.env` commonly includes:
 - `DEBUG`
 - `CORS_ORIGINS`
 - `CORS_ORIGIN_REGEX`
-- `PALM_ANALYSIS_MODE` (`vision` on Railway — required for single-capture line read)
+- `PALM_ANALYSIS_MODE` (`vision` on Railway — required for palm analyze)
 - `OPENROUTER_API_KEY` (required; without it `/v1/palm/analyze` returns 503)
 - `OPENROUTER_CHAT_MODEL`
 - `OPENROUTER_VISION_MODEL`
@@ -397,7 +397,7 @@ Backend `backend/.env` commonly includes:
 - `SENTRY_DSN`
 - `SENTRY_ENVIRONMENT`
 
-Never commit real `.env` files or service-role secrets. After palm-pipeline changes, redeploy Railway so the Expo app’s `EXPO_PUBLIC_AGASTYA_API_URL` hits the vision-first backend.
+Never commit real `.env` files or service-role secrets. After palm-pipeline changes, redeploy Railway so the Expo app’s `EXPO_PUBLIC_AGASTYA_API_URL` hits the vision-first backend. Capture → staged analysis progress → report (no line-confirm overlay).
 
 ## Testing and Quality Notes
 

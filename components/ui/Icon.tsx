@@ -46,6 +46,8 @@ export type IconName =
   | 'spa'
   | 'settings'
   | 'edit'
+  | 'share'
+  | 'ios_share'
   | 'logout'
   | 'star'
   | 'cloud_done'
@@ -73,6 +75,7 @@ type IconProps = {
 /** Stitch glyph names that do not map 1:1 to MaterialIcons hyphen names. */
 const GLYPH_ALIASES: Partial<Record<IconName, MaterialIconName>> = {
   encrypted: 'enhanced-encryption',
+  ios_share: 'ios-share',
 };
 
 export function Icon({ name, size = 24, color = '#e6e1e5', className }: IconProps) {

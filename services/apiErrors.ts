@@ -49,6 +49,9 @@ export function mapApiError(detail: string): string {
   if (d.includes('invalid supabase') || d.includes('token missing subject')) {
     return ERRORS.authInvalid;
   }
+  if (d.includes('palm analysis failed') || d.includes('please try again')) {
+    return 'Palm reading failed on the server. Please try again in a moment.';
+  }
   if (d.includes('palm vision not configured') || d.includes('openrouter_api_key')) {
     return 'Palm reading is not configured on the server yet. Add OPENROUTER_API_KEY and redeploy.';
   }
@@ -90,6 +93,57 @@ export function isPalmRetakeError(message: string): boolean {
     d.includes('no clear palm') ||
     d.includes('creases not detected') ||
     d.includes('no_hand') ||
+    d.includes('palm_unreadable') ||
+    d.includes("couldn't clearly analyze") ||
     d.includes('palm image required')
   );
+}
+
+export type PalmUnreadablePayload = {
+  code: string;
+  message: string;
+  reasons: string[];
+};
+
+/** Parse structured FastAPI detail for palm_unreadable (object or string). */
+export function parsePalmUnreadable(err: unknown): PalmUnreadablePayload | null {
+  const defaults: PalmUnreadablePayload = {
+    code: 'palm_unreadable',
+    message: "We couldn't clearly analyze your palm.",
+    reasons: ['blurry image', 'low lighting', 'palm partially outside the frame'],
+  };
+
+  if (err instanceof ApiHttpError) {
+    const raw = err.rawDetail?.trim() || '';
+    try {
+      const parsed = JSON.parse(raw) as { detail?: unknown };
+      const detail = parsed.detail ?? parsed;
+      if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
+        const d = detail as Record<string, unknown>;
+        const reasons = Array.isArray(d.reasons)
+          ? d.reasons.filter((r): r is string => typeof r === 'string')
+          : defaults.reasons;
+        return {
+          code: typeof d.code === 'string' ? d.code : defaults.code,
+          message: typeof d.message === 'string' ? d.message : err.message || defaults.message,
+          reasons: reasons.length ? reasons : defaults.reasons,
+        };
+      }
+      if (typeof detail === 'string' && isPalmRetakeError(detail)) {
+        return { ...defaults, message: err.message || detail };
+      }
+    } catch {
+      if (isPalmRetakeError(err.message) || isPalmRetakeError(raw)) {
+        return { ...defaults, message: err.message || defaults.message };
+      }
+    }
+    if (err.status === 422 || isPalmRetakeError(err.message)) {
+      return { ...defaults, message: err.message || defaults.message };
+    }
+  }
+
+  if (err instanceof Error && isPalmRetakeError(err.message)) {
+    return { ...defaults, message: err.message };
+  }
+  return null;
 }

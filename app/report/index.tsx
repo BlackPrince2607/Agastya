@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Image, Text, View, useWindowDimensions } from 'react-native';
+import { Text, View } from 'react-native';
 import { colors } from '@/constants/theme';
 
 import { EmptyState, LoadingBlock } from '@/components/feedback';
@@ -9,7 +9,6 @@ import { StackScroll } from '@/components/layout/StackScroll';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { AuraNebulaCard, GradientText, InsightCard, MetricDonut } from '@/components/primitives';
 import { PalmLineCard, PredictionCard, StrengthDots } from '@/components/report';
-import { PalmLineOverlay, palmLineLegend } from '@/components/report/PalmLineOverlay';
 import { AuraChip, GlassCard, Icon, PrimaryButton } from '@/components/ui';
 import { PressableScale } from '@/components/ui/PressableScale';
 import { REPORT_EMPTY, REPORT_PREDICTIONS_LOADING } from '@/constants/userCopy';
@@ -17,7 +16,6 @@ import { fetchPredictions } from '@/services/agastyaApi';
 import { buildSimulatedReading } from '@/services/simulatedReading';
 import { useSessionStore } from '@/store/sessionStore';
 import type { PalmAnalysisDto } from '@/types/palmAnalysis';
-import { hasPalmLineOverlay } from '@/types/palmAnalysis';
 import { PREDICTION_PERIODS, type PredictionPeriod } from '@/types/predictions';
 import { buildLocalPredictions } from '@/utils/localPredictions';
 import { withApiRetry } from '@/utils/apiRetry';
@@ -41,17 +39,11 @@ const FALLBACK_PALM: PalmAnalysisDto = {
   traits: ['creative', 'independent', 'intuitive', 'empathetic'],
 };
 
-function toImageUri(base64: string): string {
-  if (base64.startsWith('data:')) return base64;
-  return `data:image/jpeg;base64,${base64}`;
-}
-
 export default function ReportScreen() {
   const { tab } = useLocalSearchParams<{ tab?: string }>();
   const seed = useSessionStore((s) => s.readingSeed);
   const focuses = useSessionStore((s) => s.focusTopics);
   const palmAnalysis = useSessionStore((s) => s.palmAnalysis);
-  const palmCaptureBase64 = useSessionStore((s) => s.palmCaptureBase64);
   const previewReading = useSessionStore((s) => s.previewReading);
   const fullReading = useSessionStore((s) => s.fullReading);
   const premium = useSessionStore((s) => s.hasUnlockedPremium);
@@ -61,30 +53,6 @@ export default function ReportScreen() {
   const [active, setActive] = useState<ReportTab>(initialTab);
   const [period, setPeriod] = useState<PredictionPeriod>('month');
   const [predictionsLoading, setPredictionsLoading] = useState(false);
-  const { width: windowWidth } = useWindowDimensions();
-  const overlayWidth = Math.min(windowWidth - 48, 320);
-  const overlayHeight = Math.round(overlayWidth * 0.7);
-  const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(null);
-
-  useEffect(() => {
-    if (!palmCaptureBase64) {
-      setImageSize(null);
-      return;
-    }
-    let cancelled = false;
-    Image.getSize(
-      toImageUri(palmCaptureBase64),
-      (width, height) => {
-        if (!cancelled) setImageSize({ width, height });
-      },
-      () => {
-        if (!cancelled) setImageSize({ width: 3, height: 4 });
-      },
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [palmCaptureBase64]);
 
   useEffect(() => {
     const next = TABS.find((t) => t.id === tab)?.id;
@@ -229,11 +197,6 @@ export default function ReportScreen() {
                   <Text className="font-headline-md text-[18px] text-on-surface">
                     {Math.round(palm.confidence * 100)}%
                   </Text>
-                  {hasPalmLineOverlay(palm) ? (
-                    <Text className="font-body text-[13px] text-cyan/90">
-                      Lines locked from your photo scan
-                    </Text>
-                  ) : null}
                   {palm.fate_line ? (
                     <Text className="font-body text-[14px] text-on-surface-variant">
                       Fate line: {palm.fate_line}
@@ -261,44 +224,6 @@ export default function ReportScreen() {
                     ))}
                   </View>
                 </GlassCard>
-              ) : null}
-              {hasPalmLineOverlay(palm) && palm.line_geometry?.length ? (
-                <View className="gap-2">
-                  <Text className="font-label text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">
-                    Your palm lines
-                  </Text>
-                  <View
-                    className="relative w-full overflow-hidden rounded-3xl border border-white/10 bg-black/40"
-                    style={{ height: overlayHeight }}>
-                    {palmCaptureBase64 ? (
-                      <Image
-                        source={{ uri: toImageUri(palmCaptureBase64) }}
-                        style={{ width: overlayWidth, height: overlayHeight, alignSelf: 'center' }}
-                        resizeMode="cover"
-                      />
-                    ) : null}
-                    <PalmLineOverlay
-                      geometry={palm.line_geometry}
-                      width={overlayWidth}
-                      height={overlayHeight}
-                      imageWidth={imageSize?.width}
-                      imageHeight={imageSize?.height}
-                      resizeMode="cover"
-                    />
-                    <View className="absolute bottom-3 left-3 flex-row gap-2">
-                      {palmLineLegend().map((item) => (
-                        <View
-                          key={item.key}
-                          className="flex-row items-center gap-1 rounded-full border border-white/15 bg-black/55 px-2 py-1">
-                          <View className="h-2 w-2 rounded-full" style={{ backgroundColor: item.color }} />
-                          <Text className="font-label text-[10px] uppercase tracking-[0.14em] text-white/85">
-                            {item.label}
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-                </View>
               ) : null}
               {lines.map((line) => (
                 <PalmLineCard key={line.lineName} {...line} />

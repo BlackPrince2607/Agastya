@@ -1,8 +1,9 @@
-"""Palm analysis pipeline — vision model primary; OpenCV optional upgrade."""
+"""Palm analysis pipeline — vision primary; geometry optional; report-first."""
 
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from fastapi import HTTPException
 
@@ -17,6 +18,32 @@ from app.services.palm_storage import decode_capture_bytes
 
 logger = logging.getLogger(__name__)
 
+_DEFAULT_UNREADABLE_REASONS = (
+    "blurry image",
+    "low lighting",
+    "palm partially outside the frame",
+)
+
+
+def _unreadable_detail(
+    message: str = "We couldn't clearly analyze your palm.",
+    reasons: tuple[str, ...] | list[str] | None = None,
+    *,
+    code: str = "palm_unreadable",
+) -> dict[str, Any]:
+    return {
+        "code": code,
+        "message": message,
+        "reasons": list(reasons or _DEFAULT_UNREADABLE_REASONS),
+    }
+
+
+def _raise_unreadable(
+    message: str = "We couldn't clearly analyze your palm.",
+    reasons: tuple[str, ...] | list[str] | None = None,
+) -> None:
+    raise HTTPException(status_code=422, detail=_unreadable_detail(message, reasons))
+
 
 def _entropy_from_body(body: PalmAnalyzeBody) -> str:
     entropy = body.seed
@@ -26,7 +53,7 @@ def _entropy_from_body(body: PalmAnalyzeBody) -> str:
 
 
 def _resolve_landmarks(body: PalmAnalyzeBody) -> tuple[list[list[float]] | None, str | None]:
-    """Best-effort MediaPipe landmarks — optional for vision-first path."""
+    """Best-effort MediaPipe landmarks — optional enrichment only."""
     img = body.image_base64
     if img:
         decoded = decode_capture_bytes(img)
@@ -55,6 +82,12 @@ def _has_usable_geometry(palm: PalmAnalysis | None) -> bool:
     return len(palm.line_geometry) >= 2
 
 
+def _has_usable_motifs(palm: PalmAnalysis | None) -> bool:
+    if palm is None:
+        return False
+    return bool(palm.life_line and palm.heart_line and palm.head_line)
+
+
 def _attach_cv_if_possible(
     analysis: PalmAnalysis,
     body: PalmAnalyzeBody,
@@ -77,7 +110,6 @@ def _attach_cv_if_possible(
     if merged.geometry_source == "opencv_creases" and merged.line_geometry:
         return merged
 
-    # CV miss — restore vision geometry if we had it.
     if prior_geom and prior_source == "vision_model":
         return analysis.model_copy(
             update={
@@ -86,6 +118,19 @@ def _attach_cv_if_possible(
             }
         )
     return analysis
+
+
+def _finalize_success(result: PalmAnalysis) -> PalmAnalysis:
+    """Normalize quality when we have enough signal for a report."""
+    quality = result.image_quality
+    if quality in {"poor", "no_hand"} and (_has_usable_motifs(result) or _has_usable_geometry(result)):
+        quality = "acceptable"
+    return result.model_copy(
+        update={
+            "geometry_source": result.geometry_source or "unavailable",
+            "image_quality": quality,
+        }
+    )
 
 
 async def analyze_palm(settings: Settings, body: PalmAnalyzeBody) -> PalmAnalysis:
@@ -117,22 +162,24 @@ async def analyze_palm(settings: Settings, body: PalmAnalyzeBody) -> PalmAnalysi
             detail="Palm vision not configured — set OPENROUTER_API_KEY on the server.",
         )
 
-    # Vision-first: model reads motifs + crease polylines from the photo.
     inferred: PalmAnalysis | None = None
     if settings.llm_enabled and has_image and ai_mode:
-        inferred = await palm_analysis_from_vision(
-            settings,
-            image_base64=img or "",
-            seed=body.seed,
-            dominant_hand=body.dominant_hand,
-            gender=body.gender,
-        )
+        try:
+            inferred = await palm_analysis_from_vision(
+                settings,
+                image_base64=img or "",
+                seed=body.seed,
+                dominant_hand=body.dominant_hand,
+                gender=body.gender,
+            )
+        except Exception:
+            logger.exception("openrouter vision threw — continuing with CV/fallback")
+            inferred = None
 
     if inferred is not None:
-        # Optional OpenCV upgrade when landmarks are available (before rejecting no_hand).
         result = _attach_cv_if_possible(inferred, body, landmarks, settings)
 
-        # If vision omitted polylines but landmarks exist, use anatomic guide for overlay.
+        # Optional anatomic guide for overlays — never required for success.
         if not _has_usable_geometry(result) and landmarks:
             guide = extract_line_geometry(landmarks)
             if guide:
@@ -146,47 +193,26 @@ async def analyze_palm(settings: Settings, body: PalmAnalyzeBody) -> PalmAnalysi
                     }
                 )
 
-        # Only reject when there is truly no palm signal (no geometry, model says no_hand).
-        if (
-            result.image_quality == "no_hand"
-            and not _has_usable_geometry(result)
-            and not settings.debug
+        # True no-hand with no motifs → structured retake.
+        if result.image_quality == "no_hand" and not _has_usable_motifs(result) and not _has_usable_geometry(
+            result
         ):
-            raise HTTPException(
-                status_code=422,
-                detail="No clear palm visible - please retake the photo with your palm open and well lit.",
-            )
+            if not settings.debug:
+                _raise_unreadable(
+                    "We couldn't clearly analyze your palm.",
+                    ("no clear palm visible", "palm partially outside the frame", "low lighting"),
+                )
+            return _finalize_success(result)
 
-        if _has_usable_geometry(result):
-            if result.image_quality in {"poor", "no_hand"}:
-                result = result.model_copy(update={"image_quality": "acceptable"})
-            return result
-
-        # Motifs without drawable geometry — still usable for the reading text.
-        if result.life_line and result.heart_line and result.head_line:
-            if result.image_quality == "no_hand" and not _has_usable_geometry(result):
-                if not settings.debug:
-                    raise HTTPException(
-                        status_code=422,
-                        detail="No clear palm visible - please retake the photo with your palm open and well lit.",
-                    )
-            logger.warning("vision motifs without geometry seed=%s", body.seed[:32])
-            quality = result.image_quality
-            if quality in {"poor", "no_hand"}:
-                quality = "acceptable"
-            return result.model_copy(
-                update={
-                    "geometry_source": result.geometry_source or "unavailable",
-                    "image_quality": quality,
-                }
-            )
+        # Motifs alone are enough for the Life Blueprint.
+        if _has_usable_motifs(result) or _has_usable_geometry(result):
+            if not _has_usable_geometry(result):
+                logger.warning("vision motifs without geometry seed=%s", body.seed[:32])
+            return _finalize_success(result)
 
         if not settings.debug:
-            raise HTTPException(
-                status_code=422,
-                detail="Palm creases not detected — please retake with your open palm filling the frame and even light.",
-            )
-        return result
+            _raise_unreadable()
+        return _finalize_success(result)
 
     if has_image and settings.llm_enabled:
         logger.error("palm_fallback reason=openrouter_vision_failed seed=%s", body.seed[:32])
@@ -200,10 +226,13 @@ async def analyze_palm(settings: Settings, body: PalmAnalyzeBody) -> PalmAnalysi
             image_base64=img,
             allow_landmark_heuristic=True,
         )
-        if merged.geometry_source == "opencv_creases" and merged.line_geometry:
-            return merged.model_copy(update={"analysis_source": "opencv_creases"})
-        if merged.line_geometry:
-            return merged.model_copy(update={"analysis_source": "hybrid"})
+        if _has_usable_geometry(merged) or _has_usable_motifs(merged):
+            source = (
+                "opencv_creases"
+                if merged.geometry_source == "opencv_creases"
+                else "hybrid"
+            )
+            return _finalize_success(merged.model_copy(update={"analysis_source": source}))
 
     if has_image and ai_mode and settings.llm_enabled and not settings.debug:
         raise HTTPException(

@@ -1,22 +1,33 @@
-import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { Alert, Text, View } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Text, View } from 'react-native';
 
 import { MotiView } from '@/components/moti/MotiView';
 import { CosmicDotGrid } from '@/components/layout/CosmicDotGrid';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
-import { AnalyzingSeal, GradientText } from '@/components/primitives';
-import { ANALYSIS_LOADING_PHRASES, SAMPLE_READING_BADGE } from '@/constants/userCopy';
-import { ANALYSIS_PHRASE_MS, ANALYSIS_SETTLE_MS } from '@/constants/onboarding';
+import { AnalyzingSeal, CosmicButton, GradientText } from '@/components/primitives';
+import {
+  ANALYSIS_STAGE_ANALYZING,
+  ANALYSIS_STAGE_FEATURES,
+  ANALYSIS_STAGE_PREPARING,
+  ANALYSIS_STAGE_UPLOADING,
+  PALM_RETRY_CTA,
+  PALM_RETRY_REASONS_DEFAULT,
+  PALM_RETRY_SUBTITLE,
+  PALM_RETRY_TITLE,
+  SAMPLE_READING_BADGE,
+} from '@/constants/userCopy';
+import { PAGE_PADDING } from '@/constants/layout';
+import { ANALYSIS_SETTLE_MS } from '@/constants/onboarding';
+import { ApiHttpError, parsePalmUnreadable } from '@/services/apiErrors';
 import { analyzePalm } from '@/services/agastyaApi';
 import { bootstrapIdentity } from '@/services/identity';
 import { isApiConfigured } from '@/services/env';
-import { isPalmRetakeError } from '@/services/apiErrors';
 import type { PalmAnalysisDto } from '@/types/palmAnalysis';
 import { isLivePalmAnalysis, palmNeedsRetake } from '@/types/palmAnalysis';
 import { useSessionStore } from '@/store/sessionStore';
 import { deferRouterReplace } from '@/utils/routerDefer';
-import { analysisPresentationMs, analysisProgressPct, delay } from '@/utils/analysisTiming';
+import { delay } from '@/utils/analysisTiming';
 import { withApiRetry } from '@/utils/apiRetry';
 import { trimBase64Payload } from '@/utils/palmLandmarks';
 
@@ -29,153 +40,192 @@ const FALLBACK_PALM: PalmAnalysisDto = {
   analysis_source: 'fallback',
 };
 
-/** Analyze partner palm capture and return to compatibility screen. */
+type FlowPhase = 'working' | 'retry';
+type WorkStage = 0 | 1 | 2 | 3;
+
+const STAGE_LABELS = [
+  ANALYSIS_STAGE_UPLOADING,
+  ANALYSIS_STAGE_ANALYZING,
+  ANALYSIS_STAGE_FEATURES,
+  ANALYSIS_STAGE_PREPARING,
+] as const;
+
+function stagePct(stage: WorkStage): number {
+  return [10, 35, 65, 92][stage] ?? 10;
+}
+
+/** Analyze partner palm capture and return to compatibility — no overlay confirm. */
 export default function PartnerPalmAnalysisScreen() {
   const { seed } = useLocalSearchParams<{ seed?: string }>();
   const setPartnerPalmAnalysis = useSessionStore((s) => s.setPartnerPalmAnalysis);
-  const [phase, setPhase] = useState(0);
-  const [pct, setPct] = useState(0);
+
+  const [flowPhase, setFlowPhase] = useState<FlowPhase>('working');
+  const [stage, setStage] = useState<WorkStage>(0);
+  const [pct, setPct] = useState(10);
   const [sampleBadge, setSampleBadge] = useState(false);
+  const [retryMessage, setRetryMessage] = useState(PALM_RETRY_TITLE);
+  const [retryReasons, setRetryReasons] = useState<string[]>([...PALM_RETRY_REASONS_DEFAULT]);
+  const runIdRef = useRef(0);
 
-  const runMs = analysisPresentationMs(ANALYSIS_LOADING_PHRASES.length);
+  const showRetry = useCallback((message: string, reasons?: string[]) => {
+    setRetryMessage(message || PALM_RETRY_TITLE);
+    setRetryReasons(reasons?.length ? reasons : [...PALM_RETRY_REASONS_DEFAULT]);
+    setFlowPhase('retry');
+    useSessionStore.setState({
+      partnerPalmCaptureBase64: null,
+      partnerPalmCaptureLandmarks: null,
+      partnerPalmLandmarksSource: null,
+    });
+  }, []);
 
-  useEffect(() => {
-    const id = setInterval(() => setPhase((p) => (p + 1) % ANALYSIS_LOADING_PHRASES.length), ANALYSIS_PHRASE_MS);
-    return () => clearInterval(id);
+  const goRetake = useCallback(() => {
+    deferRouterReplace('/report/partner-palm-scan' as never);
   }, []);
 
   useEffect(() => {
+    const runId = ++runIdRef.current;
     const resolvedSeed = seed ?? `partner-${Date.now()}`;
-    const started = Date.now();
-    let cancelled = false;
-
-    setPct(0);
+    setFlowPhase('working');
+    setStage(0);
+    setPct(10);
     setSampleBadge(false);
 
-    // Fixed 0 → 100 over ANALYSIS_MIN_DURATION_MS; never cut short by a fast API.
-    const progressTick = setInterval(() => {
-      const elapsed = Date.now() - started;
-      const next = analysisProgressPct(elapsed, runMs);
-      setPct(next);
-      if (next >= 100) clearInterval(progressTick);
-    }, 50);
+    let cancelled = false;
+    const advance = (next: WorkStage) => {
+      if (cancelled || runId !== runIdRef.current) return;
+      setStage(next);
+      setPct(stagePct(next));
+    };
 
     void (async () => {
-      const waitForPresentation = async () => {
-        const remaining = runMs - (Date.now() - started);
-        if (remaining > 0) await delay(remaining);
-      };
-
-      let needsRetake = false;
-
-      const analyzeOnly = async () => {
+      try {
+        advance(0);
         await bootstrapIdentity();
+        if (cancelled || runId !== runIdRef.current) return;
+
         const snap = useSessionStore.getState();
         if (!snap.sessionId || !snap.deviceInstallId) {
-          throw new Error('missing_session');
-        }
-
-        const captureRaw = snap.partnerPalmCaptureBase64;
-        const capture = captureRaw ? trimBase64Payload(captureRaw) : null;
-        const landmarksSnapshot = snap.partnerPalmCaptureLandmarks;
-        const landmarksSourceSnapshot = snap.partnerPalmLandmarksSource;
-
-        // Review already locked a live reading — reuse and skip re-analyze.
-        const prelocked = snap.partnerPalmAnalysis;
-        if (prelocked && !palmNeedsRetake(prelocked) && isLivePalmAnalysis(prelocked)) {
-          setPartnerPalmAnalysis(prelocked);
-          useSessionStore.setState({
-            partnerPalmCaptureBase64: null,
-            partnerPalmCaptureLandmarks: null,
-            partnerPalmLandmarksSource: null,
-          });
+          showRetry('Something went wrong starting your session. Please try again.');
           return;
         }
 
+        const capture = snap.partnerPalmCaptureBase64
+          ? trimBase64Payload(snap.partnerPalmCaptureBase64)
+          : null;
+        if (isApiConfigured() && !capture) {
+          showRetry('The palm photo was lost before upload. Please scan again.', [
+            'photo missing after capture',
+          ]);
+          return;
+        }
+
+        advance(1);
         let palm: PalmAnalysisDto = FALLBACK_PALM;
-        try {
-          palm = await withApiRetry(() =>
-            analyzePalm({
-              sessionId: snap.sessionId!,
-              deviceInstallId: snap.deviceInstallId!,
-              seed: resolvedSeed,
-              imageBase64: capture,
-              dominantHand: snap.partnerPalmScanHand ?? 'right',
-              landmarks: landmarksSnapshot ?? undefined,
-              landmarksSource: landmarksSourceSnapshot ?? undefined,
-            }),
-          );
+
+        if (isApiConfigured()) {
+          try {
+            palm = await withApiRetry(() =>
+              analyzePalm({
+                sessionId: snap.sessionId!,
+                deviceInstallId: snap.deviceInstallId!,
+                seed: resolvedSeed,
+                imageBase64: capture,
+                dominantHand: snap.partnerPalmScanHand ?? 'right',
+              }),
+            );
+          } catch (err) {
+            if (cancelled || runId !== runIdRef.current) return;
+            const parsed = parsePalmUnreadable(err);
+            if (parsed) {
+              showRetry(parsed.message, parsed.reasons);
+              return;
+            }
+            const msg =
+              err instanceof ApiHttpError
+                ? err.message
+                : err instanceof Error
+                  ? err.message
+                  : 'Palm analysis failed';
+            showRetry(msg);
+            return;
+          }
+
           if (palmNeedsRetake(palm)) {
-            needsRetake = true;
+            showRetry(PALM_RETRY_TITLE, [...PALM_RETRY_REASONS_DEFAULT]);
             return;
           }
           if (!isLivePalmAnalysis(palm)) {
             setSampleBadge(true);
           }
-        } catch (err) {
-          const online = isApiConfigured();
-          if (online) {
-            const msg = err instanceof Error ? err.message : 'Analysis failed';
-            if (isPalmRetakeError(msg)) {
-              needsRetake = true;
-              return;
-            }
-            // Live API configured — never invent a partner palm for match scoring.
-            needsRetake = true;
-            return;
-          }
+        } else {
           palm = FALLBACK_PALM;
           setSampleBadge(true);
         }
 
+        if (cancelled || runId !== runIdRef.current) return;
         setPartnerPalmAnalysis(palm);
         useSessionStore.setState({
           partnerPalmCaptureBase64: null,
           partnerPalmCaptureLandmarks: null,
           partnerPalmLandmarksSource: null,
         });
-      };
 
-      try {
-        await Promise.all([waitForPresentation(), analyzeOnly()]);
+        advance(2);
+        await delay(350);
+        if (cancelled || runId !== runIdRef.current) return;
+        advance(3);
+        setPct(100);
+        await delay(ANALYSIS_SETTLE_MS);
+        if (cancelled || runId !== runIdRef.current) return;
+        deferRouterReplace('/report/compatibility' as never);
       } catch {
-        if (cancelled) return;
+        if (cancelled || runId !== runIdRef.current) return;
         if (isApiConfigured()) {
-          needsRetake = true;
-        } else {
-          setSampleBadge(true);
-          setPartnerPalmAnalysis(FALLBACK_PALM);
-          useSessionStore.setState({
-            partnerPalmCaptureBase64: null,
-            partnerPalmCaptureLandmarks: null,
-            partnerPalmLandmarksSource: null,
-          });
+          showRetry(PALM_RETRY_TITLE, [...PALM_RETRY_REASONS_DEFAULT]);
+          return;
         }
+        setPartnerPalmAnalysis(FALLBACK_PALM);
+        deferRouterReplace('/report/compatibility' as never);
       }
-
-      if (cancelled) return;
-      clearInterval(progressTick);
-      setPct(100);
-      await delay(ANALYSIS_SETTLE_MS);
-      if (cancelled) return;
-      if (needsRetake) {
-        Alert.alert(
-          'Try again',
-          "We couldn't read that palm clearly. Choose a brighter, open-palm photo.",
-          [{ text: 'OK', onPress: () => deferRouterReplace('/report/partner-palm-scan' as never) }],
-        );
-        return;
-      }
-      deferRouterReplace('/report/compatibility' as never);
     })();
 
     return () => {
       cancelled = true;
-      clearInterval(progressTick);
     };
-  }, [seed, setPartnerPalmAnalysis, runMs]);
+  }, [seed, setPartnerPalmAnalysis, showRetry]);
 
-  const caption = ANALYSIS_LOADING_PHRASES[phase] ?? ANALYSIS_LOADING_PHRASES[0];
+  if (flowPhase === 'retry') {
+    return (
+      <CosmicScreen>
+        <View className="flex-1">
+          <CosmicDotGrid />
+          <View
+            className="flex-1 justify-between pb-10 pt-12"
+            style={{ paddingHorizontal: PAGE_PADDING }}>
+            <View className="gap-4">
+              <GradientText className="font-label text-[12px] uppercase tracking-[0.12em] text-cyan">
+                Try again
+              </GradientText>
+              <Text className="font-headline text-[24px] leading-8 text-on-surface">{retryMessage}</Text>
+              <Text className="font-body text-[14px] leading-6 text-on-surface-variant">
+                {PALM_RETRY_SUBTITLE}
+              </Text>
+              <View className="gap-2 rounded-2xl border border-amber-500/25 bg-amber-500/10 px-4 py-3">
+                {retryReasons.map((reason) => (
+                  <Text key={reason} className="font-body text-[14px] leading-6 text-amber-100/95">
+                    • {reason}
+                  </Text>
+                ))}
+              </View>
+            </View>
+            <CosmicButton gradient="nebulaMd3" label={PALM_RETRY_CTA} onPress={goRetake} />
+          </View>
+        </View>
+      </CosmicScreen>
+    );
+  }
+
+  const caption = STAGE_LABELS[stage] ?? ANALYSIS_STAGE_UPLOADING;
 
   return (
     <CosmicScreen>
@@ -193,16 +243,23 @@ export default function PartnerPalmAnalysisScreen() {
               <AnalyzingSeal diameter={220} hideCenterGlyph progress={pct} />
               <View className="pointer-events-none absolute items-center justify-center gap-1">
                 <Text className="font-label text-[28px] font-semibold text-on-surface/95">{pct}%</Text>
-                <Text className="font-label text-[10px] uppercase tracking-[0.35em] text-on-surface-variant">
-                  processing
-                </Text>
               </View>
             </View>
           </View>
 
-          <MotiView key={phase} from={{ opacity: 0 }} animate={{ opacity: 1 }}>
-            <Text className="text-center font-body text-[17px] font-medium leading-7 text-on-surface/95">{caption}</Text>
-          </MotiView>
+          <View className="gap-8">
+            <MotiView key={stage} from={{ opacity: 0 }} animate={{ opacity: 1 }}>
+              <Text className="text-center font-body text-[17px] font-medium leading-7 text-on-surface">
+                {caption}
+              </Text>
+            </MotiView>
+            <View className="h-1.5 overflow-hidden rounded-full bg-white/10">
+              <View
+                className="h-full rounded-full bg-cyan"
+                style={{ width: `${Math.min(100, Math.round(pct))}%` }}
+              />
+            </View>
+          </View>
         </View>
       </View>
     </CosmicScreen>

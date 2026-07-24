@@ -333,16 +333,22 @@ export async function analyzePalm(body: {
   landmarks?: HandLandmark[] | null;
   landmarksSource?: 'mediapipe' | 'roi_estimate' | null;
 }) {
-  return postJson<PalmAnalysisDto>('/v1/palm/analyze', {
-    sessionId: body.sessionId,
-    deviceInstallId: body.deviceInstallId,
-    seed: body.seed,
-    imageBase64: body.imageBase64,
-    dominantHand: body.dominantHand ?? 'unknown',
-    gender: body.gender ?? undefined,
-    landmarks: body.landmarks ?? undefined,
-    landmarksSource: body.landmarksSource ?? undefined,
-  });
+  // Vision + crease path often exceeds the default 8s client timeout.
+  return postJson<PalmAnalysisDto>(
+    '/v1/palm/analyze',
+    {
+      sessionId: body.sessionId,
+      deviceInstallId: body.deviceInstallId,
+      seed: body.seed,
+      imageBase64: body.imageBase64,
+      dominantHand: body.dominantHand ?? 'unknown',
+      gender: body.gender ?? undefined,
+      landmarks: body.landmarks ?? undefined,
+      landmarksSource: body.landmarksSource ?? undefined,
+    },
+    false,
+    { timeoutMs: 90_000 },
+  );
 }
 
 export type PalmLandmarksDto = {
@@ -383,10 +389,15 @@ export async function generateReport(body: {
   if (!deviceInstallId) {
     throw new Error('Device identity is not ready yet. Please try again.');
   }
-  return postJson<Record<string, unknown>>('/v1/reports/generate', {
-    ...body,
-    deviceInstallId,
-  });
+  return postJson<Record<string, unknown>>(
+    '/v1/reports/generate',
+    {
+      ...body,
+      deviceInstallId,
+    },
+    false,
+    { timeoutMs: 90_000 },
+  );
 }
 
 export async function chatWithGuide(body: {

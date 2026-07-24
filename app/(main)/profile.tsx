@@ -38,6 +38,7 @@ import { withApiRetry } from '@/utils/apiRetry';
 import { replayOnboarding } from '@/utils/navigationFlow';
 import { paywallRouteParams } from '@/utils/paywallNavigation';
 import { previewReportHref } from '@/utils/premiumAccess';
+import { shareAgastya } from '@/utils/shareAgastya';
 
 function ritualsCompletedTotal(history: Record<string, string[]>): number {
   return Object.values(history).reduce((sum, ids) => sum + ids.length, 0);
@@ -274,6 +275,9 @@ export default function ProfileScreen() {
   };
 
   const goEditProfile = () => router.push('/edit-profile');
+  const goShareAgastya = () => {
+    void shareAgastya();
+  };
   const goUpgrade = () => router.push(paywallRouteParams('/(main)/profile'));
 
   const accountBusy = signOutBusy || deleteBusy || startFreshBusy;
@@ -292,6 +296,7 @@ export default function ProfileScreen() {
             premium={premium}
             onAvatarPress={goEditProfile}
             onEditPress={goEditProfile}
+            onSharePress={goShareAgastya}
           />
           <MembershipCard premium={premium} onPress={premium ? undefined : goUpgrade} />
           <MotiView
@@ -498,6 +503,14 @@ export default function ProfileScreen() {
         </SettingsSection>
 
         <SettingsSection index={4} title="About" subtitle="Legal and app information">
+          <SettingsRow
+            icon={Platform.OS === 'ios' ? 'ios_share' : 'share'}
+            title="Share"
+            subtitle="Invite a friend to Agastya"
+            onPress={goShareAgastya}
+            accessibilityLabel="Share Agastya"
+            accessibilityHint="Opens the share sheet to invite a friend"
+          />
           <SettingsRow icon="lock" title="Privacy policy" onPress={() => openLink(LEGAL_URLS.privacy)} />
           <SettingsRow icon="article" title="Terms of use" onPress={() => openLink(LEGAL_URLS.terms)} />
           <SettingsRow icon="info" title="Version" subtitle={version} showChevron={false} last />
