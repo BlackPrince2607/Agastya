@@ -121,7 +121,9 @@ export default function ReportPreviewScreen() {
                 ? showUnlockCta
                   ? 'Your preview is ready. Unlock Premium for the full Blueprint, or enter the app anytime.'
                   : 'Your preview is ready. Enter the app to keep exploring.'
-                : 'Upgrade for the full Blueprint, or sign in to save your reading.'}
+                : showUnlockCta
+                  ? 'Sign in, then unlock Premium for the full Blueprint — or save your reading first.'
+                  : 'Sign in to sync your unlocked reading across devices.'}
             </Text>
           </MotiView>
 
@@ -252,8 +254,10 @@ export default function ReportPreviewScreen() {
                 label="Unlock Premium"
                 onPress={() =>
                   router.push({
-                    pathname: '/onboarding/paywall',
-                    params: { seed: mergedSeed },
+                    pathname: isSignedIn ? '/onboarding/paywall' : '/onboarding/account',
+                    params: isSignedIn
+                      ? { seed: mergedSeed }
+                      : { seed: mergedSeed, toPaywall: '1' },
                   })
                 }
               />
@@ -282,7 +286,7 @@ export default function ReportPreviewScreen() {
                   ? 'Home is unlocked. Upgrade anytime for the full report and Guide.'
                   : 'Your reading is saved on this device.'
                 : showUnlockCta
-                  ? 'Your preview stays on this device until you unlock or sign in.'
+                  ? 'Sign in first so Premium unlocks on your account after payment.'
                   : 'Sign in to sync your unlocked reading across devices.'}
             </Text>
           </View>

@@ -7,7 +7,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { HandToggleRow } from '@/components/onboarding/HandToggle';
 import { OnboardingHeader } from '@/components/onboarding/OnboardingHeader';
 import { PalmScanBriefing } from '@/components/onboarding/PalmScanBriefing';
-import { PalmScanCoachingTips } from '@/components/onboarding/PalmScanCoachingTips';
+import { LivePalmCaptureGuide } from '@/components/onboarding/LivePalmCaptureGuide';
 import { PalmScanFrame } from '@/components/onboarding/PalmScanFrame';
 import { CosmicButton, GradientText } from '@/components/primitives';
 import { ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS } from '@/constants/onboarding';
@@ -17,9 +17,6 @@ import {
   CAMERA_PERMISSION_LOADING,
   GALLERY_OPENING,
   PALM_CAMERA_CAPTURING,
-  PALM_CAMERA_CENTER,
-  PALM_CAMERA_COACHING,
-  PALM_CAMERA_GUIDE_HINT,
   PALM_CAMERA_MANUAL,
   PALM_CAPTURE_FAILED,
   PALM_RETAKE_BANNER_PREFIX,
@@ -235,40 +232,33 @@ export default function PalmScanScreen() {
                 </Text>
               </View>
             ) : null}
-            <Text className="font-headline text-[22px] text-on-surface">
-              {hand === 'left' ? 'Left' : 'Right'} palm
-            </Text>
-            <Text className="mt-1 font-body text-[14px] text-on-surface-variant">
-              {PALM_CAMERA_CENTER}
-            </Text>
-            {handLocked ? (
-              <Text className="mt-1.5 font-body text-[12px] leading-5 text-on-surface-variant/90">
-                {palmHandGuidanceLabel(hand, userGender)}
+            <View className="flex-row flex-wrap items-center gap-2">
+              <Text className="font-headline text-[22px] text-on-surface">
+                {hand === 'left' ? 'Left' : 'Right'} palm
               </Text>
-            ) : null}
-            <Text className="mt-1.5 font-body text-[12px] leading-5 text-on-surface-variant/80">
-              {PALM_CAMERA_GUIDE_HINT}
-            </Text>
-            <Text className="mt-1 font-body text-[12px] leading-5 text-on-surface-variant/70">
-              {PALM_CAMERA_COACHING}
-            </Text>
+              {handLocked ? (
+                <View className="rounded-full border border-white/15 bg-black/45 px-2.5 py-1">
+                  <Text className="font-label text-[10px] uppercase tracking-[0.12em] text-on-surface-variant">
+                    {palmHandGuidanceLabel(hand, userGender)}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
           </View>
         </SafeAreaView>
 
-        <View className="flex-1 items-center justify-center px-4" pointerEvents="none">
-          <PalmScanFrame
-            size={frameSize}
-            hand={hand}
-            showInnerGuide
-            showScanLine={false}
-            cornerColor={colors.primary}
-          />
-          <View className="mt-4 max-w-[320px] gap-2 rounded-2xl border border-white/15 bg-black/65 px-4 py-3">
-            <Text className="text-center font-body text-[13px] leading-5 text-on-surface-variant">
-              {capturing
-                ? PALM_CAMERA_CAPTURING
-                : 'Hold steady — tap Capture when your palm fills the guide'}
-            </Text>
+        <View className="flex-1 items-center justify-center px-4" pointerEvents="box-none">
+          <View pointerEvents="none">
+            <PalmScanFrame
+              size={frameSize}
+              hand={hand}
+              showInnerGuide
+              showScanLine={false}
+              cornerColor={colors.primary}
+            />
+          </View>
+          <View className="mt-4 w-full items-center" pointerEvents="none">
+            <LivePalmCaptureGuide capturing={capturing} />
           </View>
         </View>
 
@@ -276,7 +266,6 @@ export default function PalmScanScreen() {
           <View
             className="gap-3 border-t border-white/10 bg-black/75 pt-4"
             style={{ paddingBottom: Math.max(insets.bottom, 14), paddingHorizontal: PAGE_PADDING }}>
-            <PalmScanCoachingTips compact />
             {handLocked ? null : <HandToggleRow hand={hand} onSelect={chooseHand} compact />}
 
             <CosmicButton

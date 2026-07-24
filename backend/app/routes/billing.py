@@ -16,6 +16,8 @@ from app.schemas.billing import (
     BillingConfigResponse,
     GooglePlayVerifyBody,
     GooglePlayVerifyResponse,
+    RazorpayConfirmPaymentBody,
+    RazorpayConfirmPaymentResponse,
     RazorpayPaymentLinkBody,
     RazorpayPaymentLinkResponse,
 )
@@ -173,6 +175,11 @@ async def create_razorpay_payment_link(
         bkt.meta["deviceInstallId"] = body.device_install_id
 
     supabase_user_id = bkt.meta.get("supabaseUserId")
+    if not supabase_user_id:
+        raise HTTPException(
+            status_code=401,
+            detail="Sign in required before starting checkout",
+        )
     amount = razorpay_client.amount_for_period(settings, body.billing_period)
 
     intent = await billing_intents.create_checkout_intent(
@@ -226,6 +233,157 @@ async def create_razorpay_payment_link(
 
     await billing_intents.attach_payment_link(settings, intent_id, payment_link_id)
     return RazorpayPaymentLinkResponse(checkout_url=checkout_url, checkout_intent_id=intent_id)
+
+
+async def _grant_razorpay_premium_from_intent(
+    settings: Settings,
+    intent: dict,
+    *,
+    bkt,
+) -> RazorpayConfirmPaymentResponse:
+    session_id = str(intent.get("session_id") or "")
+    supabase_user_id = intent.get("supabase_user_id")
+    billing_period = str(intent.get("billing_period") or "monthly")
+    days = razorpay_client.premium_expiry_days(billing_period)
+    expires = datetime.now(timezone.utc) + timedelta(days=days)
+
+    await billing_intents.mark_intent_paid(settings, str(intent["id"]))
+
+    ok = await session_repository.set_premium_by_session(
+        session_id,
+        True,
+        settings,
+        premium_source="razorpay",
+        premium_expires_at=expires,
+    )
+    if supabase_user_id:
+        await session_repository.set_premium_by_user(
+            str(supabase_user_id),
+            True,
+            settings,
+            premium_source="razorpay",
+            premium_expires_at=expires,
+        )
+
+    if not ok and not settings.supabase_enabled:
+        # Local/dev without Supabase — still unlock in-memory session bucket.
+        bkt.is_premium = True
+        bkt.premium_source = "razorpay"
+        bkt.premium_expires_at = expires
+        ok = True
+
+    if not ok:
+        raise HTTPException(status_code=502, detail="Could not grant premium")
+
+    bkt.is_premium = True
+    bkt.premium_source = "razorpay"
+    bkt.premium_expires_at = expires
+    return RazorpayConfirmPaymentResponse(is_premium=True, status="paid", source="razorpay")
+
+
+@router.post(
+    "/billing/razorpay/confirm-payment",
+    response_model=RazorpayConfirmPaymentResponse,
+    response_model_by_alias=True,
+)
+async def confirm_razorpay_payment(
+    body: RazorpayConfirmPaymentBody,
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> RazorpayConfirmPaymentResponse:
+    """Actively verify Payment Link status with Razorpay (does not rely on webhooks alone)."""
+    if not settings.billing_razorpay_enabled or not settings.razorpay_configured:
+        raise HTTPException(status_code=503, detail="Razorpay is not configured")
+
+    await _hydrate(body.session_id, settings)
+    bkt = bucket(body.session_id)
+    assert_device_binding(
+        session_id=body.session_id,
+        device_install_id=body.device_install_id,
+        stored_device_id=bkt.meta.get("deviceInstallId"),
+        allow_rebind=False,
+    )
+
+    if bkt.effectively_premium():
+        return RazorpayConfirmPaymentResponse(is_premium=True, status="paid", source="razorpay")
+
+    intent = None
+    if body.checkout_intent_id:
+        intent = await billing_intents.get_intent_by_id(settings, body.checkout_intent_id)
+    if not intent and body.payment_link_id:
+        intent = await billing_intents.get_intent_by_payment_link(settings, body.payment_link_id)
+    if not intent:
+        intent = await billing_intents.get_latest_intent_for_session(settings, body.session_id)
+
+    if not intent or str(intent.get("session_id") or "") != body.session_id:
+        raise HTTPException(status_code=404, detail="Checkout intent not found")
+
+    intent_device = intent.get("device_install_id")
+    if intent_device and str(intent_device) != body.device_install_id:
+        raise HTTPException(status_code=403, detail="Device mismatch for checkout intent")
+
+    # Prefer the signed-in user on the live session when confirming.
+    session_user = bkt.meta.get("supabaseUserId")
+    intent_user = intent.get("supabase_user_id")
+    if session_user and intent_user and str(session_user) != str(intent_user):
+        raise HTTPException(status_code=403, detail="Checkout belongs to a different account")
+    if session_user and not intent_user:
+        intent = {**intent, "supabase_user_id": str(session_user)}
+
+    if intent.get("status") == "paid":
+        return await _grant_razorpay_premium_from_intent(settings, intent, bkt=bkt)
+
+    payment_link_id = body.payment_link_id or intent.get("razorpay_payment_link_id")
+    if not payment_link_id:
+        raise HTTPException(status_code=404, detail="Payment link not found for checkout")
+
+    if (
+        body.razorpay_signature
+        and body.payment_id
+        and body.payment_link_reference_id is not None
+        and body.payment_link_status
+        and settings.razorpay_key_secret
+    ):
+        valid = razorpay_client.verify_payment_link_callback_signature(
+            key_secret=settings.razorpay_key_secret,
+            payment_link_id=str(payment_link_id),
+            payment_link_reference_id=str(body.payment_link_reference_id),
+            payment_link_status=str(body.payment_link_status),
+            payment_id=str(body.payment_id),
+            signature=body.razorpay_signature,
+        )
+        if not valid and not settings.debug:
+            raise HTTPException(status_code=401, detail="Invalid Razorpay payment signature")
+        if not valid:
+            logger.warning("Razorpay callback signature mismatch (DEBUG allowing)")
+
+    try:
+        link = await razorpay_client.fetch_payment_link(settings, str(payment_link_id))
+    except Exception as exc:
+        logger.warning("Razorpay confirm fetch failed: %s", exc)
+        raise HTTPException(status_code=502, detail="Could not verify Razorpay payment") from exc
+
+    status = str(link.get("status") or "unknown")
+    if status != "paid":
+        # Callback may say paid before link entity is fully updated — trust signed paid status.
+        if (
+            body.payment_link_status == "paid"
+            and body.payment_id
+            and body.razorpay_signature
+            and settings.razorpay_key_secret
+            and razorpay_client.verify_payment_link_callback_signature(
+                key_secret=settings.razorpay_key_secret,
+                payment_link_id=str(payment_link_id),
+                payment_link_reference_id=str(body.payment_link_reference_id or ""),
+                payment_link_status="paid",
+                payment_id=str(body.payment_id),
+                signature=body.razorpay_signature,
+            )
+        ):
+            status = "paid"
+        else:
+            return RazorpayConfirmPaymentResponse(is_premium=False, status=status)
+
+    return await _grant_razorpay_premium_from_intent(settings, intent, bkt=bkt)
 
 
 @router.post(

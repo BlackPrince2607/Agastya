@@ -7,7 +7,7 @@ import { CosmicDotGrid } from '@/components/layout/CosmicDotGrid';
 import { BackButton } from '@/components/layout/BackButton';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { HandToggleRow } from '@/components/onboarding/HandToggle';
-import { PalmScanCoachingTips } from '@/components/onboarding/PalmScanCoachingTips';
+import { LivePalmCaptureGuide } from '@/components/onboarding/LivePalmCaptureGuide';
 import { PalmScanFrame } from '@/components/onboarding/PalmScanFrame';
 import { CosmicButton, GradientText } from '@/components/primitives';
 import { PAGE_PADDING } from '@/constants/layout';
@@ -16,8 +16,6 @@ import {
   CAMERA_PERMISSION_LOADING,
   GALLERY_OPENING,
   PALM_CAMERA_CAPTURING,
-  PALM_CAMERA_COACHING,
-  PALM_CAMERA_GUIDE_HINT,
   PALM_CAMERA_MANUAL,
   PALM_CAPTURE_FAILED,
 } from '@/constants/userCopy';
@@ -155,32 +153,22 @@ export default function PartnerPalmScanScreen() {
                 </Text>
               </View>
 
-              <Text className="mt-4 font-body text-[14px] leading-6 text-on-surface-variant">
-                {PALM_CAMERA_GUIDE_HINT}
-              </Text>
-              <Text className="mt-1 font-body text-[12px] leading-5 text-on-surface-variant/80">
-                {PALM_CAMERA_COACHING}
-              </Text>
-
-              <View className="flex-1 items-center justify-center py-4" pointerEvents="none">
-                <PalmScanFrame
-                  hand={hand}
-                  size={frameSize}
-                  showInnerGuide
-                  showScanLine={false}
-                  cornerColor={colors.primary}
-                />
-                <View className="mt-4 max-w-[320px] gap-2 rounded-2xl border border-white/15 bg-black/65 px-4 py-3">
-                  <Text className="text-center font-body text-[13px] leading-5 text-on-surface-variant">
-                    {capturing
-                      ? PALM_CAMERA_CAPTURING
-                      : 'Hold steady — tap Capture when their palm fills the guide'}
-                  </Text>
+              <View className="flex-1 items-center justify-center py-4" pointerEvents="box-none">
+                <View pointerEvents="none">
+                  <PalmScanFrame
+                    hand={hand}
+                    size={frameSize}
+                    showInnerGuide
+                    showScanLine={false}
+                    cornerColor={colors.primary}
+                  />
+                </View>
+                <View className="mt-4 w-full items-center" pointerEvents="none">
+                  <LivePalmCaptureGuide capturing={capturing} partner />
                 </View>
               </View>
 
               <View className="gap-4">
-                <PalmScanCoachingTips compact />
                 <HandToggleRow hand={selectedHand} onSelect={setSelectedHand} compact />
                 <CosmicButton
                   gradient="nebulaMd3"

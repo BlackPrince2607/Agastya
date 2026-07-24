@@ -43,12 +43,13 @@ import { resetAppNavigation } from '@/utils/routerDefer';
 type EmailStepMode = 'signin' | 'signup';
 
 export default function AccountEmailScreen() {
-  const { email: emailParam, mode: modeParam, seed, fromPaywall, fromProfile } = useLocalSearchParams<{
+  const { email: emailParam, mode: modeParam, seed, fromPaywall, fromProfile, toPaywall } = useLocalSearchParams<{
     email?: string;
     mode?: EmailStepMode;
     seed?: string;
     fromPaywall?: string;
     fromProfile?: string;
+    toPaywall?: string;
   }>();
 
   const [password, setPassword] = useState('');
@@ -62,12 +63,19 @@ export default function AccountEmailScreen() {
   const email = (emailParam ?? '').trim().toLowerCase();
   const redirectUri = getAuthRedirectUri();
   const fromProfileFlow = fromProfile === '1';
+  const beforePaywall = toPaywall === '1';
+  const mergedSeed = seed ?? useSessionStore.getState().readingSeed ?? 'stillness';
 
   useEffect(() => {
-    if (fromProfileFlow) {
+    if (beforePaywall) {
+      setPostSignInReturn({
+        pathname: '/onboarding/paywall',
+        params: { seed: mergedSeed },
+      });
+    } else if (fromProfileFlow) {
       setPostSignInReturn('/(main)/profile');
     }
-  }, [fromProfileFlow]);
+  }, [beforePaywall, fromProfileFlow, mergedSeed]);
 
   useEffect(() => {
     if (!email) {

@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 
 import {
   createRazorpayPaymentLink,
+  confirmRazorpayPayment,
   fetchBillingConfig,
   verifyGooglePlayPurchase,
 } from '@/services/agastyaApi';
@@ -23,9 +24,20 @@ export type BillingConfig = {
 
 export type CheckoutResult =
   | { ok: true; redirecting: true }
-  | { ok: false; reason: 'cancelled' | 'unavailable' | 'failed' };
+  | { ok: false; reason: 'cancelled' | 'unavailable' | 'failed' | 'need_sign_in' };
 
 let cachedConfig: { at: number; config: BillingConfig | null } | null = null;
+
+/** Last checkout intent created on this device — used when deep-link params are missing. */
+let lastCheckoutIntentId: string | null = null;
+
+export function getLastCheckoutIntentId(): string | null {
+  return lastCheckoutIntentId;
+}
+
+export function clearLastCheckoutIntentId(): void {
+  lastCheckoutIntentId = null;
+}
 
 export async function getBillingConfig(force = false): Promise<BillingConfig | null> {
   if (!isApiConfigured()) return null;
@@ -64,11 +76,14 @@ export async function startRazorpayCheckout(options: {
   if (!snap.sessionId || !snap.deviceInstallId) {
     return { ok: false, reason: 'unavailable' };
   }
+  if (!snap.supabaseUserId) {
+    return { ok: false, reason: 'need_sign_in' };
+  }
 
   const { successUrl, cancelUrl } = checkoutReturnUrls();
 
   try {
-    const { checkoutUrl } = await createRazorpayPaymentLink({
+    const { checkoutUrl, checkoutIntentId } = await createRazorpayPaymentLink({
       sessionId: snap.sessionId,
       deviceInstallId: snap.deviceInstallId,
       billingPeriod: options.period,
@@ -79,10 +94,56 @@ export async function startRazorpayCheckout(options: {
       platform: 'android',
     });
 
+    if (checkoutIntentId) {
+      lastCheckoutIntentId = checkoutIntentId;
+    }
+
     await Linking.openURL(checkoutUrl);
     return { ok: true, redirecting: true };
   } catch {
     return { ok: false, reason: 'failed' };
+  }
+}
+
+export type ConfirmRazorpayOptions = {
+  checkoutIntentId?: string | null;
+  paymentLinkId?: string | null;
+  paymentId?: string | null;
+  paymentLinkReferenceId?: string | null;
+  paymentLinkStatus?: string | null;
+  razorpaySignature?: string | null;
+};
+
+/** Ask backend to verify Payment Link with Razorpay API and grant premium. */
+export async function confirmRazorpayCheckout(
+  options: ConfirmRazorpayOptions = {},
+): Promise<{ ok: true } | { ok: false; status?: string }> {
+  if (!isApiConfigured()) {
+    return { ok: false };
+  }
+  const snap = useSessionStore.getState();
+  if (!snap.sessionId || !snap.deviceInstallId) {
+    return { ok: false };
+  }
+
+  try {
+    const result = await confirmRazorpayPayment({
+      sessionId: snap.sessionId,
+      deviceInstallId: snap.deviceInstallId,
+      checkoutIntentId: options.checkoutIntentId || lastCheckoutIntentId || undefined,
+      paymentLinkId: options.paymentLinkId || undefined,
+      paymentId: options.paymentId || undefined,
+      paymentLinkReferenceId: options.paymentLinkReferenceId || undefined,
+      paymentLinkStatus: options.paymentLinkStatus || undefined,
+      razorpaySignature: options.razorpaySignature || undefined,
+    });
+    if (result.isPremium) {
+      clearLastCheckoutIntentId();
+      return { ok: true };
+    }
+    return { ok: false, status: result.status };
+  } catch {
+    return { ok: false };
   }
 }
 

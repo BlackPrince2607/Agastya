@@ -187,6 +187,17 @@ export const PALM_CAMERA_MANUAL = 'Capture palm';
 export const PALM_CAMERA_GUIDE_HINT =
   'Keep the whole palm visible — fingers open, wrist in frame, no heavy shadows.';
 
+/** Rotating live prompts shown under the camera frame (one at a time). */
+export const PALM_LIVE_GUIDES = [
+  'Face a window or soft lamp — avoid harsh overhead shadow.',
+  'Open your hand fully with fingers slightly spread.',
+  'Fill the blue guide — wrist and fingertips inside the frame.',
+  'Hold still for a beat, then tap Capture.',
+] as const;
+
+export const PALM_LIVE_GUIDE_CAPTURING = 'Capturing your palm…';
+export const PALM_LIVE_GUIDE_READY = 'When the guide looks filled, tap Capture.';
+
 export const PALM_RETAKE_DEFAULT =
   "We couldn't clearly analyze your palm.";
 

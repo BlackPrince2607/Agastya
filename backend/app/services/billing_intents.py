@@ -80,6 +80,21 @@ async def get_intent_by_payment_link(settings: Settings, payment_link_id: str) -
     return await client.select_one(TABLE, filters={"razorpay_payment_link_id": payment_link_id})
 
 
+async def get_latest_intent_for_session(
+    settings: Settings, session_id: str, *, provider: str = "razorpay"
+) -> dict[str, Any] | None:
+    client = rest_client(settings)
+    if client is None:
+        return None
+    rows = await client.select_many(
+        TABLE,
+        filters={"session_id": session_id, "provider": provider},
+        limit=1,
+        order="created_at.desc",
+    )
+    return rows[0] if rows else None
+
+
 async def mark_intent_paid(settings: Settings, intent_id: str) -> bool:
     client = rest_client(settings)
     if client is None:

@@ -300,6 +300,31 @@ export async function createRazorpayPaymentLink(body: {
   );
 }
 
+export async function confirmRazorpayPayment(body: {
+  sessionId: string;
+  deviceInstallId: string;
+  checkoutIntentId?: string;
+  paymentLinkId?: string;
+  paymentId?: string;
+  paymentLinkReferenceId?: string;
+  paymentLinkStatus?: string;
+  razorpaySignature?: string;
+}) {
+  return postJson<{ isPremium: boolean; status: string; source?: 'razorpay' }>(
+    '/v1/billing/razorpay/confirm-payment',
+    {
+      sessionId: body.sessionId,
+      deviceInstallId: body.deviceInstallId,
+      checkoutIntentId: body.checkoutIntentId,
+      paymentLinkId: body.paymentLinkId,
+      paymentId: body.paymentId,
+      paymentLinkReferenceId: body.paymentLinkReferenceId,
+      paymentLinkStatus: body.paymentLinkStatus,
+      razorpaySignature: body.razorpaySignature,
+    },
+  );
+}
+
 export async function verifyGooglePlayPurchase(body: {
   sessionId: string;
   deviceInstallId: string;

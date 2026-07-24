@@ -34,6 +34,7 @@ _LIMITS: dict[str, tuple[int, int]] = {
     "/auth/check-email": (10, 60),
     "/auth/delete-account": (5, 3600),
     "/billing/razorpay/create-payment-link": (5, 60),
+    "/billing/razorpay/confirm-payment": (10, 60),
     "/billing/google-play/verify-purchase": (5, 60),
     "/billing/config": (30, 60),
 }

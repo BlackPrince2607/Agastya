@@ -23,6 +23,7 @@ import {
   checkPremiumStatus,
   finalizeRazorpayCheckout,
 } from '@/services/premiumUnlock';
+import { useAuthSession } from '@/hooks/useAuthSession';
 import { useSessionStore } from '@/store/sessionStore';
 import { enterMainApp } from '@/utils/navigationFlow';
 import { goBack, normalizeRouteParams } from '@/utils/navigationBack';
@@ -66,12 +67,29 @@ export default function PaywallScreen() {
     checkout?: string;
     provider?: string;
     returnTo?: string;
+    razorpay_payment_id?: string;
+    razorpay_payment_link_id?: string;
+    razorpay_payment_link_reference_id?: string;
+    razorpay_payment_link_status?: string;
+    razorpay_signature?: string;
   }>();
-  const { seed, checkout, returnTo } = searchParams;
+  const {
+    seed,
+    checkout,
+    returnTo,
+    razorpay_payment_id,
+    razorpay_payment_link_id,
+    razorpay_payment_link_reference_id,
+    razorpay_payment_link_status,
+    razorpay_signature,
+  } = searchParams;
   const routeParams = normalizeRouteParams(searchParams);
   const period = useSessionStore((s) => s.billingPeriod);
   const setPeriod = useSessionStore((s) => s.setBillingPeriod);
   const premium = useSessionStore((s) => s.hasUnlockedPremium);
+  const storeUserId = useSessionStore((s) => s.supabaseUserId);
+  const { isSignedIn, email: authEmail, loading: authLoading } = useAuthSession();
+  const signedIn = Boolean(isSignedIn || storeUserId);
   const [busy, setBusy] = useState(false);
   const [billingConfig, setBillingConfig] = useState<BillingConfig | null>(null);
 
@@ -80,9 +98,41 @@ export default function PaywallScreen() {
   const billingAvailable =
     Platform.OS === 'android' && (testBypass || isPlayUserChoiceAvailable());
 
+  const mergedSeed = seed ?? useSessionStore.getState().readingSeed ?? 'stillness';
+
+  const goToSignInForPaywall = () => {
+    router.push({
+      pathname: '/onboarding/account',
+      params: { seed: mergedSeed, toPaywall: '1' },
+    });
+  };
+
+  const afterUnlockSuccess = () => {
+    // Already signed in before payment — enter the app directly.
+    if (signedIn || useSessionStore.getState().supabaseUserId) {
+      enterMainApp();
+      return;
+    }
+    router.push({
+      pathname: '/onboarding/account',
+      params: { seed: mergedSeed, fromPaywall: '1' },
+    });
+  };
+
   useEffect(() => {
     trackOnce('paywall_viewed', AnalyticsEvent.PAYWALL_VIEWED);
   }, []);
+
+  // Require sign-in before starting a new purchase (not while returning from Razorpay).
+  useEffect(() => {
+    if (authLoading) return;
+    if (checkout === 'success' || checkout === 'cancelled') return;
+    if (signedIn) return;
+    router.replace({
+      pathname: '/onboarding/account',
+      params: { seed: mergedSeed, toPaywall: '1' },
+    });
+  }, [authLoading, signedIn, checkout, mergedSeed]);
 
   useEffect(() => {
     let cancelled = false;
@@ -94,8 +144,6 @@ export default function PaywallScreen() {
       cancelled = true;
     };
   }, []);
-
-  const mergedSeed = seed ?? useSessionStore.getState().readingSeed ?? 'stillness';
 
   const formatPlanPrice = (key: 'monthly' | 'annual', fallback: string) => {
     const plan = billingConfig?.plans?.[key];
@@ -114,6 +162,7 @@ export default function PaywallScreen() {
 
   const subscribeLabel = () => {
     if (busy) return 'Processing...';
+    if (!signedIn) return 'Sign in to unlock';
     return 'Unlock Premium';
   };
 
@@ -126,10 +175,16 @@ export default function PaywallScreen() {
     let cancelled = false;
     setBusy(true);
     void (async () => {
-      const result = await finalizeRazorpayCheckout(mergedSeed);
+      const result = await finalizeRazorpayCheckout(mergedSeed, {
+        paymentLinkId: razorpay_payment_link_id,
+        paymentId: razorpay_payment_id,
+        paymentLinkReferenceId: razorpay_payment_link_reference_id,
+        paymentLinkStatus: razorpay_payment_link_status,
+        razorpaySignature: razorpay_signature,
+      });
       if (cancelled) return;
       if (result.ok) {
-        goToAccountSync();
+        afterUnlockSuccess();
       } else {
         Alert.alert(
           'Purchase pending',
@@ -143,19 +198,22 @@ export default function PaywallScreen() {
     return () => {
       cancelled = true;
     };
-  }, [checkout, mergedSeed]);
-
-  const goToAccountSync = () => {
-    router.push({
-      pathname: '/onboarding/account',
-      params: { seed: mergedSeed, fromPaywall: '1' },
-    });
-  };
+  }, [
+    checkout,
+    mergedSeed,
+    razorpay_payment_id,
+    razorpay_payment_link_id,
+    razorpay_payment_link_reference_id,
+    razorpay_payment_link_status,
+    razorpay_signature,
+  ]);
 
   const unlockFailureMessage = (reason: string) => {
     switch (reason) {
       case 'cancelled':
         return 'Purchase was cancelled.';
+      case 'need_sign_in':
+        return 'Sign in with your email first so we can unlock Premium on your account.';
       case 'unavailable':
         return 'Billing is not available on this device. Use a production Android build enrolled in Google Play User Choice.';
       case 'not_entitled':
@@ -169,6 +227,10 @@ export default function PaywallScreen() {
 
   const handleSubscribe = async () => {
     if (busy) return;
+    if (!signedIn) {
+      goToSignInForPaywall();
+      return;
+    }
     setBusy(true);
     track(AnalyticsEvent.PURCHASE_STARTED, { billing_period: period });
 
@@ -176,6 +238,10 @@ export default function PaywallScreen() {
       const result = await unlockPremium({ seed: mergedSeed });
 
       if (!result.ok) {
+        if (result.reason === 'need_sign_in') {
+          goToSignInForPaywall();
+          return;
+        }
         if (result.reason !== 'cancelled') {
           Alert.alert('Could not unlock Premium', unlockFailureMessage(result.reason));
         }
@@ -183,10 +249,11 @@ export default function PaywallScreen() {
       }
 
       if (result.source === 'razorpay') {
+        // Browser checkout opened — keep busy false; return deep link resumes finalize.
         return;
       }
 
-      goToAccountSync();
+      afterUnlockSuccess();
     } finally {
       setBusy(false);
     }
@@ -198,7 +265,7 @@ export default function PaywallScreen() {
     try {
       const result = await checkPremiumStatus({ seed: mergedSeed });
       if (result.ok) {
-        goToAccountSync();
+        afterUnlockSuccess();
       } else if (result.reason !== 'cancelled') {
         Alert.alert('No subscription found', unlockFailureMessage(result.reason));
       }
@@ -237,6 +304,11 @@ export default function PaywallScreen() {
               <View className="mt-4 rounded-2xl border border-cyan/35 bg-cyan/10 px-4 py-3">
                 <Text className="font-body text-[14px] text-cyan">You already have full access on this device.</Text>
               </View>
+            ) : null}
+            {signedIn && authEmail ? (
+              <Text className="mt-3 font-body text-[13px] leading-5 text-on-surface-variant">
+                Paying as {authEmail}. Premium unlocks on this account after checkout.
+              </Text>
             ) : null}
             {billingAvailable ? (
               <Text className="mt-3 font-body text-[13px] leading-5 text-cyan">
@@ -319,7 +391,7 @@ export default function PaywallScreen() {
               <CosmicButton
                 gradient="nebulaMd3"
                 label="Enter Agastya"
-                onPress={() => (hasPremiumAccess() ? enterMainApp() : goToAccountSync())}
+                onPress={() => (hasPremiumAccess() ? enterMainApp() : afterUnlockSuccess())}
               />
             ) : (
               <MotiView
@@ -334,7 +406,9 @@ export default function PaywallScreen() {
               </MotiView>
             )}
             <CosmicButton variant="ghost" label="Go back" onPress={backFromPaywall} />
-            <CosmicButton variant="ghost" label="Save & sign in" onPress={goToAccountSync} />
+            {!signedIn ? (
+              <CosmicButton variant="ghost" label="Sign in to unlock" onPress={goToSignInForPaywall} />
+            ) : null}
             <View className="mt-1 flex-row items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2.5">
               <Ionicons name="shield-checkmark" size={16} color="#4ade80" />
               <Text className="font-body text-[12px] text-on-surface/85">Secure payment via Google Play or Razorpay.</Text>

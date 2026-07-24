@@ -49,10 +49,11 @@ const TRUST_BADGES = [
 
 export default function SaveJourneyScreen() {
   const insets = useSafeAreaInsets();
-  const { seed, fromPaywall, fromProfile } = useLocalSearchParams<{
+  const { seed, fromPaywall, fromProfile, toPaywall } = useLocalSearchParams<{
     seed?: string;
     fromPaywall?: string;
     fromProfile?: string;
+    toPaywall?: string;
   }>();
   const storeSeed = useSessionStore((s) => s.readingSeed);
   const mergedSeed = seed ?? storeSeed ?? 'stillness';
@@ -60,6 +61,7 @@ export default function SaveJourneyScreen() {
   const hasEnteredMain = useSessionStore((s) => s.hasEnteredMain);
   const { isSignedIn, email: authEmail } = useAuthSession();
   const afterPaywall = fromPaywall === '1';
+  const beforePaywall = toPaywall === '1';
   const fromProfileFlow = fromProfile === '1';
 
   const [email, setEmail] = useState('');
@@ -69,14 +71,28 @@ export default function SaveJourneyScreen() {
   const showOAuth = isOAuthSignInEnabled && !isSignedIn;
 
   useEffect(() => {
-    if (fromProfileFlow) {
+    if (beforePaywall) {
+      setPostSignInReturn({
+        pathname: '/onboarding/paywall',
+        params: { seed: mergedSeed },
+      });
+    } else if (fromProfileFlow) {
       setPostSignInReturn('/(main)/profile');
     }
-  }, [fromProfileFlow]);
+  }, [beforePaywall, fromProfileFlow, mergedSeed]);
 
   useEffect(() => {
     void warmUpOAuthBrowser();
   }, []);
+
+  // Already signed in while heading to pay — skip straight to checkout.
+  useEffect(() => {
+    if (!beforePaywall || !isSignedIn) return;
+    router.replace({
+      pathname: '/onboarding/paywall',
+      params: { seed: mergedSeed },
+    });
+  }, [beforePaywall, isSignedIn, mergedSeed]);
 
   const openLegal = (url: string) => {
     void Linking.openURL(url).catch(() => {
@@ -98,6 +114,7 @@ export default function SaveJourneyScreen() {
         seed: mergedSeed,
         fromPaywall: fromPaywall ?? '',
         fromProfile: fromProfile ?? '',
+        toPaywall: toPaywall ?? '',
       },
     });
   };
@@ -137,10 +154,14 @@ export default function SaveJourneyScreen() {
 
   const headline = fromProfileFlow
     ? 'Sign in to your account'
-    : 'Save your reading';
+    : beforePaywall
+      ? 'Sign in to unlock Premium'
+      : 'Save your reading';
   const subhead = fromProfileFlow
     ? 'Back up your reading and sync across devices.'
-    : 'Sign in to save your report, chat history, and daily progress on any device.';
+    : beforePaywall
+      ? 'We attach Premium to your email so access follows you after payment — no second sign-in.'
+      : 'Sign in to save your report, chat history, and daily progress on any device.';
 
   return (
     <CosmicScreen variant="stitch">
@@ -183,9 +204,11 @@ export default function SaveJourneyScreen() {
                   {authEmail ? `Signed in as ${authEmail}.` : "You're signed in."}{' '}
                   {fromProfileFlow
                     ? 'Return to your profile below.'
-                    : hasRitualReading() || hasEnteredMain
-                      ? 'Tap Enter Agastya below.'
-                      : 'Tap Enter Agastya to restore your journey or start from Home.'}
+                    : beforePaywall
+                      ? 'Continue to Unlock Premium below.'
+                      : hasRitualReading() || hasEnteredMain
+                        ? 'Tap Enter Agastya below.'
+                        : 'Tap Enter Agastya to restore your journey or start from Home.'}
                 </Text>
               </GlassCard>
             ) : null}
@@ -296,6 +319,16 @@ export default function SaveJourneyScreen() {
             <View className="gap-y-3">
               {isSignedIn && fromProfileFlow ? (
                 <PrimaryButton label="Back to profile" onPress={() => router.replace('/(main)/profile')} />
+              ) : isSignedIn && beforePaywall ? (
+                <PrimaryButton
+                  label="Continue to Unlock Premium"
+                  onPress={() =>
+                    router.replace({
+                      pathname: '/onboarding/paywall',
+                      params: { seed: mergedSeed },
+                    })
+                  }
+                />
               ) : isSignedIn ? (
                 <PrimaryButton
                   label={enterBusy ? 'Opening Agastya...' : 'Enter Agastya'}
@@ -305,15 +338,22 @@ export default function SaveJourneyScreen() {
               ) : null}
               {!isSignedIn ? (
                 <Text className="mt-1 text-center font-body text-[12px] leading-5 text-on-surface-variant">
-                  Sign in above to save your reading and access the app.
+                  {beforePaywall
+                    ? 'Sign in above, then complete payment to unlock Premium on this account.'
+                    : 'Sign in above to save your reading and access the app.'}
                 </Text>
               ) : null}
-              {!afterPaywall && !premium && !fromProfileFlow ? (
+              {!afterPaywall && !beforePaywall && !premium && !fromProfileFlow ? (
                 <Pressable
-                  onPress={() => router.push({ pathname: '/onboarding/paywall', params: { seed: mergedSeed } })}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/onboarding/account',
+                      params: { seed: mergedSeed, toPaywall: '1' },
+                    })
+                  }
                   className="items-center pb-1">
                   <Text className="font-body text-[13px]" style={{ color: '#22d3ee' }}>
-                    Want full access? View plans
+                    Want full access? Sign in to unlock
                   </Text>
                 </Pressable>
               ) : null}

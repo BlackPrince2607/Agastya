@@ -33,6 +33,8 @@ PUBLIC_API_BASE_URL=https://agastya-production-eb56.up.railway.app
 PLAY_PACKAGE_NAME=com.agastya.app
 ```
 
+Checkout requires a signed-in Supabase user (`supabaseUserId` on the session). After payment, the app confirms via `POST /v1/billing/razorpay/confirm-payment` (does not wait only on webhooks) and enters the main app when already signed in.
+
 For Expo Go / no Play User Choice during this first live ₹1 test, also temporarily set:
 
 ```

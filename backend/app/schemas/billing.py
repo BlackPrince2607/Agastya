@@ -40,6 +40,42 @@ class RazorpayPaymentLinkResponse(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class RazorpayConfirmPaymentBody(BaseModel):
+    session_id: str = Field(alias="sessionId")
+    device_install_id: str = Field(alias="deviceInstallId")
+    checkout_intent_id: str | None = Field(default=None, alias="checkoutIntentId")
+    payment_link_id: str | None = Field(default=None, alias="paymentLinkId", max_length=64)
+    payment_id: str | None = Field(default=None, alias="paymentId", max_length=64)
+    payment_link_reference_id: str | None = Field(
+        default=None, alias="paymentLinkReferenceId", max_length=128
+    )
+    payment_link_status: str | None = Field(default=None, alias="paymentLinkStatus", max_length=32)
+    razorpay_signature: str | None = Field(default=None, alias="razorpaySignature", max_length=256)
+
+    model_config = {"populate_by_name": True}
+
+    @field_validator("session_id")
+    @classmethod
+    def _session_uuid(cls, v: str) -> str:
+        return _parse_uuid(v)
+
+    @field_validator("device_install_id")
+    @classmethod
+    def _device_id(cls, v: str) -> str:
+        out = validate_device_install_id(v)
+        if out is None:
+            raise ValueError("deviceInstallId required")
+        return out
+
+
+class RazorpayConfirmPaymentResponse(BaseModel):
+    is_premium: bool = Field(alias="isPremium")
+    status: str = "pending"
+    source: Literal["razorpay"] | None = None
+
+    model_config = {"populate_by_name": True}
+
+
 class GooglePlayVerifyBody(BaseModel):
     session_id: str = Field(alias="sessionId")
     device_install_id: str = Field(alias="deviceInstallId")
