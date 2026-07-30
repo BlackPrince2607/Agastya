@@ -1,6 +1,6 @@
 # Railway Option B — Razorpay live E2E checklist
 
-App already uses: `https://agastya-production-eb56.up.railway.app`
+App already uses: `https://agastya-production-b395.up.railway.app`
 
 ## 1. Deploy this branch’s backend to Railway
 
@@ -29,7 +29,7 @@ BILLING_FORCE_COUNTRY=IN
 BILLING_RAZORPAY_TEST_BYPASS=true
 CHECKOUT_ALLOWED_RETURN_ORIGINS=agastya://,exp://,https://agastya.app
 # Optional but recommended on Railway so Razorpay callbacks are always HTTPS:
-PUBLIC_API_BASE_URL=https://agastya-production-eb56.up.railway.app
+PUBLIC_API_BASE_URL=https://agastya-production-b395.up.railway.app
 PLAY_PACKAGE_NAME=com.agastya.app
 ```
 
@@ -54,7 +54,7 @@ Redeploy after changing variables (Railway usually redeploys automatically).
 3. URL:
 
 ```
-https://agastya-production-eb56.up.railway.app/v1/webhooks/razorpay
+https://agastya-production-b395.up.railway.app/v1/webhooks/razorpay
 ```
 
 4. Events: `payment.captured`, `payment_link.paid`, `payment_link.expired`, `refund.processed`, `payment.dispute.created`, `payment.dispute.won`  
@@ -65,7 +65,7 @@ https://agastya-production-eb56.up.railway.app/v1/webhooks/razorpay
 Root `.env`:
 
 ```
-EXPO_PUBLIC_AGASTYA_API_URL=https://agastya-production-eb56.up.railway.app
+EXPO_PUBLIC_AGASTYA_API_URL=https://agastya-production-b395.up.railway.app
 EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS=true
 ```
 
@@ -74,8 +74,8 @@ Restart Expo: `npx expo start -c`
 ## 5. Smoke checks after Railway redeploy
 
 ```powershell
-curl https://agastya-production-eb56.up.railway.app/v1/health
-curl "https://agastya-production-eb56.up.railway.app/v1/billing/config?platform=android"
+curl https://agastya-production-b395.up.railway.app/v1/health
+curl "https://agastya-production-b395.up.railway.app/v1/billing/config?platform=android"
 ```
 
 Config JSON should include `"id":"razorpay"` with `"enabled":true`.

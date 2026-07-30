@@ -1,165 +1,95 @@
 # Agastya — Prototype APK (share with testers)
 
-Use this guide to build an **installable `.apk`** you can send to Android phones (WhatsApp, Drive, email). No Play Store required.
+Installable `.apk` for Android (WhatsApp / Drive / email). No Play Store required.
 
----
+## Prerequisites (already set in this repo)
 
-## What you need
+| Item | Status |
+|------|--------|
+| Expo account | Logged in as `anish26` / team `anish26s-team` |
+| EAS project ID | `e734e717-48c7-49ec-8e5a-8810cfed0fa4` in `app.json` |
+| Icons / splash | `assets/images/*` |
+| API URL | Railway in `eas.json` + EAS preview env |
+| Supabase | EAS **preview** env has `EXPO_PUBLIC_SUPABASE_URL` + `ANON_KEY` |
 
-| Item | Status in your repo | Action |
-|------|---------------------|--------|
-| Expo account (free) | Not logged in yet | `npx eas-cli login` |
-| EAS project ID | Set in `app.json` (`extra.eas.projectId`) | `npx eas-cli project:init` if missing |
-| App icons | Present in `assets/images/` | None |
-| JS bundle builds | Verified (`expo export --platform android`) | None |
-| **Public API URL** | `.env` still points at local/LAN | Deploy backend (step 2) |
-| Supabase | Set in `.env` | Add redirect URL `agastya://**` |
-| RevenueCat | Empty | Optional for prototype |
-
----
-
-## Step 1 — One-time EAS setup
-
-```powershell
-cd D:\Agastya
-npx eas-cli login
-npx eas-cli project:init
-```
-
-`project:init` prints a **project ID**. Put it in `app.json`:
-
-```json
-"extra": {
-  "eas": {
-    "projectId": "YOUR-UUID-HERE"
-  }
-}
-```
-
-Also update `updates.url` in `app.json` to `https://u.expo.dev/YOUR-UUID-HERE` (same ID).
-
----
-
-## Step 2 — Deploy the backend (required)
-
-APK builds bake in `EXPO_PUBLIC_AGASTYA_API_URL`. Testers’ phones **cannot** reach `localhost` or your PC’s LAN IP.
-
-### Option A: Railway via GitHub (recommended)
-
-1. Push this repo to GitHub (if not already)
-2. [railway.app](https://railway.app) → **New Project** → **Deploy from GitHub repo**
-3. Set variables from `railway.env.example` in Railway Dashboard → **Variables**
-4. **Settings → Networking → Generate Domain**
-5. Verify: `curl https://YOUR-APP.up.railway.app/v1/health`
-
-Use that URL in `eas.json` (`prototype` / `preview` profiles) and optionally in expo.dev **Environment variables**.
-
-### Option B: Fly.io
-
-```powershell
-fly auth login
-fly launch --no-deploy --config fly.toml
-fly secrets set OPENROUTER_API_KEY=sk-or-v1-... SUPABASE_URL=https://xxx.supabase.co SUPABASE_SERVICE_ROLE_KEY=eyJ... DEBUG=false CORS_ORIGINS=https://agastya.app
-fly deploy --config fly.toml
-```
-
-Note the URL (e.g. `https://agastya-api.fly.dev`). Verify:
-
-```powershell
-curl https://YOUR-API/v1/health
-```
-
-Apply Supabase migrations (`npx supabase db push` or SQL editor) — see `DEPLOY.md` §4.
-
----
-
-## Step 3 — Configure build environment variables
-
-EAS cloud builds **do not** read your local `.env`. The **`prototype`** profile in `eas.json` already sets:
-
-- `EXPO_PUBLIC_AGASTYA_API_URL` (Railway API)
-- `EXPO_UPDATES_ENABLED=false`
-
-Also set on [expo.dev](https://expo.dev) → project → **Environment variables** (preview environment):
-
-```text
-EXPO_PUBLIC_SUPABASE_URL=https://YOUR-PROJECT.supabase.co
-EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-```
-
-Optional:
-
-```powershell
-npx eas-cli env:create --name EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY --value ...
-npx eas-cli env:create --name EXPO_PUBLIC_SENTRY_DSN --value ...
-```
-
-See `env.example` for the full frontend variable list.
-
-### Supabase auth for the APK
-
-Supabase Dashboard → **Authentication → URL configuration → Redirect URLs**, add:
-
-- `agastya://**`
-- `agastya://auth/callback`
-
----
-
-## Step 4 — Build the APK
+## Build command
 
 ```powershell
 cd D:\Agastya
 npm run build:apk
 ```
 
-This runs `eas build --platform android --profile prototype` (APK, internal distribution).
+Uses profile **`prototype`** → Android **APK**, internal distribution, API → Railway.
 
-- First build: EAS may ask to generate an Android keystore — choose **Let EAS handle it**.
-- Build runs in the cloud (~10–20 min). Watch progress at [expo.dev](https://expo.dev) or in the terminal.
+- First build: let EAS generate the Android keystore.
+- ~10–20 min in the cloud → download from [expo.dev](https://expo.dev) → Builds.
 
-When finished, download the `.apk` from the Expo dashboard **Builds** page.
+Local APK (needs Android SDK):
 
----
+```powershell
+npm run build:apk:local
+```
 
-## Step 5 — Share with testers
+## What the APK includes
 
-1. Send the `.apk` file (Drive, Telegram, email, etc.).
-2. Testers enable **Install from unknown sources** for that app/browser.
-3. Open the APK and install.
+- Palm scan, preview, chat, home (API + Supabase)
+- Sign-in via `agastya://` deep links
+- Billing: Razorpay + Play User Choice module  
+  - **Sideloaded prototype/preview APK:** `EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS=true` is baked in → Razorpay opens directly (sign in first)  
+  - **Play-enrolled / production:** full User Choice → Razorpay or Play Billing  
+  - Railway must keep `DEBUG=true` + `BILLING_RAZORPAY_TEST_BYPASS=true` while testing this path
 
-**Prototype limitations without RevenueCat:** onboarding, palm scan, chat, and free-tier features work; in-app purchase / premium unlock will not until you add `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY`.
+## Before you build (checklist)
 
-To grant premium manually for demos, set `is_premium = true` on the user’s row in Supabase (`agastya_sessions`).
+1. Railway API healthy: `curl https://agastya-production-b395.up.railway.app/v1/health`
+2. Supabase → Auth → Redirect URLs include:
+   - `agastya://**`
+   - `agastya://auth/callback`
+3. Railway `CHECKOUT_ALLOWED_RETURN_ORIGINS` includes `agastya://`
+4. EAS preview env (already present):
+   - `EXPO_PUBLIC_SUPABASE_URL`
+   - `EXPO_PUBLIC_SUPABASE_ANON_KEY`
+   - `EXPO_PUBLIC_AGASTYA_API_URL`
 
----
+Optional extras on expo.dev → Environment variables → **preview**:
+
+```text
+EXPO_PUBLIC_SENTRY_DSN=...
+EXPO_PUBLIC_POSTHOG_KEY=...
+EXPO_PUBLIC_PREMIUM_EMAIL_ALLOWLIST=sohambhalotia@gmail.com
+```
+
+## Share with testers
+
+1. Send the `.apk`
+2. Enable **Install unknown apps** for the browser/Files app
+3. Install and open
+
+Grant premium for a tester without Play billing: Supabase `agastya_sessions.is_premium = true` for their session/user, or add their email to `EXPO_PUBLIC_PREMIUM_EMAIL_ALLOWLIST` / backend `PREMIUM_EMAIL_ALLOWLIST`.
 
 ## Quick commands
 
 | Command | Purpose |
 |---------|---------|
 | `npm run doctor` | Expo health check |
-| `npm run export:android` | Local JS bundle sanity check (no APK) |
-| `npm run build:apk` | Cloud APK for testers |
-| `npm run build:apk:local` | Build APK on your PC (needs Android SDK) |
-
----
+| `npm run export:android` | JS bundle sanity check (no APK) |
+| `npm run build:apk` | Cloud APK |
+| `npm run build:apk:local` | Local APK |
 
 ## Troubleshooting
 
 | Problem | Fix |
 |---------|-----|
-| API calls fail on phone | `EXPO_PUBLIC_AGASTYA_API_URL` must be HTTPS public URL, not localhost |
+| API fails on phone | Must be HTTPS Railway URL, not localhost |
 | Sign-in redirect fails | Add `agastya://**` to Supabase redirect URLs |
-| Build fails on Sentry plugin | Set `EXPO_PUBLIC_SENTRY_DSN` secret or remove Sentry plugin from `app.json` for prototype |
-| `REPLACE_WITH_EAS_PROJECT_ID` | Run `eas project:init` and update `app.json` |
-| Install blocked | Enable unknown sources; some corporate phones block sideloading |
+| Sentry upload fails build | `SENTRY_DISABLE_AUTO_UPLOAD=true` already in prototype profile |
+| Paywall “billing not available” | Rebuild prototype APK after enabling `EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS=true` in `eas.json`, or use Expo Go with that flag in `.env` |
+| Install blocked | Enable unknown sources |
 
----
-
-## After the prototype
-
-For Play Store release, switch to the `production` profile (AAB format) and complete `DEPLOY.md` (RevenueCat, legal pages, store listings).
+## Play Store later
 
 ```powershell
 npx eas-cli build --platform android --profile production
 ```
+
+Produces an **AAB** for Play Console (see `DEPLOY.md`).

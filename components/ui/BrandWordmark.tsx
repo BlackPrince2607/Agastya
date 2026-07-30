@@ -31,8 +31,8 @@ export function BrandWordmark({ className, size = 'md', showMark = true }: Brand
         <Image
           source={require('../../assets/images/agastya-logo.png')}
           accessibilityLabel="Agastya"
-          style={{ width: px, height: px, borderRadius: px / 2 }}
-          resizeMode="cover"
+          style={{ width: px, height: px }}
+          resizeMode="contain"
         />
       ) : null}
       <GradientText

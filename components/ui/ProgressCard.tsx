@@ -34,7 +34,7 @@ export function ProgressCard({
     safeTotal > 0 ? `${completed} / ${safeTotal} Rituals Completed` : 'Begin your rituals';
 
   return (
-    <GlassCard className="w-full p-5" innerClassName="gap-4">
+    <GlassCard className="w-full" innerClassName="gap-4 p-5">
       <View className="flex-row items-start gap-4">
         <View className="h-12 w-12 items-center justify-center rounded-2xl bg-purple/20">
           <Icon name="local_fire_department" size={24} color={colors.purple} />

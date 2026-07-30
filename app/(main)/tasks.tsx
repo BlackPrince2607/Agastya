@@ -183,7 +183,7 @@ export default function TasksScreen() {
         {loading && list.length === 0 ? <LoadingBlock variant="skeleton" message={TASKS_LOADING} /> : null}
 
         {allDone ? (
-          <GlassCard glow className="w-full p-5" innerClassName="flex-row items-center gap-3">
+          <GlassCard glow className="w-full" innerClassName="flex-row items-center gap-3 p-5">
             <Icon name="auto_awesome" size={24} color={colors.primary} />
             <Text className="flex-1 font-body-medium text-[15px] leading-6 text-on-surface">
               Beautiful consistency. Rest easy — tomorrow’s rituals will be waiting.

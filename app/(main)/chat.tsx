@@ -54,6 +54,8 @@ export default function ChatScreen() {
   const isTyping = useChatStore((s) => s.isTyping);
   const addMessage = useChatStore((s) => s.addMessage);
   const setSuggestions = useChatStore((s) => s.setSuggestions);
+  const removeSuggestion = useChatStore((s) => s.removeSuggestion);
+  const clearSuggestions = useChatStore((s) => s.clearSuggestions);
   const setTyping = useChatStore((s) => s.setTyping);
 
   const [input, setInput] = useState('');
@@ -143,6 +145,7 @@ export default function ChatScreen() {
     }
 
     setError(null);
+    clearSuggestions();
     addMessage('you', trimmed);
     setInput('');
     inputRef.current?.blur();
@@ -262,8 +265,14 @@ export default function ChatScreen() {
             <View className="w-full gap-2">
               {error ? <InlineError message={error} onDismiss={() => setError(null)} /> : null}
 
-              {suggestions.length > 0 ? (
-                <SuggestionChips suggestions={suggestions} onSelect={setInput} />
+              {suggestions.length > 0 && !replyBusy && !isTyping ? (
+                <SuggestionChips
+                  suggestions={suggestions}
+                  onSelect={(text) => {
+                    removeSuggestion(text);
+                    setInput(text);
+                  }}
+                />
               ) : null}
 
               <GlassCard className="rounded-pill px-1.5 py-1.5" innerClassName="flex-row items-center gap-2">

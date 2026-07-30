@@ -54,7 +54,7 @@ const hasSentryNativePlugin = basePlugins.some(
 );
 const plugins = hasSentryNativePlugin ? basePlugins : [...basePlugins, '@sentry/react-native'];
 
-const DEFAULT_PRODUCTION_API = 'https://agastya-production-eb56.up.railway.app';
+const DEFAULT_PRODUCTION_API = 'https://agastya-production-b395.up.railway.app';
 const isEasBuild = process.env.EAS_BUILD === 'true' || process.env.CI === 'true';
 const buildProfile = process.env.EAS_BUILD_PROFILE ?? '';
 const otaDisabledByProfile = buildProfile === 'prototype' || buildProfile === 'preview';

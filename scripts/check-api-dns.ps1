@@ -2,7 +2,7 @@
 # Usage: npm run api:check-dns
 
 $ErrorActionPreference = 'Continue'
-$apiHost = 'agastya-production-eb56.up.railway.app'
+$apiHost = 'agastya-production-b395.up.railway.app'
 $apiUrl = "https://$apiHost/v1/health"
 $systemDns = (Get-DnsClientServerAddress -AddressFamily IPv4 |
   Where-Object { $_.ServerAddresses.Count -gt 0 } |

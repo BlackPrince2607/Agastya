@@ -17,7 +17,7 @@ type ProfileHeroProps = {
 };
 
 /**
- * Compact identity hero — photo + name, then equal Edit / Share action cards.
+ * Compact identity hero — photo + name, then a single full-width Edit / Share bar.
  */
 export function ProfileHero({
   displayName,
@@ -79,25 +79,23 @@ export function ProfileHero({
         </View>
       </GlassCard>
 
-      <View className="w-full flex-row" style={{ gap: STACK_GAP }}>
+      <GlassCard muted className="w-full overflow-hidden" innerClassName="flex-row p-0">
         <ProfileActionCard
           title="Edit Profile"
-          subtitle="Name, photo & more"
           icon="edit"
           onPress={onEditPress}
           accessibilityLabel="Edit Profile"
           accessibilityHint="Opens edit profile"
         />
+        <View className="w-px self-stretch bg-white/10" accessibilityElementsHidden importantForAccessibility="no" />
         <ProfileActionCard
           title="Share"
-          subtitle="Spread wisdom"
           icon={shareIcon}
-          featured
           onPress={onSharePress}
           accessibilityLabel="Share Agastya"
           accessibilityHint="Opens the share sheet to invite a friend"
         />
-      </View>
+      </GlassCard>
     </MotiView>
   );
 }

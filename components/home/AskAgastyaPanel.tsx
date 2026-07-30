@@ -19,7 +19,7 @@ export function AskAgastyaPanel({ onStart }: AskAgastyaPanelProps) {
       animate={{ opacity: 1, translateY: 0 }}
       transition={{ type: 'timing', duration: 480, delay: 120 }}>
       <GlowContainer intensity="soft">
-        <GlassCard glow className="w-full p-6" innerClassName="gap-4">
+        <GlassCard glow className="w-full" innerClassName="gap-4 p-6">
           <View className="flex-row items-start gap-3">
             <View
               className="h-12 w-12 items-center justify-center rounded-2xl border border-white/10"

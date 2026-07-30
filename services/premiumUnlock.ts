@@ -102,9 +102,19 @@ function promptAdministrativeArea(): Promise<string | null> {
   });
 }
 
-/** DEBUG-only: open Razorpay without Play User Choice (local E2E testing). */
-function isRazorpayTestBypassEnabled(): boolean {
+/** Allow Razorpay without Play User Choice (Expo Go + internal APK / preview builds). */
+function isRazorpayDirectCheckoutEnabled(): boolean {
   return (process.env.EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS || '').trim() === 'true';
+}
+
+async function startDirectRazorpayCheckout(seed: string | undefined): Promise<UnlockResult> {
+  const period = useSessionStore.getState().billingPeriod;
+  const rz = await startRazorpayCheckout({ period });
+  if (!rz.ok) return mapCheckoutFailure(rz.reason);
+  if (rz.redirecting) {
+    return { ok: true, source: 'razorpay' };
+  }
+  return finalizeAfterEntitlement(seed, 'razorpay', true);
 }
 
 function mapCheckoutFailure(
@@ -127,22 +137,16 @@ export async function unlockPremium(options: { seed?: string }): Promise<UnlockR
     return { ok: false, reason: 'need_sign_in' };
   }
 
-  const period = useSessionStore.getState().billingPeriod;
-
-  // Minimal test path: skip Play User Choice when explicitly enabled for local E2E.
-  if (isRazorpayTestBypassEnabled()) {
-    const rz = await startRazorpayCheckout({ period });
-    if (!rz.ok) return mapCheckoutFailure(rz.reason);
-    if (rz.redirecting) {
-      return { ok: true, source: 'razorpay' };
-    }
-    return finalizeAfterEntitlement(seed, 'razorpay', true);
+  // Expo Go / sideloaded prototype APK: open Razorpay directly (no Play enrollment).
+  if (isRazorpayDirectCheckoutEnabled()) {
+    return startDirectRazorpayCheckout(seed);
   }
 
   if (!isPlayUserChoiceAvailable()) {
     return { ok: false, reason: 'unavailable' };
   }
 
+  const period = useSessionStore.getState().billingPeriod;
   const productId =
     period === 'annual'
       ? process.env.EXPO_PUBLIC_PLAY_PRODUCT_ANNUAL || 'premium_annual'

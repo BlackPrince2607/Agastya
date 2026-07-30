@@ -15,7 +15,7 @@ type ReportInsightCardProps = PropsWithChildren<{
  */
 export function ReportInsightCard({ insight }: ReportInsightCardProps) {
   return (
-    <GlassCard className="w-full p-5" muted innerClassName="gap-2">
+    <GlassCard className="w-full" muted innerClassName="gap-2 p-5">
       <Text className="font-label text-[12px] uppercase tracking-[0.12em] text-primary">Insight</Text>
       <Text className="font-headline-md text-[18px] leading-6 text-on-surface">{insight.title}</Text>
       <Text className="font-body text-[15px] leading-6 text-on-surface-variant" numberOfLines={4}>

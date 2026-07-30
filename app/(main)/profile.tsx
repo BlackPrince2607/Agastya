@@ -350,11 +350,11 @@ export default function ProfileScreen() {
             />
           </MotiView>
         ) : journeyLoading && palmAnalysis ? (
-          <GlassCard muted className="w-full p-5">
+          <GlassCard muted className="w-full" innerClassName="p-5">
             <LoadingBlock variant="skeleton" compact message={PROFILE_JOURNEY_LOADING} />
           </GlassCard>
         ) : journeyLoaded && palmAnalysis && !weekly ? (
-          <GlassCard muted className="w-full gap-2 p-5">
+          <GlassCard muted className="w-full" innerClassName="gap-2 p-5">
             <Text className="font-label text-[11px] uppercase tracking-[0.14em] text-primary">This Week</Text>
             <Text className="font-headline-md text-[18px] text-on-surface">{PROFILE_WEEKLY_EMPTY.title}</Text>
             <Text className="font-body text-[14px] leading-6 text-on-surface-variant">

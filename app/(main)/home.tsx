@@ -309,7 +309,7 @@ export default function HomeDashboardScreen() {
               from={{ opacity: 0, translateY: 12 }}
               animate={{ opacity: 1, translateY: 0 }}
               transition={{ type: 'timing', duration: 450 }}>
-              <GlassCard glow className="w-full p-6">
+              <GlassCard glow className="w-full" innerClassName="p-6">
                 <View className="flex-row items-start gap-3">
                   <View className="h-12 w-12 items-center justify-center rounded-2xl bg-primary/20">
                     <Icon name="front_hand" size={24} color={colors.primary} />
@@ -335,7 +335,7 @@ export default function HomeDashboardScreen() {
             animate={{ opacity: 1, translateY: 0 }}
             transition={{ type: 'timing', duration: 500, delay: 60 }}>
             {guidanceLoading && !guidance && palmAnalysis ? (
-              <GlassCard glow className="w-full p-5">
+              <GlassCard glow className="w-full" innerClassName="p-5">
                 <LoadingBlock variant="skeleton" compact message={HOME_GUIDANCE_LOADING} />
               </GlassCard>
             ) : (
@@ -379,7 +379,7 @@ export default function HomeDashboardScreen() {
               from={{ opacity: 0, translateY: 12 }}
               animate={{ opacity: 1, translateY: 0 }}
               transition={{ type: 'timing', duration: 480, delay: 90 }}>
-              <GlassCard muted className="w-full p-5">
+              <GlassCard muted className="w-full" innerClassName="p-5">
                 <LoadingBlock variant="skeleton" compact message={HOME_WEEKLY_LOADING} />
               </GlassCard>
             </MotiView>
@@ -402,7 +402,7 @@ export default function HomeDashboardScreen() {
 
         {!premium && !dismissedUpgrade ? (
           <HomeSection>
-            <GlassCard muted className="w-full p-4" innerClassName="flex-row items-center gap-2">
+            <GlassCard muted className="w-full" innerClassName="flex-row items-center gap-2 p-4">
               <Pressable
                 className="min-w-0 flex-1 active:opacity-90"
                 onPress={() => router.push(paywallRouteParams('/(main)/home'))}

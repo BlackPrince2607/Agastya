@@ -32,6 +32,7 @@
     },
     "android": {
       "package": "com.agastya.app",
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#05020a"
@@ -98,7 +99,7 @@
       "eas": {
         "projectId": "e734e717-48c7-49ec-8e5a-8810cfed0fa4"
       },
-      "agastyaApiUrl": "https://agastya-production-eb56.up.railway.app"
+      "agastyaApiUrl": "https://agastya-production-b395.up.railway.app"
     },
     "updates": {
       "url": "https://u.expo.dev/e734e717-48c7-49ec-8e5a-8810cfed0fa4"

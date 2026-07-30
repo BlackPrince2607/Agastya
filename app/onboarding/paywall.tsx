@@ -313,7 +313,7 @@ export default function PaywallScreen() {
             {billingAvailable ? (
               <Text className="mt-3 font-body text-[13px] leading-5 text-cyan">
                 {testBypass
-                  ? 'Test mode — Razorpay checkout opens without Play User Choice.'
+                  ? 'Test / internal build — Razorpay checkout opens without Play User Choice.'
                   : 'Google Play will show a secure payment choice — UPI/cards via Razorpay or Google Play billing.'}
               </Text>
             ) : !billingAvailable && Platform.OS === 'android' ? (
@@ -438,7 +438,11 @@ function PlanRow({
   onPress: () => void;
 }) {
   return (
-    <Pressable onPress={onPress}>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="radio"
+      accessibilityState={{ checked: active }}
+      accessibilityLabel={`${label}${badge ? `, ${badge}` : ''}, ${price}${tag ? `, ${tag}` : ''}`}>
       <View
         className={
           active

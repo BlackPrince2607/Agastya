@@ -39,6 +39,8 @@ type ChatStore = {
 
   addMessage: (role: ChatRole, text: string) => void;
   setSuggestions: (suggestions: string[]) => void;
+  removeSuggestion: (text: string) => void;
+  clearSuggestions: () => void;
   setTyping: (isTyping: boolean) => void;
   hydrateFromServer: (tail: Array<{ role: string; content: string }>) => void;
   clear: () => void;
@@ -62,8 +64,16 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       lastUserTopic: role === 'you' ? lastUserTopicFromMessages(messages) : get().lastUserTopic,
     });
   },
-  setSuggestions: (suggestions) =>
-    set({ suggestions: suggestions.length > 0 ? suggestions : DEFAULT_SUGGESTIONS }),
+  setSuggestions: (suggestions) => {
+    const hasStarted = get().messageCount > 0;
+    set({
+      suggestions:
+        suggestions.length > 0 ? suggestions : hasStarted ? [] : DEFAULT_SUGGESTIONS,
+    });
+  },
+  removeSuggestion: (text) =>
+    set({ suggestions: get().suggestions.filter((s) => s !== text) }),
+  clearSuggestions: () => set({ suggestions: [] }),
   setTyping: (isTyping) => set({ isTyping }),
   hydrateFromServer: (tail) => {
     if (!tail.length) return;
@@ -86,7 +96,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     set({
       messages,
       messageCount,
-      suggestions: DEFAULT_SUGGESTIONS,
+      suggestions: messageCount > 0 ? [] : DEFAULT_SUGGESTIONS,
       isTyping: false,
       lastUserTopic: lastUserTopicFromMessages(messages),
     });

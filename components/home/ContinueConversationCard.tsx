@@ -24,7 +24,7 @@ export function ContinueConversationCard({ topic, onContinue }: ContinueConversa
         accessibilityLabel="Continue your conversation"
         accessibilityHint={topic}
         scaleTo={0.98}>
-        <GlassCard muted className="w-full p-4" innerClassName="flex-row items-center gap-3">
+        <GlassCard muted className="w-full" innerClassName="flex-row items-center gap-3 p-4">
           <View
             className="h-11 w-11 items-center justify-center rounded-2xl"
             style={{ backgroundColor: 'rgba(168,85,247,0.16)' }}>
