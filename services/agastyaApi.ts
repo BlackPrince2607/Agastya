@@ -32,12 +32,28 @@ function wrapFetchError(path: string, err: unknown): Error {
 function apiRequestHeaders(extra: Record<string, string> = {}): Record<string, string> {
   const headers: Record<string, string> = {
     Accept: 'application/json',
+    'X-Request-Id': extra['X-Request-Id'] ?? createRequestId(),
     ...extra,
   };
   if (AGASTYA_API_ROOT.includes('ngrok')) {
     headers['ngrok-skip-browser-warning'] = 'true';
   }
   return headers;
+}
+
+function createRequestId(): string {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+  } catch {
+    // fall through
+  }
+  return `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function readResponseRequestId(res: Response): string | undefined {
+  return res.headers.get('X-Request-Id') ?? res.headers.get('x-request-id') ?? undefined;
 }
 
 async function fetchWithTimeout(
@@ -119,10 +135,11 @@ async function getJson<T>(path: string, signal?: AbortSignal, auth = false): Pro
   });
   if (!res.ok) {
     const detail = await res.text();
+    const requestId = readResponseRequestId(res);
     if (__DEV__) {
-      console.warn(`[Agastya API] ${path} → ${res.status}`, detail.slice(0, 400));
+      console.warn(`[Agastya API] ${path} → ${res.status}`, detail.slice(0, 400), requestId);
     }
-    throw new ApiHttpError(mapApiError(detail), res.status, detail);
+    throw new ApiHttpError(mapApiError(detail), res.status, detail, requestId);
   }
   return res.json() as Promise<T>;
 }
@@ -193,10 +210,11 @@ async function postJson<T>(
   });
   if (!res.ok) {
     const detail = await res.text();
+    const requestId = readResponseRequestId(res);
     if (__DEV__) {
-      console.warn(`[Agastya API] ${path} → ${res.status}`, detail.slice(0, 400));
+      console.warn(`[Agastya API] ${path} → ${res.status}`, detail.slice(0, 400), requestId);
     }
-    throw new ApiHttpError(mapApiError(detail), res.status, detail);
+    throw new ApiHttpError(mapApiError(detail), res.status, detail, requestId);
   }
   return res.json() as Promise<T>;
 }
@@ -212,10 +230,11 @@ async function patchJson<T>(path: string, body: unknown, signal?: AbortSignal): 
   });
   if (!res.ok) {
     const detail = await res.text();
+    const requestId = readResponseRequestId(res);
     if (__DEV__) {
-      console.warn(`[Agastya API] ${path} → ${res.status}`, detail.slice(0, 400));
+      console.warn(`[Agastya API] ${path} → ${res.status}`, detail.slice(0, 400), requestId);
     }
-    throw new ApiHttpError(mapApiError(detail), res.status, detail);
+    throw new ApiHttpError(mapApiError(detail), res.status, detail, requestId);
   }
   return res.json() as Promise<T>;
 }
@@ -372,7 +391,8 @@ export async function analyzePalm(body: {
       landmarksSource: body.landmarksSource ?? undefined,
     },
     false,
-    { timeoutMs: 90_000 },
+    // Single server vision attempt (~90s) + buffer; server no longer double-retries timeouts.
+    { timeoutMs: 100_000 },
   );
 }
 
@@ -421,7 +441,8 @@ export async function generateReport(body: {
       deviceInstallId,
     },
     false,
-    { timeoutMs: 90_000 },
+    // Single server chat-model attempt (~60s) + buffer.
+    { timeoutMs: 70_000 },
   );
 }
 
@@ -443,7 +464,8 @@ export async function chatWithGuide(body: {
       deviceInstallId,
     },
     false,
-    { timeoutMs: 60_000 },
+    // Memory extract is deferred server-side; budget matches one chat completion.
+    { timeoutMs: 70_000 },
   );
 }
 
@@ -467,6 +489,7 @@ export async function fetchDailyGuidance(body: {
     date?: string | null;
     continueHint?: string | null;
     consistencyNote?: string | null;
+    source?: 'llm' | 'fallback';
   }>(
     '/v1/insights/daily',
     {
@@ -521,6 +544,7 @@ export async function fetchWeeklySummary(body: {
     topTheme?: string | null;
     consistencyNote?: string | null;
     currentChapter?: string | null;
+    source?: 'llm' | 'fallback';
   }>(
     '/v1/insights/weekly',
     {
@@ -567,7 +591,7 @@ export async function fetchDailyTasks(body: {
   if (!deviceInstallId) {
     throw new Error('Device identity is not ready yet. Please try again.');
   }
-  return postJson<{ tasks: unknown[]; variant: string; focusTheme?: string | null }>(
+  return postJson<{ tasks: unknown[]; variant: string; focusTheme?: string | null; source?: 'llm' | 'fallback' }>(
     '/v1/tasks/daily',
     {
       ...body,
@@ -590,10 +614,16 @@ export async function fetchPredictions(body: {
   if (!deviceInstallId) {
     throw new Error('Device identity is not ready yet. Please try again.');
   }
-  return postJson<PredictionsResponse>('/v1/predictions/generate', {
-    ...body,
-    deviceInstallId,
-  });
+  // LLM-backed; default 8s abort is far below OpenRouter chat budget (~60s).
+  return postJson<PredictionsResponse>(
+    '/v1/predictions/generate',
+    {
+      ...body,
+      deviceInstallId,
+    },
+    false,
+    { timeoutMs: 60_000 },
+  );
 }
 
 export type GuideReplyResult =
@@ -683,9 +713,15 @@ export async function requestGuideReply(
   } catch (e) {
     const msg = e instanceof Error ? e.message : ERRORS.network;
     const friendly = mapApiError(msg);
-    captureException(e, { apiRoot: AGASTYA_API_ROOT, phase: 'chat_reply', friendly });
+    const requestId = e instanceof ApiHttpError ? e.requestId : undefined;
+    captureException(e, {
+      apiRoot: AGASTYA_API_ROOT,
+      phase: 'chat_reply',
+      friendly,
+      ...(requestId ? { requestId } : {}),
+    });
     if (__DEV__) {
-      console.warn('[Agastya Guide] API error:', friendly, e);
+      console.warn('[Agastya Guide] API error:', friendly, requestId, e);
     }
     const hostHint =
       friendly === ERRORS.network || friendly.includes('too long')

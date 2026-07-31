@@ -25,6 +25,8 @@ from app.services.day_context import (
 )
 from app.services.llm_client import llm_chat_completion
 from app.services.user_memory import continue_hint_from_memory, prune_user_memory, prompt_memory_snippets
+from app.utils.ai_errors import log_ai_fallback
+from app.utils.json_repair import loads_llm_json
 
 logger = logging.getLogger(__name__)
 
@@ -63,12 +65,15 @@ def _deterministic_guidance(
         focus_theme=focus_theme,
         cached=False,
         date=utc_today_iso(),
+        source="fallback",
     )
 
 
 def _guidance_payload_from_ctx(ctx: dict[str, Any], bkt: SessionBucket, streak: int | None = None) -> DailyGuidanceResponse:
     guidance = ctx["guidance"]
     theme = str(ctx.get("focusTheme") or guidance.get("focusTheme") or "").strip().lower()
+    raw_source = str(ctx.get("source") or "llm")
+    source = "fallback" if raw_source == "fallback" else "llm"
     return enrich_guidance_response(
         DailyGuidanceResponse(
             title=str(guidance["title"]).strip(),
@@ -76,6 +81,7 @@ def _guidance_payload_from_ctx(ctx: dict[str, Any], bkt: SessionBucket, streak: 
             focus_theme=theme if theme in FOCUS_THEMES else None,
             cached=True,
             date=str(ctx.get("date")),
+            source=source,  # type: ignore[arg-type]
         ),
         bkt,
         streak=streak,
@@ -265,9 +271,10 @@ async def generate_daily_guidance(
         temperature=0.7,
         max_tokens=280,
         timeout_seconds=12.0,
+        feature="daily_guidance",
     )
     if completion is None:
-        logger.warning("llm_fallback_reason=daily_guidance")
+        log_ai_fallback("daily_guidance", "no_completion")
         store_daily_context(
             bkt,
             title=fallback.title,
@@ -279,7 +286,7 @@ async def generate_daily_guidance(
 
     try:
         raw = completion.choices[0].message.content or "{}"
-        data = json.loads(raw)
+        data = loads_llm_json(raw, feature="daily_guidance")
         title = str(data.get("title") or "").strip() or fallback.title
         body_text = str(data.get("body") or "").strip() or fallback.body
         # focusTheme is locked server-side — never take LLM overrides.
@@ -289,6 +296,7 @@ async def generate_daily_guidance(
             focus_theme=focus_theme,
             cached=False,
             date=utc_today_iso(),
+            source="llm",
         )
         store_daily_context(
             bkt,
@@ -301,6 +309,7 @@ async def generate_daily_guidance(
     except Exception as exc:
         logger.exception("Daily guidance parse failed: %s", exc)
         sentry_sdk.capture_exception(exc)
+        log_ai_fallback("daily_guidance", "parse_error", error_type=type(exc).__name__)
         store_daily_context(
             bkt,
             title=fallback.title,

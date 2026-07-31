@@ -1,1 +1,1 @@
-"""Small shared helpers (logging formatters, id helpers) — avoid dumping misc in routes."""
+"""Small shared helpers — AI logging, JSON repair, validators."""

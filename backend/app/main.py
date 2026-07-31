@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.config import Settings, get_settings, validate_production_settings
+from app.middleware.request_context import RequestContextMiddleware
 from app.middleware.security import MaxBodySizeMiddleware, SecurityHeadersMiddleware
 from app.routes import agastya, auth, billing, health, webhooks
 
@@ -94,14 +95,24 @@ def create_app() -> FastAPI:
     if settings.trusted_hosts_list:
         app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.trusted_hosts_list)
 
+    # Outermost last-added runs first: correlation must wrap the full stack.
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(MaxBodySizeMiddleware)
+    app.add_middleware(RequestContextMiddleware)
 
     cors_kw: dict = {
         "allow_origins": settings.cors_origins_list,
         "allow_credentials": True,
         "allow_methods": ["GET", "POST", "PATCH", "OPTIONS"],
-        "allow_headers": ["Authorization", "Content-Type", "Accept", "ngrok-skip-browser-warning"],
+        "allow_headers": [
+            "Authorization",
+            "Content-Type",
+            "Accept",
+            "ngrok-skip-browser-warning",
+            "X-Request-Id",
+            "X-Correlation-Id",
+        ],
+        "expose_headers": ["X-Request-Id"],
     }
     regex_segments: list[str] = []
     if settings.debug:

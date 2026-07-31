@@ -14,6 +14,8 @@ from app.prompts.templates import MEMORY_EXTRACT_SYSTEM
 from app.services.bucket_store import SessionBucket, normalize_user_memory
 from app.services.day_context import utc_today_iso
 from app.services.llm_client import llm_chat_completion
+from app.utils.ai_errors import log_ai_fallback
+from app.utils.json_repair import loads_llm_json
 
 logger = logging.getLogger(__name__)
 
@@ -295,19 +297,21 @@ async def maybe_extract_and_merge_memory(
         ],
         temperature=0.2,
         max_tokens=180,
+        feature="memory_extract",
     )
     if completion is None:
-        logger.warning("llm_fallback_reason=memory_extract")
+        log_ai_fallback("memory_extract", "no_completion")
         return False
     try:
         raw = completion.choices[0].message.content or "{}"
-        data = json.loads(raw)
+        data = loads_llm_json(raw, feature="memory_extract")
         facts = data.get("facts") if isinstance(data, dict) else None
         if not isinstance(facts, list):
             return False
         return merge_extracted_facts(bkt, facts[:2])
     except Exception:
         logger.exception("memory extract parse failed")
+        log_ai_fallback("memory_extract", "parse_error")
         return False
 
 

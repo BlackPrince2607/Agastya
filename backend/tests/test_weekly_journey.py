@@ -183,3 +183,58 @@ def test_weekly_includes_current_chapter(monkeypatch):
     assert result.current_chapter
     assert "Career" in (result.current_chapter or "")
     assert bkt.weekly_context["currentChapter"] == result.current_chapter
+    assert result.source == "llm"
+
+
+def test_weekly_fallback_is_soft_retryable(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    get_settings.cache_clear()
+    settings = get_settings()
+    bkt = SessionBucket(palm=_palm())
+    store_weekly_context(
+        bkt,
+        title="Fallback week",
+        body="Deterministic weekly body.",
+        top_theme="career",
+        source="fallback",
+        fallback_attempts=1,
+    )
+    # Force last attempt into the past so soft retry opens.
+    assert isinstance(bkt.weekly_context, dict)
+    bkt.weekly_context["lastAttemptAt"] = (
+        datetime.now(timezone.utc) - timedelta(minutes=20)
+    ).isoformat()
+
+    body = WeeklySummaryBody(
+        session_id="00000000-0000-4000-8000-000000000001",
+        device_install_id="device-test",
+        palm_analysis=_palm(),
+        focus_topics=["career"],
+    )
+    completion = SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(
+                    content='{"title":"Recovered Week","body":"LLM recovered after outage.","currentChapter":"Career"}'
+                )
+            )
+        ]
+    )
+
+    async def run():
+        with patch(
+            "app.services.weekly_insight.llm_chat_completion",
+            new_callable=AsyncMock,
+            return_value=completion,
+        ) as mock_llm:
+            result, changed = await generate_weekly_summary(settings, body, bkt)
+            mock_llm.assert_awaited()
+            return result, changed
+
+    result, changed = asyncio.run(run())
+    assert changed is True
+    assert result.source == "llm"
+    assert result.title == "Recovered Week"
+    assert bkt.weekly_context["source"] == "llm"

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import sentry_sdk
@@ -27,8 +27,23 @@ from app.services.day_context import (
 )
 from app.services.llm_client import llm_chat_completion
 from app.services.user_memory import prune_user_memory, prompt_memory_snippets
+from app.utils.ai_errors import log_ai_fallback
+from app.utils.json_repair import loads_llm_json
 
 logger = logging.getLogger(__name__)
+
+# Soft retry after deterministic fallback — avoid locking a transient LLM outage for the week.
+_FALLBACK_RETRY_AFTER = timedelta(minutes=15)
+_MAX_FALLBACK_ATTEMPTS = 2
+
+
+def _parse_iso(ts: str | None) -> datetime | None:
+    if not ts:
+        return None
+    try:
+        return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    except ValueError:
+        return None
 
 
 def _week_signal_bundle(bkt: SessionBucket) -> dict[str, Any]:
@@ -95,10 +110,17 @@ def _deterministic_weekly(
         cached=False,
         top_theme=theme,
         current_chapter=current,
+        source="fallback",
     )
 
 
 def cached_weekly_if_current(bkt: SessionBucket) -> WeeklySummaryResponse | None:
+    """
+    Return locked weekly summary when safe to serve without regenerating.
+
+    LLM-backed entries are permanent for the ISO week.
+    Fallback entries are served while a soft retry window has not elapsed / attempts exhausted.
+    """
     ctx = bkt.weekly_context
     week = utc_week_key()
     if not isinstance(ctx, dict) or ctx.get("weekKey") != week:
@@ -107,7 +129,11 @@ def cached_weekly_if_current(bkt: SessionBucket) -> WeeklySummaryResponse | None
     body = str(ctx.get("body") or "").strip()
     if not title or not body:
         return None
-    return WeeklySummaryResponse(
+
+    raw_source = str(ctx.get("source") or "llm")
+    source = "fallback" if raw_source == "fallback" else "llm"
+
+    payload = WeeklySummaryResponse(
         title=title,
         body=body,
         week_key=week,
@@ -115,7 +141,23 @@ def cached_weekly_if_current(bkt: SessionBucket) -> WeeklySummaryResponse | None
         top_theme=str(ctx.get("topTheme") or "") or None,
         consistency_note=str(ctx.get("consistencyNote") or "") or None,
         current_chapter=str(ctx.get("currentChapter") or "") or None,
+        source=source,  # type: ignore[arg-type]
     )
+
+    if source != "fallback":
+        return payload
+
+    attempts = int(ctx.get("fallbackAttempts") or 1)
+    if attempts >= _MAX_FALLBACK_ATTEMPTS:
+        return payload
+
+    last = _parse_iso(str(ctx.get("lastAttemptAt") or ctx.get("generated_at") or ""))
+    now = datetime.now(timezone.utc)
+    if last is not None and now - last < _FALLBACK_RETRY_AFTER:
+        return payload
+
+    # Soft retry window open — caller may regenerate.
+    return None
 
 
 def store_weekly_context(
@@ -127,9 +169,12 @@ def store_weekly_context(
     consistency_note: str | None = None,
     current_chapter: str | None = None,
     source: str = "llm",
+    fallback_attempts: int | None = None,
 ) -> None:
-    bkt.weekly_context = {
-        "weekKey": utc_week_key(),
+    week = utc_week_key()
+    prev = bkt.weekly_context if isinstance(bkt.weekly_context, dict) else {}
+    payload: dict[str, Any] = {
+        "weekKey": week,
         "title": title,
         "body": body,
         "topTheme": top_theme,
@@ -137,7 +182,16 @@ def store_weekly_context(
         "currentChapter": current_chapter,
         "source": source,
         "generated_at": datetime.now(timezone.utc).isoformat(),
+        "lastAttemptAt": datetime.now(timezone.utc).isoformat(),
     }
+    if source == "fallback":
+        prev_attempts = int(prev.get("fallbackAttempts") or 0) if prev.get("weekKey") == week else 0
+        payload["fallbackAttempts"] = (
+            fallback_attempts if fallback_attempts is not None else prev_attempts + 1
+        )
+    else:
+        payload["fallbackAttempts"] = 0
+    bkt.weekly_context = payload
 
 
 async def generate_weekly_summary(
@@ -215,9 +269,10 @@ async def generate_weekly_summary(
         temperature=0.65,
         max_tokens=360,
         timeout_seconds=12.0,
+        feature="weekly_summary",
     )
     if completion is None:
-        logger.warning("llm_fallback_reason=weekly_summary")
+        log_ai_fallback("weekly_summary", "no_completion")
         store_weekly_context(
             bkt,
             title=fallback.title,
@@ -231,7 +286,7 @@ async def generate_weekly_summary(
 
     try:
         raw = completion.choices[0].message.content or "{}"
-        data = json.loads(raw)
+        data = loads_llm_json(raw, feature="weekly_summary")
         title = str(data.get("title") or "").strip() or fallback.title
         body_text = str(data.get("body") or "").strip() or fallback.body
         current = str(data.get("currentChapter") or "").strip() or fallback.current_chapter
@@ -243,6 +298,7 @@ async def generate_weekly_summary(
             top_theme=top_theme,
             consistency_note=consistency_note,
             current_chapter=(current[:160] if current else None),
+            source="llm",
         )
         store_weekly_context(
             bkt,
@@ -257,6 +313,7 @@ async def generate_weekly_summary(
     except Exception as exc:
         logger.exception("Weekly summary parse failed: %s", exc)
         sentry_sdk.capture_exception(exc)
+        log_ai_fallback("weekly_summary", "parse_error", error_type=type(exc).__name__)
         store_weekly_context(
             bkt,
             title=fallback.title,

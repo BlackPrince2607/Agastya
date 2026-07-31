@@ -3,12 +3,14 @@
 export class ApiHttpError extends Error {
   readonly status: number;
   readonly rawDetail: string;
+  readonly requestId?: string;
 
-  constructor(message: string, status: number, rawDetail: string) {
+  constructor(message: string, status: number, rawDetail: string, requestId?: string) {
     super(message);
     this.name = 'ApiHttpError';
     this.status = status;
     this.rawDetail = rawDetail;
+    this.requestId = requestId;
   }
 }
 

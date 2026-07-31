@@ -22,6 +22,7 @@ class PredictionsResponse(BaseModel):
     period: PredictionPeriod
     items: list[PredictionItem]
     generated_at: str = Field(alias="generatedAt")
+    source: Literal["llm", "fallback"] = "llm"
 
     model_config = {"populate_by_name": True}
 

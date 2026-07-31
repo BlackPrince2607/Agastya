@@ -1,5 +1,7 @@
 """Today's Guidance request/response DTOs."""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field, field_validator
 
 from app.schemas.palm import PalmAnalysis
@@ -37,6 +39,7 @@ class DailyGuidanceResponse(BaseModel):
     date: str | None = None
     continue_hint: str | None = Field(default=None, alias="continueHint")
     consistency_note: str | None = Field(default=None, alias="consistencyNote")
+    source: Literal["llm", "fallback"] = "llm"
 
     model_config = {"populate_by_name": True}
 
@@ -99,6 +102,7 @@ class WeeklySummaryResponse(BaseModel):
     top_theme: str | None = Field(default=None, alias="topTheme")
     consistency_note: str | None = Field(default=None, alias="consistencyNote")
     current_chapter: str | None = Field(default=None, alias="currentChapter")
+    source: Literal["llm", "fallback"] = "llm"
 
     model_config = {"populate_by_name": True}
 

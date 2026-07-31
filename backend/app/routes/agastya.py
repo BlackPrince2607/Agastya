@@ -1,5 +1,6 @@
 """Core Agastya HTTP surface — palm v1, dossiers, chat, daily rituals."""
 
+import asyncio
 import logging
 from typing import Annotated, Any
 
@@ -8,6 +9,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from app.auth.supabase_jwt import _bearer_token, verify_supabase_access_token
 from app.config import Settings, get_settings
 from app.middleware.rate_limit import check_rate_limit
+from app.middleware.request_context import get_request_id, set_request_id
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.schemas.palm_analyze import PalmAnalyzeBody
 from app.schemas.palm_landmarks import PalmLandmarksBody, PalmLandmarksResponse
@@ -46,6 +48,8 @@ from app.services.palm_storage import decode_capture_bytes, upload_palm_capture_
 from app.services.predictions_engine import build_predictions_payload
 from app.services.report_engine import build_report_payload
 from app.services import session_repository
+from app.utils.ai_errors import raise_ai_http_error
+from app.utils.ai_logging import log_ai_event
 from app.utils.validators import assert_device_binding, validate_session_id
 
 logger = logging.getLogger(__name__)
@@ -493,8 +497,13 @@ async def palm_analyze(
     except HTTPException:
         raise
     except Exception as exc:
-        logger.exception("palm/analyze failed session=%s", body.session_id)
-        raise HTTPException(status_code=500, detail="Palm analysis failed. Please try again.") from exc
+        raise_ai_http_error(
+            500,
+            "Palm analysis failed. Please try again.",
+            feature="palm_analyze",
+            reason="unhandled",
+            exc=exc,
+        )
 
 
 @router.post("/palm/landmarks")
@@ -579,26 +588,46 @@ async def cosmic_chat(body: ChatRequest, settings: Annotated[Settings, Depends(g
             bkt=bkt,
         )
     except GuideLlmUnavailableError as exc:
-        raise HTTPException(
-            status_code=503,
-            detail="guide_llm_unavailable",
-        ) from exc
+        raise_ai_http_error(
+            503,
+            "guide_llm_unavailable",
+            feature="chat",
+            reason="llm_unavailable",
+            exc=exc,
+        )
     tail = [{"role": m.role, "content": m.content} for m in body.messages]
     tail.append({"role": "guide", "content": reply})
     bkt.chat_tail = tail[-40:]
 
-    memory_changed = False
+    # Persist chat first so the client is not blocked on a second LLM (memory extract).
+    await _persist(body.session_id, settings)
+
     last_user = next(
         (m.content for m in reversed(body.messages) if m.role in {"user", "you"}),
         "",
     )
     if last_user.strip():
-        memory_changed = await maybe_extract_and_merge_memory(settings, bkt, last_user)
+        session_id = body.session_id
+        user_text = last_user
+        request_id = get_request_id()
 
-    await _persist(body.session_id, settings)
-    if memory_changed:
-        logger.info("user_memory_updated session=%s", body.session_id)
-    return ChatResponse(reply=reply, suggestions=suggestions, memory_changed=memory_changed)
+        async def _bg_memory_extract() -> None:
+            if request_id:
+                set_request_id(request_id)
+            try:
+                await _hydrate(session_id, settings)
+                mem_bkt = bucket(session_id)
+                changed = await maybe_extract_and_merge_memory(settings, mem_bkt, user_text)
+                if changed:
+                    await _persist(session_id, settings)
+                    log_ai_event(logger, "user_memory_updated", feature="chat")
+            except Exception:
+                logger.exception("background memory extract failed session=%s", session_id)
+
+        asyncio.create_task(_bg_memory_extract())
+
+    # memoryChanged stays false on the immediate response; extract runs best-effort in background.
+    return ChatResponse(reply=reply, suggestions=suggestions, memory_changed=False)
 
 
 @router.post("/insights/daily", response_model=DailyGuidanceResponse, response_model_by_alias=True)
@@ -675,11 +704,11 @@ async def daily_tasks(body: DailyTasksBody, settings: Annotated[Settings, Depend
     _bind_device(bkt, body.session_id, body.device_install_id)
     bkt = await _sync_premium(body.session_id, settings)
     body = body.model_copy(update={"is_premium": bkt.effectively_premium()})
-    tasks, variant, focus_theme, changed = await generate_daily_tasks(settings, body, bkt)
+    tasks, variant, focus_theme, changed, source = await generate_daily_tasks(settings, body, bkt)
     # tasksCache lives under daily_context but never overwrites Today's Focus / guidance.
     if changed:
         await _persist(body.session_id, settings)
-    return DailyTasksResponse(tasks=tasks, variant=variant, focus_theme=focus_theme)
+    return DailyTasksResponse(tasks=tasks, variant=variant, focus_theme=focus_theme, source=source)  # type: ignore[arg-type]
 
 
 @router.post(

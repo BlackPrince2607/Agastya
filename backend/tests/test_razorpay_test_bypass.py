@@ -149,17 +149,28 @@ def test_confirm_payment_grants_premium_when_link_paid(client, monkeypatch):
         "supabase_user_id": USER_ID,
         "billing_period": "monthly",
         "razorpay_payment_link_id": "plink_paid",
+        "external_transaction_token": "ext_tok_confirm",
+        "administrative_area": "KA",
+        "amount": 100,
+        "currency": "INR",
         "status": "pending",
     }
     granted = {}
+    play_calls = {}
 
     async def fake_latest(*_a, **_k):
         return intent
 
     async def fake_fetch(*_a, **_k):
-        return {"id": "plink_paid", "status": "paid", "amount_paid": 100}
+        return {
+            "id": "plink_paid",
+            "status": "paid",
+            "amount_paid": 100,
+            "payments": [{"payment_id": "pay_from_link"}],
+        }
 
-    async def fake_mark(*_a, **_k):
+    async def fake_mark(*_a, **kwargs):
+        granted["payment_id"] = kwargs.get("razorpay_payment_id")
         return True
 
     async def fake_set_session(sid, is_premium, settings, **kwargs):
@@ -170,13 +181,25 @@ def test_confirm_payment_grants_premium_when_link_paid(client, monkeypatch):
         granted["user"] = (uid, is_premium)
         return True
 
+    async def fake_play(settings, intent_arg, **kwargs):
+        play_calls["token"] = intent_arg.get("external_transaction_token")
+        play_calls["payment_id"] = kwargs.get("payment_id")
+        play_calls["amount"] = kwargs.get("amount_paise")
+
     monkeypatch.setattr("app.services.billing_intents.get_latest_intent_for_session", fake_latest)
     monkeypatch.setattr("app.services.razorpay_client.fetch_payment_link", fake_fetch)
     monkeypatch.setattr("app.services.billing_intents.mark_intent_paid", fake_mark)
     monkeypatch.setattr("app.services.session_repository.set_premium_by_session", fake_set_session)
     monkeypatch.setattr("app.services.session_repository.set_premium_by_user", fake_set_user)
+    monkeypatch.setattr(
+        "app.services.billing_intents.report_play_external_for_intent",
+        fake_play,
+    )
 
-    _seed_signed_in_bucket()
+    b = _seed_signed_in_bucket()
+    b.is_premium = False
+    b.premium_source = None
+    b.premium_expires_at = None
 
     res = client.post(
         "/v1/billing/razorpay/confirm-payment",
@@ -184,6 +207,7 @@ def test_confirm_payment_grants_premium_when_link_paid(client, monkeypatch):
             "sessionId": SESSION_ID,
             "deviceInstallId": DEVICE_ID,
             "paymentLinkId": "plink_paid",
+            "paymentId": "pay_confirm_1",
         },
     )
     assert res.status_code == 200
@@ -192,6 +216,67 @@ def test_confirm_payment_grants_premium_when_link_paid(client, monkeypatch):
     assert body["status"] == "paid"
     assert granted["session"][0] == SESSION_ID
     assert granted["user"][0] == USER_ID
+    assert granted["payment_id"] == "pay_confirm_1"
+    assert play_calls["token"] == "ext_tok_confirm"
+    assert play_calls["payment_id"] == "pay_confirm_1"
+
+
+def test_confirm_payment_reports_play_without_callback_payment_id(client, monkeypatch):
+    """When deep-link omits paymentId, confirm still reports Play using link payments[]."""
+    intent = {
+        "id": "00000000-0000-4000-8000-000000000098",
+        "session_id": SESSION_ID,
+        "device_install_id": DEVICE_ID,
+        "supabase_user_id": USER_ID,
+        "billing_period": "monthly",
+        "razorpay_payment_link_id": "plink_paid2",
+        "external_transaction_token": "ext_tok_2",
+        "administrative_area": "MH",
+        "amount": 200,
+        "currency": "INR",
+        "status": "pending",
+    }
+    play_calls = {}
+
+    async def _async_ok(*_a, **_k):
+        return True
+
+    async def fake_by_link(*_a, **_k):
+        return intent
+
+    async def fake_fetch(*_a, **_k):
+        return {
+            "id": "plink_paid2",
+            "status": "paid",
+            "payments": [{"payment_id": "pay_from_entity"}],
+        }
+
+    async def fake_play(settings, intent_arg, **kwargs):
+        play_calls["payment_id"] = kwargs.get("payment_id")
+
+    monkeypatch.setattr("app.services.billing_intents.get_intent_by_payment_link", fake_by_link)
+    monkeypatch.setattr("app.services.razorpay_client.fetch_payment_link", fake_fetch)
+    monkeypatch.setattr("app.services.billing_intents.mark_intent_paid", _async_ok)
+    monkeypatch.setattr("app.services.session_repository.set_premium_by_session", _async_ok)
+    monkeypatch.setattr("app.services.session_repository.set_premium_by_user", _async_ok)
+    monkeypatch.setattr("app.services.billing_intents.report_play_external_for_intent", fake_play)
+
+    b = _seed_signed_in_bucket()
+    b.is_premium = False
+    b.premium_source = None
+    b.premium_expires_at = None
+
+    res = client.post(
+        "/v1/billing/razorpay/confirm-payment",
+        json={
+            "sessionId": SESSION_ID,
+            "deviceInstallId": DEVICE_ID,
+            "paymentLinkId": "plink_paid2",
+        },
+    )
+    assert res.status_code == 200
+    assert res.json()["isPremium"] is True
+    assert play_calls["payment_id"] == "pay_from_entity"
 
 
 def test_confirm_payment_pending_when_link_not_paid(client, monkeypatch):

@@ -1,9 +1,13 @@
 /** Retry an async call once after a delay when the error looks transient. */
 
-const TRANSIENT_RE = /503|502|504|timeout|network|fetch|aborted|guide_llm_unavailable/i;
+// Do not retry client timeouts/aborts — server LLM attempts are already budgeted;
+// a second client call doubles OpenRouter cost while the first may still be running.
+const TRANSIENT_RE = /503|502|504|network|fetch|guide_llm_unavailable/i;
+const NO_RETRY_RE = /timeout|aborted/i;
 
 export function isTransientApiError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
+  if (NO_RETRY_RE.test(msg)) return false;
   return TRANSIENT_RE.test(msg);
 }
 

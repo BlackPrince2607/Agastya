@@ -17,6 +17,8 @@ from app.schemas.tasks import DailyTasksBody, Task
 from app.services.bucket_store import SessionBucket, normalize_user_memory
 from app.services.day_context import resolve_today_focus_theme
 from app.services.reflection_task import EVENING_REFLECTION, ensure_reflection_task
+from app.utils.ai_errors import log_ai_fallback
+from app.utils.json_repair import loads_llm_json
 
 _SUGGESTION_LINE = re.compile(r"^\s*SUGGESTIONS:\s*(\[.*\])\s*$", re.IGNORECASE | re.MULTILINE)
 logger = logging.getLogger(__name__)
@@ -39,7 +41,7 @@ def _split_suggestions(text: str) -> tuple[str, list[str]]:
         return text.strip(), []
     suggestions: list[str] = []
     try:
-        parsed = json.loads(match.group(1))
+        parsed = loads_llm_json(match.group(1), feature="chat_suggestions")
         if isinstance(parsed, list):
             suggestions = [str(s).strip() for s in parsed if str(s).strip()][:3]
     except Exception:
@@ -52,10 +54,10 @@ def _heuristic_chat(body: ChatRequest) -> str:
     return "I couldn't reach the guide just now — try again in a moment."
 
 
-def _chat_fallback(settings: Settings, body: ChatRequest) -> tuple[str, list[str]]:
+def _chat_fallback(settings: Settings, body: ChatRequest, *, reason: str) -> tuple[str, list[str]]:
     if settings.llm_enabled and not settings.allow_llm_fallback:
         raise GuideLlmUnavailableError("OpenRouter chat unavailable")
-    logger.warning("llm_fallback_reason=chat_heuristic llm_enabled=%s", settings.llm_enabled)
+    log_ai_fallback("chat", reason, llm_enabled=settings.llm_enabled)
     return _heuristic_chat(body), list(_FALLBACK_SUGGESTIONS)
 
 
@@ -125,24 +127,21 @@ async def generate_chat_reply(
         messages=msgs,
         temperature=0.5,
         max_tokens=220,
+        feature="chat",
     )
     if completion is None:
-        if settings.llm_enabled:
-            logger.warning("OpenRouter chat unavailable; using heuristic guide reply")
-        return _chat_fallback(settings, body)
+        return _chat_fallback(settings, body, reason="no_completion")
 
     try:
         text = completion.choices[0].message.content or ""
         reply, suggestions = _split_suggestions(text)
         if not reply:
-            if settings.llm_enabled:
-                logger.warning("OpenRouter chat returned an empty reply; using heuristic guide reply")
-            return _chat_fallback(settings, body)
+            return _chat_fallback(settings, body, reason="empty_reply")
         return reply, suggestions or list(_FALLBACK_SUGGESTIONS)
     except Exception as exc:
         logger.exception("Chat reply parse failed: %s", exc)
         sentry_sdk.capture_exception(exc)
-        return _chat_fallback(settings, body)
+        return _chat_fallback(settings, body, reason="parse_error")
 
 
 def _deterministic_tasks(
@@ -245,8 +244,8 @@ async def generate_daily_tasks(
     settings: Settings,
     body: DailyTasksBody,
     bkt: SessionBucket | None = None,
-) -> tuple[list[Task], str, str, bool]:
-    """Return tasks, variant, focusTheme, and whether daily_context was mutated (for persist)."""
+) -> tuple[list[Task], str, str, bool, str]:
+    """Return tasks, variant, focusTheme, whether daily_context mutated, and source."""
     from app.services.day_context import utc_today_iso
 
     palm = body.palm_analysis
@@ -281,7 +280,9 @@ async def generate_daily_tasks(
                 cached_tasks = [Task.model_validate(t) for t in cache["tasks"][:3]]
                 if len(cached_tasks) >= 3:
                     variant = str(cache.get("variant") or f"focus:{suggested}")
-                    return ensure_reflection_task(cached_tasks), variant, suggested, False
+                    cached_source = str(cache.get("source") or "llm")
+                    source = "fallback" if cached_source == "fallback" else "llm"
+                    return ensure_reflection_task(cached_tasks), variant, suggested, False, source
             except Exception:
                 pass
 
@@ -309,22 +310,24 @@ async def generate_daily_tasks(
             {"role": "user", "content": json.dumps(payload)},
         ],
         temperature=0.65,
+        max_tokens=600,
+        feature="daily_tasks",
     )
     if completion is None:
-        logger.warning("llm_fallback_reason=daily_tasks llm_enabled=%s", settings.llm_enabled)
-        return fallback[0], fallback[1], fallback[2], False
+        log_ai_fallback("daily_tasks", "no_completion", llm_enabled=settings.llm_enabled)
+        return fallback[0], fallback[1], fallback[2], False, "fallback"
     try:
         raw = completion.choices[0].message.content or "{}"
-        data = json.loads(raw)
+        data = loads_llm_json(raw, feature="daily_tasks")
         raw_tasks = data.get("tasks") or []
         if len(raw_tasks) < 3:
-            logger.warning("llm_fallback_reason=daily_tasks_insufficient_count")
-            return fallback[0], fallback[1], fallback[2], False
+            log_ai_fallback("daily_tasks", "insufficient_count")
+            return fallback[0], fallback[1], fallback[2], False, "fallback"
         try:
             tasks = [Task.model_validate(t) for t in raw_tasks[:3]]
         except Exception:
-            logger.warning("llm_fallback_reason=daily_tasks_validation")
-            return fallback[0], fallback[1], fallback[2], False
+            log_ai_fallback("daily_tasks", "validation")
+            return fallback[0], fallback[1], fallback[2], False, "fallback"
         # focusTheme is locked via resolve_today_focus_theme — ignore LLM overrides.
         variant = f"focus:{suggested}"
         tasks_out = ensure_reflection_task(tasks)
@@ -349,12 +352,14 @@ async def generate_daily_tasks(
             base["tasksCache"] = {
                 "focusTheme": suggested,
                 "variant": variant,
+                "source": "llm",
                 "tasks": [t.model_dump(by_alias=True) for t in tasks_out],
             }
             bkt.daily_context = base
-            return tasks_out, variant, suggested, True
-        return tasks_out, variant, suggested, False
+            return tasks_out, variant, suggested, True, "llm"
+        return tasks_out, variant, suggested, False, "llm"
     except Exception as exc:
         logger.exception("Daily tasks generation failed: %s", exc)
         sentry_sdk.capture_exception(exc)
-        return fallback[0], fallback[1], fallback[2], False
+        log_ai_fallback("daily_tasks", "parse_error", error_type=type(exc).__name__)
+        return fallback[0], fallback[1], fallback[2], False, "fallback"

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import base64
 import binascii
-import json
 import logging
 import re
 
@@ -14,6 +13,8 @@ from app.config import Settings
 from app.prompts.templates import PALM_VISION_SYSTEM
 from app.schemas.palm import PalmAnalysis
 from app.services.llm_client import llm_chat_completion
+from app.utils.ai_logging import log_ai_event
+from app.utils.json_repair import loads_llm_json
 
 logger = logging.getLogger(__name__)
 
@@ -194,13 +195,14 @@ async def palm_analysis_from_vision(
             temperature=0.25,
             max_tokens=1400,
             timeout_seconds=settings.openrouter_vision_timeout_seconds,
+            feature="palm_vision",
         )
         if completion is None:
             return None
         raw_text = (completion.choices[0].message.content or "").strip()
         if not raw_text:
             return None
-        data = json.loads(raw_text)
+        data = loads_llm_json(raw_text, feature="palm_vision")
         life_raw = str(data.get("life_line", "")).strip()
         heart_raw = str(data.get("heart_line", "")).strip()
         head_raw = str(data.get("head_line", "")).strip()
@@ -261,6 +263,12 @@ async def palm_analysis_from_vision(
             geometry_source="vision_model" if geometry else None,
         )
     except Exception as exc:
-        logger.exception("OpenRouter palm vision failed: %s", exc)
+        log_ai_event(
+            logger,
+            "palm_vision_failed",
+            feature="palm_vision",
+            level=logging.ERROR,
+            error_type=type(exc).__name__,
+        )
         sentry_sdk.capture_exception(exc)
         return None

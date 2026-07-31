@@ -114,7 +114,7 @@ def test_chat_strips_client_system_role(monkeypatch):
 
     captured: dict = {}
 
-    async def fake_llm(_settings, *, model, messages, temperature, max_tokens):
+    async def fake_llm(_settings, *, model, messages, temperature, max_tokens, **_kwargs):
         captured["messages"] = messages
         return SimpleNamespace(
             choices=[SimpleNamespace(message=SimpleNamespace(content="Safe reply.\nSUGGESTIONS: [\"Ok\"]"))]

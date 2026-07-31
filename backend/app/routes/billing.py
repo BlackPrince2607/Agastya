@@ -240,6 +240,7 @@ async def _grant_razorpay_premium_from_intent(
     intent: dict,
     *,
     bkt,
+    payment_id: str | None = None,
 ) -> RazorpayConfirmPaymentResponse:
     session_id = str(intent.get("session_id") or "")
     supabase_user_id = intent.get("supabase_user_id")
@@ -247,7 +248,11 @@ async def _grant_razorpay_premium_from_intent(
     days = razorpay_client.premium_expiry_days(billing_period)
     expires = datetime.now(timezone.utc) + timedelta(days=days)
 
-    await billing_intents.mark_intent_paid(settings, str(intent["id"]))
+    await billing_intents.mark_intent_paid(
+        settings,
+        str(intent["id"]),
+        razorpay_payment_id=payment_id,
+    )
 
     ok = await session_repository.set_premium_by_session(
         session_id,
@@ -278,6 +283,16 @@ async def _grant_razorpay_premium_from_intent(
     bkt.is_premium = True
     bkt.premium_source = "razorpay"
     bkt.premium_expires_at = expires
+
+    # Same Play ExternalTransactions path as the Razorpay webhook — confirm-only
+    # unlocks must still enqueue/report when a User Choice token is present.
+    await billing_intents.report_play_external_for_intent(
+        settings,
+        intent,
+        payment_id=payment_id,
+        amount_paise=int(intent.get("amount") or 0) or None,
+    )
+
     return RazorpayConfirmPaymentResponse(is_premium=True, status="paid", source="razorpay")
 
 
@@ -329,8 +344,14 @@ async def confirm_razorpay_payment(
     if session_user and not intent_user:
         intent = {**intent, "supabase_user_id": str(session_user)}
 
+    payment_id = str(body.payment_id).strip() if body.payment_id else None
+
     if intent.get("status") == "paid":
-        return await _grant_razorpay_premium_from_intent(settings, intent, bkt=bkt)
+        if payment_id and not intent.get("razorpay_payment_id"):
+            await billing_intents.attach_payment_id(settings, str(intent["id"]), payment_id)
+        return await _grant_razorpay_premium_from_intent(
+            settings, intent, bkt=bkt, payment_id=payment_id or intent.get("razorpay_payment_id")
+        )
 
     payment_link_id = body.payment_link_id or intent.get("razorpay_payment_link_id")
     if not payment_link_id:
@@ -362,6 +383,16 @@ async def confirm_razorpay_payment(
         logger.warning("Razorpay confirm fetch failed: %s", exc)
         raise HTTPException(status_code=502, detail="Could not verify Razorpay payment") from exc
 
+    if not payment_id:
+        # Prefer explicit callback payment id; else first payment on the link entity.
+        payments = link.get("payments")
+        if isinstance(payments, list) and payments:
+            first = payments[0]
+            if isinstance(first, dict) and first.get("payment_id"):
+                payment_id = str(first["payment_id"]).strip() or None
+            elif isinstance(first, str):
+                payment_id = first.strip() or None
+
     status = str(link.get("status") or "unknown")
     if status != "paid":
         # Callback may say paid before link entity is fully updated — trust signed paid status.
@@ -383,7 +414,9 @@ async def confirm_razorpay_payment(
         else:
             return RazorpayConfirmPaymentResponse(is_premium=False, status=status)
 
-    return await _grant_razorpay_premium_from_intent(settings, intent, bkt=bkt)
+    return await _grant_razorpay_premium_from_intent(
+        settings, intent, bkt=bkt, payment_id=payment_id
+    )
 
 
 @router.post(

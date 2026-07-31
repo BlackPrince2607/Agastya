@@ -12,6 +12,8 @@ from app.services.llm_client import llm_chat_completion
 from app.prompts.templates import REPORT_SYSTEM
 from app.schemas.palm import PalmAnalysis
 from app.schemas.report import AuraProfile, FullReport, InsightSection, LifeMetrics
+from app.utils.ai_errors import log_ai_fallback
+from app.utils.json_repair import loads_llm_json
 
 logger = logging.getLogger(__name__)
 
@@ -230,6 +232,7 @@ def deterministic_report(
         metrics=metrics,
         aura=aura,
         palm_analysis=palm,
+        source="fallback",
     )
 
 
@@ -279,18 +282,20 @@ async def build_report_payload(
                 {"role": "user", "content": json.dumps(payload)},
             ],
             temperature=0.6,
+            max_tokens=1200,
+            feature="report",
         )
         if completion is None:
-            logger.warning("llm_fallback_reason=report llm_enabled=%s", settings.llm_enabled)
+            log_ai_fallback("report", "no_completion", llm_enabled=settings.llm_enabled)
             return fallback
         raw = completion.choices[0].message.content or ""
-        data = json.loads(raw)
+        data = loads_llm_json(raw, feature="report")
         report = FullReport.model_validate(data)
         if mode == "preview":
             report = report.model_copy(update={"sections": report.sections[:2]})
         # ensure palm echoes request
-        report = report.model_copy(update={"palm_analysis": palm})
+        report = report.model_copy(update={"palm_analysis": palm, "source": "llm"})
         return report
     except Exception as exc:
-        logger.warning("llm_fallback_reason=report_parse error=%s", exc)
+        log_ai_fallback("report", "parse_error", error_type=type(exc).__name__)
         return fallback

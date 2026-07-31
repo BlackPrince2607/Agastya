@@ -14,6 +14,7 @@ export type PredictionsResponse = {
   period: PredictionPeriod;
   items: PredictionItem[];
   generatedAt: string;
+  source?: 'llm' | 'fallback';
 };
 
 export type PredictionsByPeriod = Record<PredictionPeriod, PredictionsResponse>;

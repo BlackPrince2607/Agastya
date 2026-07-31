@@ -98,7 +98,8 @@ def test_daily_tasks_fall_back_when_llm_unavailable(monkeypatch):
         ):
             return await generate_daily_tasks(settings, body)
 
-    tasks, variant, focus_theme, _changed = asyncio.run(run())
+    tasks, variant, focus_theme, _changed, source = asyncio.run(run())
     assert len(tasks) == 3
     assert focus_theme in {"career", "love", "money", "growth"}
     assert variant.startswith("focus:")
+    assert source == "fallback"

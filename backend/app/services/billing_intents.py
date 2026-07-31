@@ -95,15 +95,117 @@ async def get_latest_intent_for_session(
     return rows[0] if rows else None
 
 
-async def mark_intent_paid(settings: Settings, intent_id: str) -> bool:
+async def mark_intent_paid(
+    settings: Settings,
+    intent_id: str,
+    *,
+    razorpay_payment_id: str | None = None,
+) -> bool:
+    client = rest_client(settings)
+    if client is None:
+        return False
+    values: dict[str, Any] = {
+        "status": "paid",
+        "paid_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if razorpay_payment_id:
+        values["razorpay_payment_id"] = str(razorpay_payment_id).strip()
+    return await client.patch(
+        TABLE,
+        filters={"id": intent_id},
+        values=values,
+    )
+
+
+async def attach_payment_id(settings: Settings, intent_id: str, payment_id: str) -> bool:
+    """Persist Razorpay payment id for refund / dispute resolution."""
+    if not payment_id or not str(payment_id).strip():
+        return False
     client = rest_client(settings)
     if client is None:
         return False
     return await client.patch(
         TABLE,
         filters={"id": intent_id},
-        values={"status": "paid", "paid_at": datetime.now(timezone.utc).isoformat()},
+        values={"razorpay_payment_id": str(payment_id).strip()},
     )
+
+
+async def get_intent_by_payment_id(settings: Settings, payment_id: str) -> dict[str, Any] | None:
+    client = rest_client(settings)
+    if client is None:
+        return None
+    return await client.select_one(
+        TABLE, filters={"razorpay_payment_id": str(payment_id).strip()}
+    )
+
+
+async def resolve_intent_for_payment(
+    settings: Settings,
+    *,
+    checkout_intent_id: str | None = None,
+    payment_id: str | None = None,
+    payment_link_id: str | None = None,
+) -> dict[str, Any] | None:
+    """Resolve checkout intent without relying solely on Razorpay notes."""
+    if checkout_intent_id:
+        intent = await get_intent_by_id(settings, str(checkout_intent_id))
+        if intent:
+            return intent
+    if payment_id:
+        intent = await get_intent_by_payment_id(settings, str(payment_id))
+        if intent:
+            return intent
+    if payment_link_id:
+        intent = await get_intent_by_payment_link(settings, str(payment_link_id))
+        if intent:
+            return intent
+    return None
+
+
+async def report_play_external_for_intent(
+    settings: Settings,
+    intent: dict[str, Any] | None,
+    *,
+    payment_id: str | None = None,
+    amount_paise: int | None = None,
+) -> None:
+    """Enqueue + report Google Play ExternalTransactions for a paid Razorpay intent.
+
+    Shared by webhook and confirm-payment so confirm-only unlocks still satisfy
+    Play User Choice reporting requirements.
+    """
+    if not intent:
+        return
+    token = intent.get("external_transaction_token")
+    if not token:
+        return
+
+    if await play_report_already_done(settings, str(token)):
+        return
+
+    from app.services import play_external_transactions
+
+    intent_id = str(intent["id"]) if intent.get("id") else None
+    await enqueue_play_report(
+        settings,
+        checkout_intent_id=intent_id,
+        external_transaction_token=str(token),
+    )
+    paise = int(amount_paise if amount_paise is not None else (intent.get("amount") or 0))
+    micros = max(paise, 0) * 10_000
+    administrative_area = intent.get("administrative_area")
+    report_id = intent_id or (str(payment_id).strip() if payment_id else None) or str(token)
+    ok = await play_external_transactions.report_external_transaction(
+        settings,
+        external_transaction_id=report_id,
+        external_transaction_token=str(token),
+        amount_micros=micros or 1,
+        currency=str(intent.get("currency") or "INR"),
+        administrative_area=str(administrative_area) if administrative_area else None,
+    )
+    if ok:
+        await mark_play_report_done(settings, external_transaction_token=str(token))
 
 
 async def mark_intent_expired(settings: Settings, intent_id: str) -> bool:
@@ -127,6 +229,13 @@ async def enqueue_play_report(
     if client is None or not external_transaction_token:
         return
     try:
+        existing = await client.select_one(
+            PLAY_TABLE,
+            filters={"external_transaction_token": external_transaction_token},
+            columns="id,reported_at",
+        )
+        if existing:
+            return
         from app.services.supabase_rest import _http_client
 
         headers = {**client._headers, "Prefer": "return=minimal"}
@@ -135,9 +244,25 @@ async def enqueue_play_report(
             payload["checkout_intent_id"] = checkout_intent_id
         res = await _http_client().post(f"{client._base}/{PLAY_TABLE}", headers=headers, json=payload)
         if res.status_code not in (200, 201, 204):
+            # Concurrent insert race — ignore unique/duplicate style failures.
+            body = (res.text or "").lower()
+            if res.status_code == 409 or "duplicate" in body or "23505" in body:
+                return
             logger.warning("billing_play_reports insert failed: %s", res.status_code)
     except Exception as exc:
         logger.warning("enqueue_play_report failed: %s", exc)
+
+
+async def play_report_already_done(settings: Settings, external_transaction_token: str) -> bool:
+    client = rest_client(settings)
+    if client is None or not external_transaction_token:
+        return False
+    row = await client.select_one(
+        PLAY_TABLE,
+        filters={"external_transaction_token": external_transaction_token},
+        columns="reported_at",
+    )
+    return bool(row and row.get("reported_at"))
 
 
 async def mark_play_report_done(

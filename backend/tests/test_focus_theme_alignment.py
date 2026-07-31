@@ -96,8 +96,9 @@ def test_tasks_reuse_guidance_locked_theme(monkeypatch):
         ):
             return await generate_daily_tasks(settings, body, bkt)
 
-    tasks, variant, theme, changed = asyncio.run(run())
+    tasks, variant, theme, changed, source = asyncio.run(run())
     assert theme == "money"
     assert variant == "focus:money"
     assert len(tasks) == 3
     assert changed is True
+    assert source == "llm"

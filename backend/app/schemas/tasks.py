@@ -48,5 +48,6 @@ class DailyTasksResponse(BaseModel):
     tasks: list[Task]
     variant: str
     focus_theme: str | None = Field(default=None, alias="focusTheme")
+    source: Literal["llm", "fallback"] = "llm"
 
     model_config = {"populate_by_name": True}

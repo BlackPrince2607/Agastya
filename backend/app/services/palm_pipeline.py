@@ -15,6 +15,8 @@ from app.services.palm_cv import extract_line_geometry, merge_cv_into_analysis
 from app.services.palm_dummy import dummy_palm_analysis
 from app.services.palm_landmarks import detect_hand_landmarks_from_bytes
 from app.services.palm_storage import decode_capture_bytes
+from app.utils.ai_errors import log_ai_fallback, raise_ai_http_error
+from app.utils.ai_logging import log_ai_event
 
 logger = logging.getLogger(__name__)
 
@@ -157,9 +159,11 @@ async def analyze_palm(settings: Settings, body: PalmAnalyzeBody) -> PalmAnalysi
         raise HTTPException(status_code=400, detail="Palm image required for AI analysis.")
 
     if has_image and ai_mode and not settings.llm_enabled:
-        raise HTTPException(
-            status_code=503,
-            detail="Palm vision not configured — set OPENROUTER_API_KEY on the server.",
+        raise_ai_http_error(
+            503,
+            "Palm vision not configured — set OPENROUTER_API_KEY on the server.",
+            feature="palm_analyze",
+            reason="vision_not_configured",
         )
 
     inferred: PalmAnalysis | None = None
@@ -173,7 +177,12 @@ async def analyze_palm(settings: Settings, body: PalmAnalyzeBody) -> PalmAnalysi
                 gender=body.gender,
             )
         except Exception:
-            logger.exception("openrouter vision threw — continuing with CV/fallback")
+            log_ai_event(
+                logger,
+                "palm_vision_threw",
+                feature="palm_analyze",
+                level=logging.ERROR,
+            )
             inferred = None
 
     if inferred is not None:
@@ -215,7 +224,7 @@ async def analyze_palm(settings: Settings, body: PalmAnalyzeBody) -> PalmAnalysi
         return _finalize_success(result)
 
     if has_image and settings.llm_enabled:
-        logger.error("palm_fallback reason=openrouter_vision_failed seed=%s", body.seed[:32])
+        log_ai_fallback("palm_analyze", "openrouter_vision_failed", seed_prefix=body.seed[:32])
 
     # Vision unavailable — try CV-only when landmarks exist.
     if has_image and landmarks:
@@ -227,20 +236,19 @@ async def analyze_palm(settings: Settings, body: PalmAnalyzeBody) -> PalmAnalysi
             allow_landmark_heuristic=True,
         )
         if _has_usable_geometry(merged) or _has_usable_motifs(merged):
-            source = (
-                "opencv_creases"
-                if merged.geometry_source == "opencv_creases"
-                else "hybrid"
-            )
-            return _finalize_success(merged.model_copy(update={"analysis_source": source}))
+            # Motifs came from seed-hash dummy — never claim opencv_creases/hybrid for provenance.
+            # geometry_source still reflects real CV when present.
+            return _finalize_success(merged.model_copy(update={"analysis_source": "fallback"}))
 
     if has_image and ai_mode and settings.llm_enabled and not settings.debug:
-        raise HTTPException(
-            status_code=503,
-            detail="Palm vision temporarily unavailable — please try again in a moment.",
+        raise_ai_http_error(
+            503,
+            "Palm vision temporarily unavailable — please try again in a moment.",
+            feature="palm_analyze",
+            reason="vision_unavailable",
         )
 
-    logger.warning("Palm analysis falling back to deterministic motifs (seed entropy)")
+    log_ai_fallback("palm_analyze", "deterministic_motifs")
     fallback = dummy_palm_analysis(entropy)
     fallback = fallback.model_copy(update={"analysis_source": "fallback"})
     if has_image and landmarks:

@@ -38,6 +38,7 @@ class FullReport(BaseModel):
     metrics: LifeMetrics
     aura: AuraProfile
     palm_analysis: PalmAnalysis | None = Field(default=None, alias="palmAnalysis")
+    source: Literal["llm", "fallback"] = "llm"
 
     model_config = {"populate_by_name": True}
 

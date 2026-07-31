@@ -350,7 +350,8 @@ def test_palm_analyze_cv_only_when_llm_fails(mock_landmarks, mock_vision, vision
     )
     assert res.status_code == 200
     data = res.json()
-    assert data["analysis_source"] == "opencv_creases"
+    # Motifs are seed-hash when vision fails; geometry may still be real CV.
+    assert data["analysis_source"] == "fallback"
     assert data["geometry_source"] == "opencv_creases"
     assert data.get("line_geometry")
 

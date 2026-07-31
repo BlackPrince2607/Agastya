@@ -12,6 +12,8 @@ from app.prompts.templates import PREDICTIONS_SYSTEM
 from app.schemas.palm import PalmAnalysis
 from app.schemas.predictions import PredictionItem, PredictionsResponse
 from app.services.llm_client import llm_chat_completion
+from app.utils.ai_errors import log_ai_fallback
+from app.utils.json_repair import loads_llm_json
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +59,7 @@ def deterministic_predictions(*, seed: str, period: str) -> PredictionsResponse:
         period=period,  # type: ignore[arg-type]
         items=items,
         generated_at=datetime.now(timezone.utc).isoformat(),
+        source="fallback",
     )
 
 
@@ -85,22 +88,25 @@ async def build_predictions_payload(
                 {"role": "user", "content": json.dumps(payload)},
             ],
             temperature=0.65,
+            max_tokens=800,
+            feature="predictions",
         )
         if completion is None:
-            logger.warning("llm_fallback_reason=predictions llm_enabled=%s", settings.llm_enabled)
+            log_ai_fallback("predictions", "no_completion", llm_enabled=settings.llm_enabled)
             return fallback
         raw = completion.choices[0].message.content or "{}"
-        data = json.loads(raw)
+        data = loads_llm_json(raw, feature="predictions")
         items_raw = data.get("items") or []
         if len(items_raw) < 4:
-            logger.warning("llm_fallback_reason=predictions_insufficient_count")
+            log_ai_fallback("predictions", "insufficient_count")
             return fallback
         items = [PredictionItem.model_validate(it) for it in items_raw[:4]]
         return PredictionsResponse(
             period=period,  # type: ignore[arg-type]
             items=items,
             generated_at=datetime.now(timezone.utc).isoformat(),
+            source="llm",
         )
     except Exception as exc:
-        logger.warning("llm_fallback_reason=predictions_parse error=%s", exc)
+        log_ai_fallback("predictions", "parse_error", error_type=type(exc).__name__)
         return fallback

@@ -51,3 +51,54 @@ def test_llm_chat_completion_retries_then_succeeds(monkeypatch):
     result = asyncio.run(run())
     assert result is ok_response
     assert mock_create.await_count == 2
+
+
+def test_llm_chat_completion_does_not_retry_none_status(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    get_settings.cache_clear()
+    settings = get_settings()
+
+    mock_client = MagicMock()
+    fail_exc = Exception("sdk bug")
+    # no status_code attribute
+    mock_create = AsyncMock(side_effect=fail_exc)
+    mock_client.chat.completions.create = mock_create
+
+    async def run() -> object:
+        with patch("app.services.llm_client.openrouter_client", return_value=mock_client):
+            with patch("app.services.llm_client.asyncio.sleep", new_callable=AsyncMock) as sleep:
+                result = await llm_chat_completion(
+                    settings,
+                    model="openai/gpt-4o-mini",
+                    messages=[{"role": "user", "content": "hi"}],
+                )
+                sleep.assert_not_awaited()
+                return result
+
+    assert asyncio.run(run()) is None
+    assert mock_create.await_count == 1
+
+
+def test_llm_chat_completion_does_not_retry_timeout(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    get_settings.cache_clear()
+    settings = get_settings()
+
+    mock_client = MagicMock()
+    mock_create = AsyncMock(side_effect=TimeoutError())
+    mock_client.chat.completions.create = mock_create
+
+    async def run() -> object:
+        with patch("app.services.llm_client.openrouter_client", return_value=mock_client):
+            with patch("app.services.llm_client.asyncio.sleep", new_callable=AsyncMock) as sleep:
+                result = await llm_chat_completion(
+                    settings,
+                    model="openai/gpt-4o-mini",
+                    messages=[{"role": "user", "content": "hi"}],
+                    timeout_seconds=1.0,
+                )
+                sleep.assert_not_awaited()
+                return result
+
+    assert asyncio.run(run()) is None
+    assert mock_create.await_count == 1

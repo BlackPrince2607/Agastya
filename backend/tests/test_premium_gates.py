@@ -75,7 +75,7 @@ def test_chat_free_cap_at_five(client):
     }
     res = client.post("/v1/chat", json=body)
     assert res.status_code == 200
-    assert "preview ceiling" in res.json()["reply"].lower()
+    assert "free chat limit" in res.json()["reply"].lower()
 
 
 def test_chat_single_message_bypass_blocked_by_tail(client):
@@ -103,7 +103,7 @@ def test_chat_single_message_bypass_blocked_by_tail(client):
         },
     )
     assert res.status_code == 200
-    assert "preview ceiling" in res.json()["reply"].lower()
+    assert "free chat limit" in res.json()["reply"].lower()
 
 
 def test_chat_accepts_frontend_payload_without_is_premium(client):
