@@ -11,10 +11,8 @@ export const GENDER_OPTIONS: Array<{
   description: string;
   icon: IconName;
 }> = [
-  { id: 'male', label: 'Man', description: 'Readings shaped with this lens', icon: 'person' },
-  { id: 'female', label: 'Woman', description: 'Readings shaped with this lens', icon: 'person' },
-  { id: 'non_binary', label: 'Non-binary', description: 'Inclusive, identity-aware guidance', icon: 'psychology' },
-  { id: 'prefer_not', label: 'Prefer not to say', description: 'We keep your reading general', icon: 'visibility' },
+  { id: 'male', label: 'Male', description: 'Readings shaped with this lens', icon: 'person' },
+  { id: 'female', label: 'Female', description: 'Readings shaped with this lens', icon: 'person' },
 ];
 
 type ProfileBasicsFormProps = {

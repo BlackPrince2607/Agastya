@@ -18,7 +18,7 @@ function parseFocusTopics(raw: string[]): FocusTopic[] {
 }
 
 function parseGender(raw: string | null | undefined): Gender | undefined {
-  if (raw === 'female' || raw === 'male' || raw === 'non_binary' || raw === 'prefer_not') {
+  if (raw === 'female' || raw === 'male') {
     return raw;
   }
   return undefined;

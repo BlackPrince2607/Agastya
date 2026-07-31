@@ -215,8 +215,6 @@ def deterministic_report(
         gender_frag = "Read for a masculine presence. "
     elif gender == "female":
         gender_frag = "Read for a feminine presence. "
-    elif gender:
-        gender_frag = f"Identity note: {gender}. "
 
     return FullReport(
         blueprint_title="Your Life Blueprint",

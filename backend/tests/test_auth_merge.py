@@ -115,7 +115,7 @@ def test_authenticated_bootstrap_returns_richest_saved_session(client, monkeypat
                 "device_install_id": "dev-old",
                 "supabase_user_id": user_id,
                 "display_name": "Restored",
-                "gender": "prefer_not",
+                "gender": "female",
                 "focus_topics": ["growth"],
                 "palm_storage_path": None,
                 "palm_analysis": None,

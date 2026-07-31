@@ -11,7 +11,7 @@ export type FocusTopic = 'love' | 'career' | 'money' | 'growth' | 'matching';
 
 export type BillingPeriod = 'monthly' | 'annual';
 
-export type Gender = 'female' | 'male' | 'non_binary' | 'prefer_not';
+export type Gender = 'female' | 'male';
 
 export type PalmScanHand = 'left' | 'right';
 

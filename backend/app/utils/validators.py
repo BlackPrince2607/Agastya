@@ -39,6 +39,14 @@ def validate_device_install_id(device_install_id: str | None) -> str | None:
     return s
 
 
+def normalize_gender(value: str | None) -> str | None:
+    """Accept only male/female; anything else becomes None."""
+    if value is None:
+        return None
+    s = value.strip().lower()
+    return s if s in {"male", "female"} else None
+
+
 def assert_device_binding(
     *,
     session_id: str,

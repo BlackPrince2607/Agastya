@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.utils.validators import _parse_uuid, validate_device_install_id
+from app.utils.validators import _parse_uuid, normalize_gender, validate_device_install_id
 
 
 class PalmAnalyzeBody(BaseModel):
@@ -43,12 +43,7 @@ class PalmAnalyzeBody(BaseModel):
     @field_validator("gender")
     @classmethod
     def _gender(cls, v: str | None) -> str | None:
-        if v is None:
-            return None
-        s = v.strip().lower()
-        if s in {"male", "female", "non_binary", "prefer_not"}:
-            return s
-        return None
+        return normalize_gender(v)
 
     @field_validator("landmarks_source")
     @classmethod

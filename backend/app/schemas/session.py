@@ -4,7 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.utils.validators import _parse_uuid, validate_device_install_id
+from app.utils.validators import _parse_uuid, normalize_gender, validate_device_install_id
 
 
 class SessionRegisterBody(BaseModel):
@@ -29,6 +29,11 @@ class SessionRegisterBody(BaseModel):
             raise ValueError("deviceInstallId required")
         return out
 
+    @field_validator("gender")
+    @classmethod
+    def _gender(cls, v: str | None) -> str | None:
+        return normalize_gender(v)
+
 
 class SessionProfilePatchBody(BaseModel):
     session_id: str = Field(alias="sessionId")
@@ -52,6 +57,10 @@ class SessionProfilePatchBody(BaseModel):
             raise ValueError("deviceInstallId required")
         return out
 
+    @field_validator("gender")
+    @classmethod
+    def _gender(cls, v: str | None) -> str | None:
+        return normalize_gender(v)
 
 class SessionRegisterResponse(BaseModel):
     ok: bool = True

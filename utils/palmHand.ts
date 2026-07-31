@@ -3,14 +3,13 @@ import type { Gender, PalmScanHand } from '@/store/sessionStore';
 /**
  * Traditional palmistry hand for a reading:
  * male → right (active), female → left (active).
- * Other identities default to right and may still choose.
  */
 export function palmHandForGender(gender?: Gender | null): PalmScanHand {
   if (gender === 'female') return 'left';
   return 'right';
 }
 
-/** Male/female hands are fixed; others can still pick. */
+/** Male/female hands are fixed once gender is set. */
 export function isPalmHandLockedByGender(gender?: Gender | null): boolean {
   return gender === 'male' || gender === 'female';
 }
