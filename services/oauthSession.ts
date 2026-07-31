@@ -1,4 +1,11 @@
-import { peekPendingAuthReturnUrl } from '@/services/authCallback';
+import * as Linking from 'expo-linking';
+import * as WebBrowser from 'expo-web-browser';
+
+import {
+  peekPendingAuthReturnUrl,
+  resolveAuthCallbackUrl,
+  setPendingAuthReturnUrl,
+} from '@/services/authCallback';
 import {
   isAuthCallbackUrl,
   isOAuthSuccessCallback,
@@ -23,6 +30,19 @@ async function waitForPendingAuthUrl(timeoutMs: number): Promise<string | null> 
     if (pending && isAuthCallbackUrl(pending)) {
       return pending;
     }
+    try {
+      const initial = await Linking.getInitialURL();
+      if (initial && isAuthCallbackUrl(initial)) {
+        setPendingAuthReturnUrl(initial);
+        return initial;
+      }
+    } catch {
+      /* ignore */
+    }
+    const resolved = await resolveAuthCallbackUrl();
+    if (resolved && isAuthCallbackUrl(resolved)) {
+      return resolved;
+    }
     await sleep(120);
   }
   return null;
@@ -38,6 +58,9 @@ export async function runOAuthBrowserFlow(
   if (__DEV__) {
     console.log('[Agastya auth] opening OAuth → redirect', redirectUri);
   }
+
+  // Helps Expo Go finish the auth session when the app reloads on exp:// return.
+  WebBrowser.maybeCompleteAuthSession();
 
   const result = await openOAuthBrowserSession(oauthUrl, redirectUri);
 
@@ -59,7 +82,7 @@ export async function runOAuthBrowserFlow(
     }
   }
 
-  const pending = await waitForPendingAuthUrl(result.type === 'success' ? 800 : 4_500);
+  const pending = await waitForPendingAuthUrl(result.type === 'success' ? 1_200 : 5_500);
   if (pending) {
     if (__DEV__) {
       console.log('[Agastya auth] using pending deep-link callback');
@@ -69,6 +92,15 @@ export async function runOAuthBrowserFlow(
       return { ok: false, message: oauthError };
     }
     return { ok: true, url: pending };
+  }
+
+  if (__DEV__ && (result.type === 'cancel' || result.type === 'dismiss')) {
+    console.warn(
+      '[Agastya auth] no deep link after browser',
+      result.type,
+      '— confirm Supabase Redirect URLs include exp://** and',
+      redirectUri,
+    );
   }
 
   const supabase = getSupabase();

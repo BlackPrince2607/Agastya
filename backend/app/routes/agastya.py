@@ -440,7 +440,14 @@ async def merge_session(
         raise HTTPException(status_code=403, detail="Session already linked to another account")
     if not body.device_install_id:
         raise HTTPException(status_code=403, detail="deviceInstallId required")
-    _bind_device(bkt, body.anonymous_session_id, body.device_install_id)
+    # Signed-in merge may continue on a new install / Expo Go reset — rebind device.
+    assert_device_binding(
+        session_id=body.anonymous_session_id,
+        device_install_id=body.device_install_id,
+        stored_device_id=bkt.meta.get("deviceInstallId"),
+        allow_rebind=True,
+    )
+    bkt.meta["deviceInstallId"] = body.device_install_id
 
     bkt.meta["supabaseUserId"] = body.supabase_user_id
     await _hydrate_from_user_sessions(body.anonymous_session_id, bkt, settings)

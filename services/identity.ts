@@ -3,6 +3,7 @@ import * as Crypto from 'expo-crypto';
 import { Platform } from 'react-native';
 
 import { fetchApiHealthWithRetry, registerSession } from '@/services/agastyaApi';
+import { ApiHttpError } from '@/services/apiErrors';
 import { diagnoseReachability, reachabilityDevHint } from '@/services/apiReachability';
 import { AGASTYA_API_ROOT, isApiConfigured } from '@/services/env';
 import { track } from '@/services/analytics';
@@ -190,6 +191,41 @@ export async function syncProfileRemote() {
       { signal: ctrl.signal },
     );
   } catch (err) {
+    const apiErr = err instanceof ApiHttpError ? err : null;
+    const detail = (apiErr?.rawDetail ?? apiErr?.message ?? (err instanceof Error ? err.message : '')).toLowerCase();
+    const deviceMismatch =
+      apiErr?.status === 403 &&
+      (detail.includes('deviceinstallid does not match') ||
+        detail.includes('no longer matches your saved session'));
+
+    if (deviceMismatch && snap.deviceInstallId) {
+      // Stale sessionId bound to another install — mint a fresh session so onboarding can continue.
+      const freshSessionId = Crypto.randomUUID();
+      useSessionStore.setState({ sessionId: freshSessionId, identityReady: true });
+      if (__DEV__) {
+        console.warn(
+          '[Agastya] Session device mismatch — started a fresh sessionId. Use Profile → Start fresh if readings look wrong.',
+        );
+      }
+      try {
+        await registerSession(
+          {
+            sessionId: freshSessionId,
+            deviceInstallId: snap.deviceInstallId,
+            displayName: snap.userDisplayName,
+            gender: snap.userGender,
+            focusTopics: snap.focusTopics,
+          },
+          { signal: ctrl.signal },
+        );
+        return;
+      } catch (retryErr) {
+        if (__DEV__) {
+          console.warn('[Agastya] Session register retry failed', retryErr);
+        }
+      }
+    }
+
     if (__DEV__) {
       console.warn(
         '[Agastya] Session register skipped (API offline or misconfigured EXPO_PUBLIC_AGASTYA_API_URL). Onboarding continues locally.',

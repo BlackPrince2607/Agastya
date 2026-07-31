@@ -101,6 +101,7 @@ export async function restoreSessionFromServer(options?: RestoreOptions): Promis
 
       const updates: {
         sessionId?: string;
+        deviceInstallId?: string;
         userDisplayName?: string;
         userGender?: Gender;
         focusTopics?: FocusTopic[];
@@ -112,7 +113,21 @@ export async function restoreSessionFromServer(options?: RestoreOptions): Promis
       } = {};
 
       // Profile / premium always safe from either bootstrap shape.
-      if (data.sessionId && data.sessionId !== snap.sessionId) updates.sessionId = data.sessionId;
+      // Adopting a cloud sessionId without its deviceInstallId causes register/merge 403s.
+      if (data.sessionId && data.sessionId !== snap.sessionId) {
+        updates.sessionId = data.sessionId;
+        if (data.deviceInstallId) {
+          updates.deviceInstallId = data.deviceInstallId;
+        }
+      } else if (
+        data.deviceInstallId &&
+        data.deviceInstallId !== snap.deviceInstallId &&
+        data.sessionId &&
+        data.sessionId === snap.sessionId
+      ) {
+        // Same session, server binding wins so mutations match the owner device.
+        updates.deviceInstallId = data.deviceInstallId;
+      }
       if (data.displayName) updates.userDisplayName = data.displayName;
       const gender = parseGender(data.gender);
       if (gender) updates.userGender = gender;
