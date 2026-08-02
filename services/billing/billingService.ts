@@ -8,7 +8,6 @@ import {
   verifyGooglePlayPurchase,
 } from '@/services/agastyaApi';
 import { isApiConfigured } from '@/services/env';
-import type { BillingPeriod } from '@/store/sessionStore';
 import { useSessionStore } from '@/store/sessionStore';
 
 export type BillingPlanInfo = {
@@ -62,9 +61,8 @@ function checkoutReturnUrls(): { successUrl: string; cancelUrl: string } {
   };
 }
 
-/** Create Razorpay Payment Link and open hosted checkout. */
+/** Create Razorpay Payment Link and open hosted checkout (lifetime unlock). */
 export async function startRazorpayCheckout(options: {
-  period: BillingPeriod;
   externalTransactionToken?: string | null;
   administrativeArea?: string | null;
 }): Promise<CheckoutResult> {
@@ -86,7 +84,7 @@ export async function startRazorpayCheckout(options: {
     const { checkoutUrl, checkoutIntentId } = await createRazorpayPaymentLink({
       sessionId: snap.sessionId,
       deviceInstallId: snap.deviceInstallId,
-      billingPeriod: options.period,
+      billingPeriod: 'lifetime',
       successUrl,
       cancelUrl,
       externalTransactionToken: options.externalTransactionToken ?? undefined,

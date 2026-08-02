@@ -60,7 +60,8 @@ export function ChatBubble({ role, text, stacked = false, stacksNext = false }: 
           borderRadius: radii.md + 2,
           borderBottomLeftRadius: stacksNext ? 10 : 5,
           borderTopLeftRadius: stacked ? 10 : radii.md + 2,
-        }}>
+        }}
+        accessibilityLiveRegion={stacked ? undefined : 'polite'}>
         <Text className="font-body text-[15px] leading-[22px] text-on-surface">{text}</Text>
       </View>
     </View>

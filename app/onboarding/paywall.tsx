@@ -9,11 +9,12 @@ import { MotiView } from 'moti';
 
 import { CosmicDotGrid } from '@/components/layout/CosmicDotGrid';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
+import { StickyActionBar, STICKY_ACTION_BAR_TALL } from '@/components/layout/StickyActionBar';
 import { OnboardingHeader } from '@/components/onboarding/OnboardingHeader';
-import { BlurContainer, CosmicButton } from '@/components/primitives';
+import { CosmicButton } from '@/components/primitives';
 import { ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS } from '@/constants/onboarding';
 import { stitchMd3 } from '@/constants/stitchWelcome';
-import { stitchSignal } from '@/constants/theme';
+import { colors, stitchSignal } from '@/constants/theme';
 import { AnalyticsEvent, track, trackOnce } from '@/services/analytics';
 import { getBillingConfig } from '@/services/billing/billingService';
 import type { BillingConfig } from '@/services/billing/billingService';
@@ -84,8 +85,6 @@ export default function PaywallScreen() {
     razorpay_signature,
   } = searchParams;
   const routeParams = normalizeRouteParams(searchParams);
-  const period = useSessionStore((s) => s.billingPeriod);
-  const setPeriod = useSessionStore((s) => s.setBillingPeriod);
   const premium = useSessionStore((s) => s.hasUnlockedPremium);
   const storeUserId = useSessionStore((s) => s.supabaseUserId);
   const { isSignedIn, email: authEmail, loading: authLoading } = useAuthSession();
@@ -145,8 +144,8 @@ export default function PaywallScreen() {
     };
   }, []);
 
-  const formatPlanPrice = (key: 'monthly' | 'annual', fallback: string) => {
-    const plan = billingConfig?.plans?.[key];
+  const formatLifetimePrice = (fallback: string) => {
+    const plan = billingConfig?.plans?.lifetime ?? billingConfig?.plans?.annual;
     if (!plan) return fallback;
     const major = plan.amount / 100;
     try {
@@ -160,10 +159,10 @@ export default function PaywallScreen() {
     }
   };
 
-  const subscribeLabel = () => {
+  const unlockLabel = () => {
     if (busy) return 'Processing...';
     if (!signedIn) return 'Sign in to unlock';
-    return 'Unlock Premium';
+    return `Unlock Premium · ${formatLifetimePrice('₹4,999')}`;
   };
 
   useEffect(() => {
@@ -189,8 +188,8 @@ export default function PaywallScreen() {
         Alert.alert(
           'Purchase pending',
           result.reason === 'report_failed'
-            ? 'Payment may have succeeded, but we could not load your full report yet. Try checking subscription status or sign in again.'
-            : 'We could not confirm your payment yet. Wait a moment and tap Check subscription status, or contact support if this continues.',
+            ? 'Payment may have succeeded, but we could not load your full report yet. Try checking premium status or sign in again.'
+            : 'We could not confirm your payment yet. Wait a moment and tap Check premium status, or contact support if this continues.',
         );
       }
       setBusy(false);
@@ -217,7 +216,7 @@ export default function PaywallScreen() {
       case 'unavailable':
         return 'Billing is not available on this device. Use a production Android build enrolled in Google Play User Choice.';
       case 'not_entitled':
-        return 'No active subscription was found for this account.';
+        return 'No Premium purchase was found for this account.';
       case 'report_failed':
         return 'Purchase succeeded, but we could not generate your full report. Please try again.';
       default:
@@ -232,7 +231,7 @@ export default function PaywallScreen() {
       return;
     }
     setBusy(true);
-    track(AnalyticsEvent.PURCHASE_STARTED, { billing_period: period });
+    track(AnalyticsEvent.PURCHASE_STARTED, { billing_period: 'lifetime' });
 
     try {
       const result = await unlockPremium({ seed: mergedSeed });
@@ -267,7 +266,7 @@ export default function PaywallScreen() {
       if (result.ok) {
         afterUnlockSuccess();
       } else if (result.reason !== 'cancelled') {
-        Alert.alert('No subscription found', unlockFailureMessage(result.reason));
+        Alert.alert('No Premium found', unlockFailureMessage(result.reason));
       }
     } finally {
       setBusy(false);
@@ -287,7 +286,7 @@ export default function PaywallScreen() {
           contentContainerStyle={{
             paddingHorizontal: 24,
             paddingTop: 8,
-            paddingBottom: 320 + insets.bottom,
+            paddingBottom: STICKY_ACTION_BAR_TALL + insets.bottom,
             gap: 22,
           }}>
           <OnboardingHeader step={ONBOARDING_STEPS.paywall} total={ONBOARDING_TOTAL_STEPS} />
@@ -355,130 +354,74 @@ export default function PaywallScreen() {
           </LinearGradient>
 
           <View className="gap-3">
-            <PlanRow
-              label="Yearly Access"
-              badge="Most popular"
-              price={`${formatPlanPrice('annual', '₹4,999')}/year`}
-              tag="Save 50%"
-              active={period === 'annual'}
-              onPress={() => setPeriod('annual')}
-            />
-            <PlanRow
-              label="Monthly Access"
-              price={`${formatPlanPrice('monthly', '₹799')}/month`}
-              active={period === 'monthly'}
-              onPress={() => setPeriod('monthly')}
-            />
+            <View className="rounded-3xl border border-primary/55 bg-primary/10 px-5 py-4">
+              <View className="mb-3 self-start rounded-full border border-primary/40 bg-primary/20 px-3 py-1">
+                <Text className="font-label text-[9px] font-bold uppercase tracking-[0.22em] text-cyan">
+                  One-time unlock
+                </Text>
+              </View>
+              <Text className="font-label text-[17px] font-semibold text-on-surface">Agastya Premium</Text>
+              <Text className="mt-1 font-body text-[14px] text-on-surface-variant">
+                {formatLifetimePrice('₹4,999')} · lifetime access · no auto-renewal
+              </Text>
+            </View>
           </View>
 
           <View className="items-center gap-2 py-2">
             <Text className="font-body text-[13px] text-on-surface-variant text-center">
-              Period access after payment. Check subscription status if the app was closed during checkout.
+              Pay once via Razorpay (UPI/cards) or Google Play. Check premium status if the app was closed during
+              checkout.
             </Text>
           </View>
 
-          <Pressable onPress={() => void handleCheckStatus()} disabled={busy} className="items-center py-2 active:opacity-80">
-            <Text className="font-body text-[14px] font-medium text-cyan underline">Check subscription status</Text>
+          <Pressable
+            onPress={() => void handleCheckStatus()}
+            disabled={busy}
+            accessibilityRole="button"
+            accessibilityLabel="Check premium status"
+            accessibilityState={{ disabled: busy }}
+            className="items-center py-2 active:opacity-80">
+            <Text className="font-body text-[14px] font-medium text-cyan underline">Check premium status</Text>
           </Pressable>
         </ScrollView>
 
-        <BlurContainer
-          intensity={56}
-          className="absolute bottom-0 left-0 right-0 z-20 rounded-none border-t border-white/14 bg-[#0f0e10]/94 px-6 pt-4"
-          style={{ elevation: 24 }}>
-          <View style={{ paddingBottom: Math.max(insets.bottom, 16) }} className="gap-y-3.5">
-            {premium ? (
+        <StickyActionBar contentStyle={{ gap: 14 }}>
+          {premium ? (
+            <CosmicButton
+              gradient="nebulaMd3"
+              label="Enter Agastya"
+              onPress={() => (hasPremiumAccess() ? enterMainApp() : afterUnlockSuccess())}
+            />
+          ) : busy ? (
+            <CosmicButton
+              gradient="nebulaMd3"
+              label={unlockLabel()}
+              onPress={() => void handleSubscribe()}
+              disabled={busy}
+            />
+          ) : (
+            <MotiView
+              from={{ scale: 1 }}
+              animate={{ scale: 1.02 }}
+              transition={{ type: 'timing', duration: 1100, loop: true, repeatReverse: true }}>
               <CosmicButton
                 gradient="nebulaMd3"
-                label="Enter Agastya"
-                onPress={() => (hasPremiumAccess() ? enterMainApp() : afterUnlockSuccess())}
+                label={unlockLabel()}
+                onPress={() => void handleSubscribe()}
+                disabled={busy}
               />
-            ) : (
-              <MotiView
-                from={{ scale: 1 }}
-                animate={{ scale: 1.02 }}
-                transition={{ type: 'timing', duration: 1100, loop: true, repeatReverse: true }}>
-                <CosmicButton
-                  gradient="nebulaMd3"
-                  label={subscribeLabel()}
-                  onPress={() => void handleSubscribe()}
-                />
-              </MotiView>
-            )}
-            <CosmicButton variant="ghost" label="Go back" onPress={backFromPaywall} />
-            {!signedIn ? (
-              <CosmicButton variant="ghost" label="Sign in to unlock" onPress={goToSignInForPaywall} />
-            ) : null}
-            <View className="mt-1 flex-row items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2.5">
-              <Ionicons name="shield-checkmark" size={16} color="#4ade80" />
-              <Text className="font-body text-[12px] text-on-surface/85">Secure payment via Google Play or Razorpay.</Text>
-            </View>
+            </MotiView>
+          )}
+          <CosmicButton variant="ghost" label="Go back" onPress={backFromPaywall} />
+          {!signedIn ? (
+            <CosmicButton variant="ghost" label="Sign in to unlock" onPress={goToSignInForPaywall} />
+          ) : null}
+          <View className="flex-row items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2.5">
+            <Ionicons name="shield-checkmark" size={16} color={colors.health} />
+            <Text className="font-body text-[12px] text-on-surface/85">Secure one-time payment via Google Play or Razorpay.</Text>
           </View>
-        </BlurContainer>
+        </StickyActionBar>
       </View>
     </CosmicScreen>
-  );
-}
-
-function PlanRow({
-  label,
-  badge,
-  price,
-  sub,
-  tag,
-  active,
-  onPress,
-}: {
-  label: string;
-  badge?: string;
-  price: string;
-  sub?: string;
-  tag?: string;
-  active: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="radio"
-      accessibilityState={{ checked: active }}
-      accessibilityLabel={`${label}${badge ? `, ${badge}` : ''}, ${price}${tag ? `, ${tag}` : ''}`}>
-      <View
-        className={
-          active
-            ? 'rounded-3xl border border-primary/55 bg-primary/10 px-5 py-4'
-            : 'rounded-3xl border border-white/12 bg-black/35 px-5 py-4'
-        }
-        style={active ? { shadowColor: stitchSignal, shadowOpacity: 0.25, shadowRadius: 12 } : undefined}>
-        {badge ? (
-          <View className="mb-3 self-start rounded-full border border-primary/40 bg-primary/20 px-3 py-1">
-            <Text className="font-label text-[9px] font-bold uppercase tracking-[0.22em] text-cyan">
-              {badge}
-            </Text>
-          </View>
-        ) : null}
-        <View className="flex-row items-center gap-3">
-          <View
-            className={`h-5 w-5 rounded-full border-2 ${active ? 'border-cyan bg-cyan/30' : 'border-white/25'}`}
-          />
-          <View className="min-w-0 flex-1">
-            <View className="flex-row flex-wrap items-center gap-2">
-              <Text className="font-label text-[17px] font-semibold text-on-surface">{label}</Text>
-              {tag ? (
-                <View className="rounded-md bg-primary/25 px-2 py-0.5">
-                  <Text className="font-label text-[10px] font-bold uppercase tracking-wide text-cyan">
-                    {tag}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-            <Text className="mt-1 font-body text-[14px] text-on-surface-variant">
-              {price}
-              {sub ? <Text className="text-on-primary-container"> ({sub})</Text> : null}
-            </Text>
-          </View>
-        </View>
-      </View>
-    </Pressable>
   );
 }

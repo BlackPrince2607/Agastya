@@ -14,6 +14,8 @@ type ProgressCardProps = {
   streak?: number;
   /** 0–100 progress; derived from completed/total when omitted. */
   value?: number;
+  /** Shown when total is 0 (no rituals yet). */
+  emptyLabel?: string;
 };
 
 /**
@@ -26,12 +28,13 @@ export function ProgressCard({
   footnote = "Complete all rituals to unlock today's wisdom.",
   streak,
   value,
+  emptyLabel = 'Begin your rituals',
 }: ProgressCardProps) {
   const safeTotal = Math.max(0, total);
   const progress =
     value ?? (safeTotal > 0 ? Math.round((Math.min(completed, safeTotal) / safeTotal) * 100) : 0);
   const countLabel =
-    safeTotal > 0 ? `${completed} / ${safeTotal} Rituals Completed` : 'Begin your rituals';
+    safeTotal > 0 ? `${completed} / ${safeTotal} Rituals Completed` : emptyLabel;
 
   return (
     <GlassCard className="w-full" innerClassName="gap-4 p-5">
@@ -45,7 +48,11 @@ export function ProgressCard({
           <Text className="mt-0.5 font-body text-[13px] leading-5 text-on-surface-variant">{footnote}</Text>
         </View>
         {typeof streak === 'number' && streak > 0 ? (
-          <Text className="font-headline-md text-[22px] text-primary">{streak}</Text>
+          <Text
+            className="font-headline-md text-[22px] text-primary"
+            accessibilityLabel={`${streak} day streak`}>
+            {streak}
+          </Text>
         ) : null}
       </View>
       <ProgressBar value={progress} height={10} palette="progress" />

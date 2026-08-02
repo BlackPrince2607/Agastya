@@ -10,7 +10,11 @@ from app.utils.validators import _parse_uuid, validate_device_install_id
 class RazorpayPaymentLinkBody(BaseModel):
     session_id: str = Field(alias="sessionId")
     device_install_id: str = Field(alias="deviceInstallId")
-    billing_period: Literal["monthly", "annual"] = Field(alias="billingPeriod")
+    # Lifetime one-time unlock. Legacy monthly/annual accepted and treated as lifetime.
+    billing_period: Literal["lifetime", "monthly", "annual"] = Field(
+        default="lifetime",
+        alias="billingPeriod",
+    )
     success_url: str = Field(alias="successUrl", max_length=2048)
     cancel_url: str = Field(alias="cancelUrl", max_length=2048)
     external_transaction_token: str | None = Field(default=None, alias="externalTransactionToken")

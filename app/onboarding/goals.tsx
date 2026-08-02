@@ -11,6 +11,7 @@ import { CosmicButton } from '@/components/primitives';
 import { ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS } from '@/constants/onboarding';
 import { PAGE_PADDING } from '@/constants/layout';
 import { stitchMd3 } from '@/constants/stitchWelcome';
+import { triggerLightTap } from '@/hooks/useHapticTap';
 import { syncProfileRemote } from '@/services/identity';
 import { deferRouterPush } from '@/utils/routerDefer';
 import type { FocusTopic } from '@/store/sessionStore';
@@ -60,6 +61,7 @@ export default function GoalsScreen() {
   const setTopics = useSessionStore((s) => s.setFocusTopics);
 
   const toggle = (id: FocusTopic) => {
+    void triggerLightTap();
     const next = topics.includes(id) ? topics.filter((t) => t !== id) : [...topics, id];
     setTopics(next);
   };
@@ -93,7 +95,7 @@ export default function GoalsScreen() {
             <OnboardingHeader step={ONBOARDING_STEPS.goals} total={ONBOARDING_TOTAL_STEPS} />
 
             <View>
-              <Text className="font-headline text-[30px] leading-9 tracking-tight text-on-surface">
+              <Text className="font-headline text-[28px] leading-9 tracking-tight text-on-surface">
                 What do you want help with?
               </Text>
               <Text className="mt-4 max-w-md font-body text-[15px] leading-6 text-on-surface-variant">
@@ -105,7 +107,14 @@ export default function GoalsScreen() {
               {FOCUS_TOPIC_OPTIONS.map((opt) => {
                 const picked = topics.includes(opt.id);
                 return (
-                  <Pressable key={opt.id} onPress={() => toggle(opt.id)} className="active:opacity-95" style={({ pressed }) => ({ transform: [{ scale: pressed ? 0.985 : 1 }] })}>
+                  <Pressable
+                    key={opt.id}
+                    onPress={() => toggle(opt.id)}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: picked }}
+                    accessibilityLabel={opt.label}
+                    className="active:opacity-95"
+                    style={({ pressed }) => ({ transform: [{ scale: pressed ? 0.985 : 1 }] })}>
                     <View
                       className={`flex-row items-start rounded-3xl border p-[18px] ${
                         picked ? 'bg-white/12' : 'bg-white/[0.06]'
@@ -144,7 +153,7 @@ export default function GoalsScreen() {
                       </View>
                       <View className="ml-3 mt-1 h-10 w-7 shrink-0 items-center justify-center">
                         <MaterialCommunityIcons
-                          name={picked ? 'check-circle' : 'chevron-right'}
+                          name={picked ? 'check-circle' : 'checkbox-blank-circle-outline'}
                           size={24}
                           color={picked ? stitchMd3.primary : 'rgba(203,196,206,0.65)'}
                         />

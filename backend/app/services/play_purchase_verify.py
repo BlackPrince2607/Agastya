@@ -46,13 +46,59 @@ def _publisher_credentials(settings: Settings):
     return credentials
 
 
+async def verify_product_purchase(
+    settings: Settings,
+    *,
+    purchase_token: str,
+    product_id: str,
+) -> dict[str, Any] | None:
+    """Return one-time product purchase resource if valid and purchased."""
+    credentials = _publisher_credentials(settings)
+    if credentials is None:
+        return None
+
+    package_name = settings.play_package_name
+    url = (
+        f"https://androidpublisher.googleapis.com/androidpublisher/v3/applications/"
+        f"{package_name}/purchases/products/{product_id}/tokens/{purchase_token}"
+    )
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            res = await client.get(
+                url,
+                headers={"Authorization": f"Bearer {credentials.token}"},
+            )
+        if res.status_code != 200:
+            logger.warning(
+                "Play product verify failed status=%s body=%s",
+                res.status_code,
+                res.text[:300],
+            )
+            return None
+        data = res.json()
+        if not isinstance(data, dict):
+            return None
+
+        # 0 = Purchased, 1 = Canceled, 2 = Pending
+        purchase_state = data.get("purchaseState")
+        if purchase_state is not None and int(purchase_state) != 0:
+            logger.info("Play product not purchased: state=%s", purchase_state)
+            return None
+
+        return data
+    except Exception as exc:
+        logger.warning("Play product verify error: %s", exc)
+        return None
+
+
 async def verify_subscription_purchase(
     settings: Settings,
     *,
     purchase_token: str,
     product_id: str,
 ) -> dict[str, Any] | None:
-    """Return subscription v2 resource if purchase is valid and active."""
+    """Legacy subscription verify — prefer verify_product_purchase for lifetime unlock."""
     credentials = _publisher_credentials(settings)
     if credentials is None:
         return None
@@ -80,7 +126,6 @@ async def verify_subscription_purchase(
         if not isinstance(data, dict):
             return None
 
-        # Match product id from line items when present.
         line_items = data.get("lineItems") or []
         if line_items:
             matched = any(

@@ -18,7 +18,7 @@ export function BackButton({
   onPress,
   fallback,
   accessibilityLabel = 'Back',
-  color = colors.cyan,
+  color = colors.onSurface,
 }: BackButtonProps) {
   const pathname = usePathname();
   const segments = useSegments();

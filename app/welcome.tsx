@@ -108,6 +108,8 @@ export default function WelcomeScreen() {
       <StickyActionBar bottomPadding={32} contentStyle={styles.welcomeDock}>
         <View style={styles.ctaStack}>
           <MotiPressable
+            accessibilityRole="button"
+            accessibilityLabel="Get started"
             onPress={() => {
               void triggerLightTap();
               deferRouterReplace(resolveOnboardingHref());
@@ -129,6 +131,9 @@ export default function WelcomeScreen() {
           </MotiPressable>
 
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={signInBusy ? 'Signing in…' : 'Sign in'}
+            accessibilityState={{ busy: signInBusy, disabled: signInBusy }}
             onPress={() => void handleSignIn()}
             disabled={signInBusy}
             style={({ pressed }) => [styles.secondaryBtn, (pressed || signInBusy) && { opacity: 0.88 }]}>
@@ -140,10 +145,6 @@ export default function WelcomeScreen() {
               )}
             </WelcomeBlurShell>
           </Pressable>
-        </View>
-
-        <View style={styles.progressTrack}>
-          <View style={styles.progressFill} />
         </View>
       </StickyActionBar>
     </View>
@@ -246,8 +247,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    minHeight: 60,
-    paddingVertical: 17,
+    minHeight: 58,
+    paddingVertical: 16,
     paddingHorizontal: 28,
   },
   primaryIconBubble: {
@@ -262,7 +263,7 @@ const styles = StyleSheet.create({
   },
   primaryLabel: {
     fontFamily: 'SpaceGrotesk_600SemiBold',
-    fontSize: 15,
+    fontSize: 13,
     letterSpacing: 2.4,
     color: '#ffffff',
     textTransform: 'uppercase',
@@ -292,28 +293,6 @@ const styles = StyleSheet.create({
     letterSpacing: 2.8,
     color: stitchMd3.onBackground,
     textTransform: 'uppercase',
-  },
-  progressTrack: {
-    alignSelf: 'center',
-    width: 96,
-    height: 4,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    overflow: 'hidden',
-  },
-  progressFill: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: '14%',
-    borderRadius: 999,
-    backgroundColor: stitchMd3.primary,
-    shadowColor: stitchMd3.primary,
-    shadowOpacity: 0.45,
-    shadowRadius: 12,
   },
   welcomeDock: {
     alignItems: 'center',

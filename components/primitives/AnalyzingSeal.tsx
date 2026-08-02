@@ -9,20 +9,32 @@ type Props = {
   hideCenterGlyph?: boolean;
   /** 0–100 ring fill; drives the arc from empty → full. */
   progress?: number;
+  accessibilityLabel?: string;
 };
 
 /** Circular progress seal — arc fills 0 → 100 with `progress`. */
-export function AnalyzingSeal({ diameter = 220, hideCenterGlyph, progress = 0 }: Props) {
+export function AnalyzingSeal({
+  diameter = 220,
+  hideCenterGlyph,
+  progress = 0,
+  accessibilityLabel = 'Analysis progress',
+}: Props) {
   const gid = `sealGlow-${diameter}`;
   const thickness = 6;
   const r = diameter / 2 - thickness / 2;
   const c = Math.PI * 2 * r;
   const pct = Math.min(100, Math.max(0, progress));
+  const now = Math.round(pct);
   // Empty at 0, full ring at 100 (draw from top, clockwise).
   const dashOffset = c * (1 - pct / 100);
 
   return (
-    <View style={{ width: diameter, height: diameter, alignItems: 'center', justifyContent: 'center' }}>
+    <View
+      style={{ width: diameter, height: diameter, alignItems: 'center', justifyContent: 'center' }}
+      accessible
+      accessibilityRole="progressbar"
+      accessibilityValue={{ min: 0, max: 100, now }}
+      accessibilityLabel={accessibilityLabel}>
       <Svg width={diameter} height={diameter}>
         <Defs>
           <LinearGradient id={gid} x1="0" y1="0" x2="1" y2="1">

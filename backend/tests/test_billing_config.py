@@ -31,6 +31,10 @@ def test_billing_config_india_android(client):
     assert "razorpay" in ids
     rz = next(p for p in data["providers"] if p["id"] == "razorpay")
     assert rz["requiresPlayUserChoice"] is True
+    assert "lifetime" in data["plans"]
+    assert data["plans"]["lifetime"]["amount"] == 499900
+    assert "monthly" not in data["plans"]
+    assert "annual" not in data["plans"]
 
 
 def test_billing_config_android_no_razorpay_when_flag_off(monkeypatch):

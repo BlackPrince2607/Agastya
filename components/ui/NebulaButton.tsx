@@ -37,6 +37,7 @@ export function NebulaButton({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={label}
+        accessibilityState={{ disabled: !!disabled }}
         disabled={disabled}
         onPress={handlePress}
         className={`flex-row items-center justify-center gap-2 ${className ?? ''}`}
@@ -81,6 +82,7 @@ export function NebulaButton({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={label}
+        accessibilityState={{ disabled: !!disabled }}
         disabled={disabled}
         onPress={handlePress}
         style={({ pressed }) => ({
@@ -94,6 +96,9 @@ export function NebulaButton({
 
   return (
     <MotiPressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: !!disabled }}
       animate={({ pressed }) => ({
         scale: pressed && !disabled ? 0.97 : 1,
         opacity: disabled ? 0.55 : 1,

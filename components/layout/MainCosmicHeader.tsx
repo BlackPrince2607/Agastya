@@ -33,9 +33,11 @@ export function MainCosmicHeader({
       onProfilePress();
       return;
     }
-    if (!onProfileTab) {
-      router.push('/(main)/profile');
+    if (onProfileTab) {
+      router.push('/edit-profile');
+      return;
     }
+    router.push('/(main)/profile');
   };
 
   return (
@@ -47,7 +49,7 @@ export function MainCosmicHeader({
 
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={onProfileTab ? 'Your profile' : 'Open profile'}
+          accessibilityLabel={onProfileTab ? 'Edit profile' : 'Open profile'}
           onPress={handleProfilePress}
           className="z-10 h-11 w-11 overflow-hidden rounded-full border active:opacity-90"
           style={{ borderColor: 'rgba(168,85,247,0.35)' }}>

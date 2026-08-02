@@ -3,7 +3,7 @@ import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Text, View } from 'react-native';
 
-import { LoadingBlock } from '@/components/feedback';
+import { EmptyState, LoadingBlock } from '@/components/feedback';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { OnboardingScroll } from '@/components/layout/OnboardingScroll';
 import { OnboardingHeader } from '@/components/onboarding/OnboardingHeader';
@@ -40,11 +40,6 @@ export default function ResetPasswordScreen() {
       if (!auth.isSignedIn) {
         setSessionOk(false);
         setChecking(false);
-        Alert.alert(
-          'Link expired',
-          'Open the reset link from your email again, or request a new one from the sign-in screen.',
-          [{ text: 'OK', onPress: () => router.replace('/onboarding/account') }],
-        );
         return;
       }
 
@@ -89,7 +84,13 @@ export default function ResetPasswordScreen() {
     return (
       <CosmicScreen variant="stitch">
         <View className="flex-1 items-center justify-center px-8">
-          <PrimaryButton label="Back to sign in" onPress={() => router.replace('/onboarding/account')} />
+          <EmptyState
+            icon="lock"
+            title="Link expired"
+            body="Open the reset link from your email again, or request a new one from the sign-in screen."
+            actionLabel="Back to sign in"
+            onAction={() => router.replace('/onboarding/account')}
+          />
         </View>
       </CosmicScreen>
     );
@@ -97,7 +98,7 @@ export default function ResetPasswordScreen() {
 
   return (
     <CosmicScreen variant="stitch">
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1">
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="flex-1">
         <OnboardingScroll>
           <OnboardingHeader showBack useClose />
 
@@ -115,6 +116,8 @@ export default function ResetPasswordScreen() {
               showPasswordToggle
               autoCapitalize="none"
               autoCorrect={false}
+              textContentType="newPassword"
+              autoComplete="password-new"
               placeholder="At least 6 characters"
               value={password}
               onChangeText={setPassword}
@@ -126,6 +129,8 @@ export default function ResetPasswordScreen() {
               showPasswordToggle
               autoCapitalize="none"
               autoCorrect={false}
+              textContentType="newPassword"
+              autoComplete="password-new"
               placeholder="Repeat password"
               value={confirm}
               onChangeText={setConfirm}

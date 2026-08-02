@@ -1,6 +1,9 @@
-import { useId } from 'react';
+import { useEffect, useId } from 'react';
 import { Text, View } from 'react-native';
+import Animated, { useAnimatedProps, useSharedValue, withTiming } from 'react-native-reanimated';
 import Svg, { Circle, Defs, G, LinearGradient, Stop } from 'react-native-svg';
+
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 type ProgressRingProps = {
   done: number;
@@ -17,8 +20,17 @@ export function ProgressRing({ done, total, size = 112, stroke = 8 }: ProgressRi
   const center = canvas / 2;
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
-  const frac = total > 0 ? Math.min(1, done / total) : 0;
-  const progress = circumference * frac;
+  const targetFrac = total > 0 ? Math.min(1, done / total) : 0;
+
+  const progress = useSharedValue(targetFrac);
+
+  useEffect(() => {
+    progress.value = withTiming(targetFrac, { duration: 650 });
+  }, [targetFrac, progress]);
+
+  const animatedProps = useAnimatedProps(() => ({
+    strokeDasharray: `${progress.value * circumference} ${circumference}`,
+  }));
 
   return (
     <View style={{ width: canvas, height: canvas, overflow: 'visible' }} className="items-center justify-center">
@@ -38,7 +50,7 @@ export function ProgressRing({ done, total, size = 112, stroke = 8 }: ProgressRi
             strokeWidth={stroke}
             fill="none"
           />
-          <Circle
+          <AnimatedCircle
             cx={center}
             cy={center}
             r={radius}
@@ -46,7 +58,7 @@ export function ProgressRing({ done, total, size = 112, stroke = 8 }: ProgressRi
             strokeWidth={stroke}
             fill="none"
             strokeLinecap="round"
-            strokeDasharray={`${progress} ${circumference}`}
+            animatedProps={animatedProps}
           />
         </G>
       </Svg>

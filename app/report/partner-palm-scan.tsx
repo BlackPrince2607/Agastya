@@ -1,4 +1,5 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { router } from 'expo-router';
 import { useRef, useState } from 'react';
 import { Alert, Pressable, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -107,8 +108,23 @@ export default function PartnerPalmScanScreen() {
               </Text>
             </View>
             <View className="gap-3">
-              <CosmicButton variant="ghost" label="Allow camera" onPress={() => requestPermission()} />
-              <CosmicButton variant="ghost" label="Upload from gallery instead" onPress={() => void uploadFromGallery()} />
+              <CosmicButton gradient="nebulaMd3" label="Allow camera" onPress={() => requestPermission()} />
+              <CosmicButton
+                variant="ghost"
+                label="Upload from gallery instead"
+                onPress={() => {
+                  void triggerLightTap();
+                  void uploadFromGallery();
+                }}
+              />
+              <CosmicButton
+                variant="ghost"
+                label="Back"
+                onPress={() => {
+                  void triggerLightTap();
+                  router.back();
+                }}
+              />
             </View>
           </View>
         </View>
@@ -178,8 +194,12 @@ export default function PartnerPalmScanScreen() {
                 />
                 <Pressable
                   accessibilityRole="button"
+                  accessibilityLabel="Upload partner palm photo from gallery"
                   disabled={uploadBusy || capturing}
-                  onPress={() => void uploadFromGallery()}
+                  onPress={() => {
+                    void triggerLightTap();
+                    void uploadFromGallery();
+                  }}
                   className="items-center py-2 active:opacity-75">
                   <Text className="font-label text-[13px] uppercase tracking-[0.08em] text-on-surface-variant">
                     {uploadBusy ? GALLERY_OPENING : 'Upload from gallery'}

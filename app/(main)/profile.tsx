@@ -55,10 +55,43 @@ function appVersionLabel(): string {
   return build ? `${version} (${build})` : version;
 }
 
-function storeSubscriptionsUrl(): string | null {
-  if (Platform.OS === 'ios') return 'https://apps.apple.com/account/subscriptions';
-  if (Platform.OS === 'android') return 'https://play.google.com/store/account/subscriptions';
+function storePurchasesUrl(): string | null {
+  if (Platform.OS === 'android') {
+    return 'https://play.google.com/store/account/orderhistory';
+  }
   return null;
+}
+
+function JourneyEmptyContent({
+  title,
+  body,
+  showEyebrow = true,
+}: {
+  title: string;
+  body: string;
+  showEyebrow?: boolean;
+}) {
+  return (
+    <View className="gap-2">
+      {showEyebrow ? (
+        <Text className="font-label text-[11px] uppercase tracking-[0.14em] text-primary">Your journey</Text>
+      ) : null}
+      <Text className="font-headline-md text-[18px] text-on-surface" maxFontSizeMultiplier={1.35}>
+        {title}
+      </Text>
+      <Text className="font-body text-[14px] leading-6 text-on-surface-variant" maxFontSizeMultiplier={1.35}>
+        {body}
+      </Text>
+    </View>
+  );
+}
+
+function JourneyEmptyShell({ title, body }: { title: string; body: string }) {
+  return (
+    <GlassCard muted className="w-full" innerClassName="p-5">
+      <JourneyEmptyContent title={title} body={body} />
+    </GlassCard>
+  );
 }
 
 export default function ProfileScreen() {
@@ -189,7 +222,7 @@ export default function ProfileScreen() {
   const version = useMemo(() => appVersionLabel(), []);
 
   const reportsGenerated = (palmAnalysis ? 1 : 0) + (partnerPalmAnalysis ? 1 : 0);
-  const manageSubsUrl = storeSubscriptionsUrl();
+  const managePurchasesUrl = storePurchasesUrl();
 
   const handleRestorePurchases = async () => {
     if (restoreBusy) return;
@@ -197,10 +230,10 @@ export default function ProfileScreen() {
     try {
       const result = await checkPremiumStatus({});
       Alert.alert(
-        result.ok ? 'Subscription active' : 'No subscription found',
+        result.ok ? 'Premium active' : 'No Premium found',
         result.ok
           ? 'Pro is active on this account.'
-          : 'We could not find an active subscription. If you paid recently, wait a moment and try again.',
+          : 'We could not find a Premium purchase. If you paid recently, wait a moment and try again.',
       );
     } finally {
       setRestoreBusy(false);
@@ -346,7 +379,8 @@ export default function ProfileScreen() {
               title={weekly.currentChapter?.trim() || weekly.title}
               body={weekly.body}
               ctaLabel="See your journey"
-              onPress={() => router.push('/tasks')}
+              accessibilityHint="Opens your palm report and journey"
+              onPress={() => router.push('/report')}
             />
           </MotiView>
         ) : journeyLoading && palmAnalysis ? (
@@ -354,13 +388,7 @@ export default function ProfileScreen() {
             <LoadingBlock variant="skeleton" compact message={PROFILE_JOURNEY_LOADING} />
           </GlassCard>
         ) : journeyLoaded && palmAnalysis && !weekly ? (
-          <GlassCard muted className="w-full" innerClassName="gap-2 p-5">
-            <Text className="font-label text-[11px] uppercase tracking-[0.14em] text-primary">This Week</Text>
-            <Text className="font-headline-md text-[18px] text-on-surface">{PROFILE_WEEKLY_EMPTY.title}</Text>
-            <Text className="font-body text-[14px] leading-6 text-on-surface-variant">
-              {PROFILE_WEEKLY_EMPTY.body}
-            </Text>
-          </GlassCard>
+          <JourneyEmptyShell title={PROFILE_WEEKLY_EMPTY.title} body={PROFILE_WEEKLY_EMPTY.body} />
         ) : null}
 
         {timeline.length > 0 && palmAnalysis ? (
@@ -389,11 +417,12 @@ export default function ProfileScreen() {
           </SettingsSection>
         ) : journeyLoaded && palmAnalysis && timeline.length === 0 ? (
           <SettingsSection index={0} title="Your journey" subtitle="Moments from your Life Blueprint path">
-            <View className="gap-1.5 py-4">
-              <Text className="font-headline-md text-[15px] text-on-surface">{PROFILE_TIMELINE_EMPTY.title}</Text>
-              <Text className="font-body text-[13px] leading-5 text-on-surface-variant">
-                {PROFILE_TIMELINE_EMPTY.body}
-              </Text>
+            <View className="py-4">
+              <JourneyEmptyContent
+                title={PROFILE_TIMELINE_EMPTY.title}
+                body={PROFILE_TIMELINE_EMPTY.body}
+                showEyebrow={false}
+              />
             </View>
           </SettingsSection>
         ) : null}
@@ -422,20 +451,21 @@ export default function ProfileScreen() {
           />
         </SettingsSection>
 
-        <SettingsSection index={2} title="Subscription" subtitle="Membership and billing">
+        <SettingsSection index={2} title="Premium" subtitle="One-time unlock and billing">
           <SettingsRow
             icon="refresh"
-            title={restoreBusy ? 'Checking…' : 'Check subscription status'}
-            subtitle="Sync premium from your account"
+            title={restoreBusy ? 'Checking…' : 'Check premium status'}
+            subtitle="Sync Premium from your account"
             onPress={() => void handleRestorePurchases()}
-            last={!manageSubsUrl || !premium}
+            disabled={restoreBusy}
+            last={!managePurchasesUrl || !premium}
           />
-          {premium && manageSubsUrl ? (
+          {premium && managePurchasesUrl ? (
             <SettingsRow
               icon="settings"
-              title="Manage subscription"
-              subtitle={Platform.OS === 'ios' ? 'App Store subscriptions' : 'Play Store subscriptions'}
-              onPress={() => openLink(manageSubsUrl)}
+              title="Play purchase history"
+              subtitle="View Google Play orders"
+              onPress={() => openLink(managePurchasesUrl)}
               last
             />
           ) : null}

@@ -9,7 +9,7 @@ import type { SimulatedReading } from '@/types/report';
 
 export type FocusTopic = 'love' | 'career' | 'money' | 'growth' | 'matching';
 
-export type BillingPeriod = 'monthly' | 'annual';
+export type BillingPeriod = 'lifetime';
 
 export type Gender = 'female' | 'male';
 
@@ -126,7 +126,7 @@ export const useSessionStore = create<SessionStore>()(
 
       readingSeed: 'stillness',
       focusTopics: [],
-      billingPeriod: 'annual',
+      billingPeriod: 'lifetime',
       palmScanHand: null,
 
       ...emptyReadingState,
@@ -185,7 +185,7 @@ export const useSessionStore = create<SessionStore>()(
           avatarId: undefined,
           readingSeed: 'stillness',
           focusTopics: [],
-          billingPeriod: 'annual',
+          billingPeriod: 'lifetime',
           palmScanHand: null,
           sessionId: null,
           deviceInstallId: null,
@@ -217,8 +217,8 @@ export const useSessionStore = create<SessionStore>()(
         if (err && __DEV__) {
           console.warn('[Agastya] session restore failed — starting fresh', err);
         }
-        if (state && (state.billingPeriod as string) === 'weekly') {
-          state.billingPeriod = 'monthly';
+        if (state && (state.billingPeriod as string) !== 'lifetime') {
+          state.billingPeriod = 'lifetime';
         }
       },
       partialize: (state) => ({

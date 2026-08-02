@@ -1,7 +1,7 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useMemo, useRef, useState } from 'react';
-import { Platform, Pressable, Text, TextInput, View } from 'react-native';
+import { Alert, Platform, Pressable, Text, TextInput, View } from 'react-native';
 
 import { MetricBar } from '@/components/match/MetricBar';
 import { PartnerPalmAddSheet } from '@/components/match/PartnerPalmAddSheet';
@@ -88,16 +88,27 @@ export function CosmicMatchPanel({ onOpenGuide }: CosmicMatchPanelProps) {
   };
 
   const handlePartnerPress = () => {
-    if (partnerPalm) {
-      router.push('/report/partner-palm-analysis');
-      return;
-    }
+    // Existing partner palm: keep summary view — do not re-enter capture/analysis.
+    if (partnerPalm) return;
     setAddSheetOpen(true);
   };
 
   const clearPartnerPalm = () => {
-    setPartnerPalmAnalysis(null);
-    setPartnerPalmCaptureBase64(null);
+    Alert.alert(
+      'Remove partner palm?',
+      'This clears your partner reading from compatibility. You can scan or upload again anytime.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => {
+            setPartnerPalmAnalysis(null);
+            setPartnerPalmCaptureBase64(null);
+          },
+        },
+      ],
+    );
   };
 
   return (
@@ -304,7 +315,7 @@ function EditablePartnerLabel({
         maxLength={24}
         accessibilityLabel="Partner name"
         className="shrink px-0.5 text-center font-body-medium text-[13px] font-semibold leading-4 text-on-surface"
-        style={{ minWidth: 52, maxWidth: 80, height: 20, paddingVertical: 0 }}
+        style={{ minWidth: 52, maxWidth: 80, minHeight: 44, paddingVertical: 12 }}
       />
       <Pressable
         onPress={() => inputRef.current?.focus()}

@@ -1,4 +1,6 @@
 export const LEGAL_URLS = {
-  terms: 'https://agastya.app/terms',
-  privacy: 'https://agastya.app/privacy',
+  terms: 'https://sharvo.online/terms',
+  privacy: 'https://sharvo.online/privacy',
+  support: 'https://sharvo.online/support',
+  deleteAccount: 'https://sharvo.online/delete-account',
 } as const;

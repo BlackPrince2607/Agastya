@@ -108,8 +108,7 @@ function isRazorpayDirectCheckoutEnabled(): boolean {
 }
 
 async function startDirectRazorpayCheckout(seed: string | undefined): Promise<UnlockResult> {
-  const period = useSessionStore.getState().billingPeriod;
-  const rz = await startRazorpayCheckout({ period });
+  const rz = await startRazorpayCheckout({});
   if (!rz.ok) return mapCheckoutFailure(rz.reason);
   if (rz.redirecting) {
     return { ok: true, source: 'razorpay' };
@@ -146,11 +145,7 @@ export async function unlockPremium(options: { seed?: string }): Promise<UnlockR
     return { ok: false, reason: 'unavailable' };
   }
 
-  const period = useSessionStore.getState().billingPeriod;
-  const productId =
-    period === 'annual'
-      ? process.env.EXPO_PUBLIC_PLAY_PRODUCT_ANNUAL || 'premium_annual'
-      : process.env.EXPO_PUBLIC_PLAY_PRODUCT_MONTHLY || 'premium_monthly';
+  const productId = process.env.EXPO_PUBLIC_PLAY_PRODUCT_ID || 'premium_unlock';
 
   const choice = await launchPlayUserChoiceBilling({ productId });
 
@@ -167,7 +162,6 @@ export async function unlockPremium(options: { seed?: string }): Promise<UnlockR
       return { ok: false, reason: 'cancelled' };
     }
     const rz = await startRazorpayCheckout({
-      period,
       externalTransactionToken: choice.externalTransactionToken,
       administrativeArea: area,
     });

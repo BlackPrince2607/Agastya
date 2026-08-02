@@ -5,6 +5,7 @@ import { GlassCard } from '@/components/ui/GlassCard';
 import { Icon } from '@/components/ui/Icon';
 import { PressableScale } from '@/components/ui/PressableScale';
 import { colors } from '@/constants/theme';
+import { useReduceMotion } from '@/hooks/useReduceMotion';
 
 type InsightCardProps = {
   eyebrow?: string;
@@ -14,6 +15,7 @@ type InsightCardProps = {
   onPress?: () => void;
   /** Show floating flare icon (default true). */
   animatedIcon?: boolean;
+  accessibilityHint?: string;
 };
 
 /**
@@ -26,22 +28,33 @@ export function InsightCard({
   ctaLabel = 'Read Full Reading',
   onPress,
   animatedIcon = true,
+  accessibilityHint = 'Opens your palm reading',
 }: InsightCardProps) {
+  const reduceMotion = useReduceMotion();
+
+  const flareIcon = (
+    <View
+      className="h-12 w-12 items-center justify-center rounded-full"
+      style={{ backgroundColor: 'rgba(168,85,247,0.22)' }}>
+      <Icon name="flare" size={24} color="rgba(255,255,255,0.72)" />
+    </View>
+  );
+
   const content = (
     <GlassCard glow className="w-full" innerClassName="gap-4 p-5">
       <View className="relative w-full">
         {animatedIcon ? (
-          <MotiView
-            className="absolute right-0 top-0 z-10"
-            from={{ translateY: 0 }}
-            animate={{ translateY: -3 }}
-            transition={{ type: 'timing', duration: 2200, loop: true }}>
-            <View
-              className="h-12 w-12 items-center justify-center rounded-full"
-              style={{ backgroundColor: 'rgba(168,85,247,0.22)' }}>
-              <Icon name="flare" size={24} color="rgba(255,255,255,0.72)" />
-            </View>
-          </MotiView>
+          reduceMotion ? (
+            <View className="absolute right-0 top-0 z-10">{flareIcon}</View>
+          ) : (
+            <MotiView
+              className="absolute right-0 top-0 z-10"
+              from={{ translateY: 0, opacity: 0.85 }}
+              animate={{ translateY: 0, opacity: 1 }}
+              transition={{ type: 'timing', duration: 600 }}>
+              {flareIcon}
+            </MotiView>
+          )
         ) : null}
 
         <View className={`w-full gap-3 ${animatedIcon ? 'pr-14' : ''}`}>
@@ -71,7 +84,7 @@ export function InsightCard({
     <PressableScale
       onPress={onPress}
       accessibilityLabel={`${title}. ${ctaLabel}`}
-      accessibilityHint="Opens your palm reading"
+      accessibilityHint={accessibilityHint}
       scaleTo={0.985}
       style={{ width: '100%' }}>
       {content}

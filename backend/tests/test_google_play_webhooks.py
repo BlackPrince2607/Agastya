@@ -23,11 +23,23 @@ def _rtdn_payload(notification_type: int, purchase_token: str = "tok_abc") -> di
         "subscriptionNotification": {
             "notificationType": notification_type,
             "purchaseToken": purchase_token,
-            "subscriptionId": "premium_monthly",
+            "subscriptionId": "premium_unlock",
         }
     }
     encoded = base64.b64encode(json.dumps(inner).encode()).decode()
     return {"message": {"data": encoded, "messageId": f"msg-{notification_type}"}}
+
+
+def _rtdn_onetime_payload(notification_type: int, purchase_token: str = "tok_ot") -> dict:
+    inner = {
+        "oneTimeProductNotification": {
+            "notificationType": notification_type,
+            "purchaseToken": purchase_token,
+            "sku": "premium_unlock",
+        }
+    }
+    encoded = base64.b64encode(json.dumps(inner).encode()).decode()
+    return {"message": {"data": encoded, "messageId": f"ot-{notification_type}"}}
 
 
 def test_rtdn_rejects_missing_token(client):
@@ -50,6 +62,15 @@ def test_rtdn_unknown_token_ignored(client):
     res = client.post(
         "/v1/webhooks/google-play?token=rtdn-test-token",
         json=_rtdn_payload(13, purchase_token="unknown_token"),
+    )
+    assert res.status_code == 200
+    assert res.json()["status"] == "ignored"
+
+
+def test_rtdn_onetime_unknown_token_ignored(client):
+    res = client.post(
+        "/v1/webhooks/google-play?token=rtdn-test-token",
+        json=_rtdn_onetime_payload(1, purchase_token="unknown_ot"),
     )
     assert res.status_code == 200
     assert res.json()["status"] == "ignored"

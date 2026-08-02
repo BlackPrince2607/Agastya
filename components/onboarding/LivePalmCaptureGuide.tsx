@@ -42,7 +42,9 @@ export function LivePalmCaptureGuide({ capturing = false, partner = false }: Liv
         <Text className="text-center font-label text-[10px] uppercase tracking-[0.2em] text-cyan">
           Live guide
         </Text>
-        <Text className="mt-2 text-center font-body text-[14px] leading-5 text-on-surface">
+        <Text
+          accessibilityLiveRegion="polite"
+          className="mt-2 text-center font-body text-[14px] leading-5 text-on-surface">
           {capturing ? PALM_LIVE_GUIDE_CAPTURING : tip}
         </Text>
         {!capturing ? (

@@ -48,7 +48,7 @@ function AnimatedTabIconComponent({ name, color, focused }: AnimatedTabIconProps
           width: 14,
           height: 3,
           borderRadius: 999,
-          backgroundColor: colors.growth,
+          backgroundColor: colors.primary,
           shadowColor: colors.purple,
           shadowOpacity: focused ? 0.65 : 0,
           shadowRadius: 5,

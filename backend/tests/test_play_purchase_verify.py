@@ -17,10 +17,27 @@ def test_record_play_purchase_no_supabase():
             settings,
             purchase_token="tok_test",
             session_id="00000000-0000-4000-8000-000000000001",
-            product_id="premium_monthly",
+            product_id="premium_unlock",
         )
     )
     assert ok is True
+
+
+def test_verify_product_skips_without_credentials():
+    settings = Settings(
+        debug=True,
+        google_play_service_account_json=None,
+    )
+    import asyncio
+
+    result = asyncio.run(
+        play_purchase_verify.verify_product_purchase(
+            settings,
+            purchase_token="tok_test",
+            product_id="premium_unlock",
+        )
+    )
+    assert result is None
 
 
 def test_verify_subscription_skips_without_credentials():
@@ -34,7 +51,7 @@ def test_verify_subscription_skips_without_credentials():
         play_purchase_verify.verify_subscription_purchase(
             settings,
             purchase_token="tok_test",
-            product_id="premium_monthly",
+            product_id="premium_unlock",
         )
     )
     assert result is None

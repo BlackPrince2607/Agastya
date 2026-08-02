@@ -18,13 +18,8 @@ import java.util.concurrent.atomic.AtomicReference
 /**
  * Google Play User Choice Billing bridge.
  *
- * Required for India User Choice Billing program: enables Google's choice dialog
- * (Google Play vs alternative billing) via Play Billing Library 7.x.
- *
- * When user selects Google Play, purchase is acknowledged here and purchaseToken
- * is sent to backend for server-side verification (replaces RevenueCat).
- * When user selects alternative billing, externalTransactionToken is returned
- * for Razorpay checkout + ExternalTransactions API reporting.
+ * India User Choice: Google Play vs alternative billing (Razorpay Payment Link).
+ * Product type is one-time INAPP (lifetime premium_unlock), not subscriptions.
  */
 class PlayUserChoiceModule : Module() {
   private var billingClient: BillingClient? = null
@@ -55,7 +50,6 @@ class PlayUserChoiceModule : Module() {
             p.resolve(mapOf("outcome" to "cancelled"))
           }
           BillingClient.BillingResponseCode.OK -> {
-            // Acknowledge purchase on this client (required by Play policy).
             var purchaseToken: String? = null
             purchases?.forEach { purchase ->
               if (purchase.purchaseState == Purchase.PurchaseState.PURCHASED) {
@@ -97,7 +91,6 @@ class PlayUserChoiceModule : Module() {
           PendingPurchasesParams.newBuilder().enableOneTimeProducts().build()
         )
         .enableUserChoiceBilling { userChoiceDetails ->
-          // Required: alternative billing path returns token for ExternalTransactions API.
           val token = userChoiceDetails.externalTransactionToken
           val p = pendingPromise.getAndSet(null)
           p?.resolve(
@@ -121,7 +114,7 @@ class PlayUserChoiceModule : Module() {
           val productList = listOf(
             QueryProductDetailsParams.Product.newBuilder()
               .setProductId(productId)
-              .setProductType(BillingClient.ProductType.SUBS)
+              .setProductType(BillingClient.ProductType.INAPP)
               .build()
           )
           val params = QueryProductDetailsParams.newBuilder().setProductList(productList).build()
@@ -135,21 +128,16 @@ class PlayUserChoiceModule : Module() {
             }
 
             val productDetails: ProductDetails = productDetailsList[0]
-            val offerDetails = productDetails.subscriptionOfferDetails
-            val token = offerToken
-              ?: offerDetails?.firstOrNull()?.offerToken
-            if (token == null) {
-              pendingPromise.getAndSet(null)?.resolve(mapOf("outcome" to "unavailable"))
-              return@queryProductDetailsAsync
+            val productDetailsParamsBuilder = BillingFlowParams.ProductDetailsParams.newBuilder()
+              .setProductDetails(productDetails)
+
+            // Only set offer token when the JS layer passes one (multi-offer INAPP).
+            if (!offerToken.isNullOrEmpty()) {
+              productDetailsParamsBuilder.setOfferToken(offerToken)
             }
 
-            val productDetailsParams = BillingFlowParams.ProductDetailsParams.newBuilder()
-              .setProductDetails(productDetails)
-              .setOfferToken(token)
-              .build()
-
             val flowParams = BillingFlowParams.newBuilder()
-              .setProductDetailsParamsList(listOf(productDetailsParams))
+              .setProductDetailsParamsList(listOf(productDetailsParamsBuilder.build()))
               .build()
 
             val launchResult = client.launchBillingFlow(activity, flowParams)

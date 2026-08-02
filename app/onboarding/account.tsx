@@ -165,7 +165,7 @@ export default function SaveJourneyScreen() {
 
   return (
     <CosmicScreen variant="stitch">
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1">
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="flex-1">
         <View className="flex-1">
           <ScrollView
             showsVerticalScrollIndicator={false}
@@ -192,7 +192,7 @@ export default function SaveJourneyScreen() {
             </View>
 
             <View className="items-center gap-3.5 px-1">
-              <Text className="text-center font-headline text-[30px] leading-9 text-on-surface">{headline}</Text>
+              <Text className="text-center font-headline text-[28px] leading-9 text-on-surface">{headline}</Text>
               <Text className="max-w-sm text-center font-body text-[15px] leading-6 text-on-surface-variant">
                 {subhead}
               </Text>
@@ -200,7 +200,7 @@ export default function SaveJourneyScreen() {
 
             {isSignedIn ? (
               <GlassCard className="w-full px-4 py-3" style={{ borderColor: 'rgba(34,211,238,0.35)' }}>
-                <Text className="font-body text-[14px] leading-6" style={{ color: '#22d3ee' }}>
+                <Text className="font-body text-[14px] leading-6 text-cyan">
                   {authEmail ? `Signed in as ${authEmail}.` : "You're signed in."}{' '}
                   {fromProfileFlow
                     ? 'Return to your profile below.'
@@ -229,6 +229,7 @@ export default function SaveJourneyScreen() {
                     disabled={oauthBusy !== null}
                     accessibilityRole="button"
                     accessibilityLabel="Continue with Apple"
+                    accessibilityState={{ disabled: oauthBusy !== null, busy: oauthBusy === 'apple' }}
                     className="flex-row items-center justify-center gap-3"
                     style={({ pressed }) => [
                       styles.oauthButton,
@@ -251,6 +252,7 @@ export default function SaveJourneyScreen() {
                   disabled={oauthBusy !== null}
                   accessibilityRole="button"
                   accessibilityLabel="Continue with Google"
+                  accessibilityState={{ disabled: oauthBusy !== null, busy: oauthBusy === 'google' }}
                   className="flex-row items-center justify-center gap-3"
                   style={({ pressed }) => [
                     styles.oauthButton,
@@ -262,8 +264,8 @@ export default function SaveJourneyScreen() {
                   ) : (
                     <GoogleLogo size={20} />
                   )}
-                  <Text className="font-body-medium text-[16px] font-semibold text-on-surface">
-                    {oauthBusy === 'google' ? 'Restoring your reading…' : 'Continue with Google'}
+                    <Text className="font-body-medium text-[16px] font-semibold text-on-surface">
+                    {oauthBusy === 'google' ? 'Signing in...' : 'Continue with Google'}
                   </Text>
                 </Pressable>
               </View>
@@ -286,6 +288,8 @@ export default function SaveJourneyScreen() {
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoCorrect={false}
+                  textContentType="emailAddress"
+                  autoComplete="email"
                   placeholder="you@example.com"
                   value={email}
                   onChangeText={setEmail}
@@ -298,12 +302,18 @@ export default function SaveJourneyScreen() {
 
             <View className="items-center gap-2 pt-1">
               <View className="flex-row justify-center gap-6">
-                <Pressable onPress={() => openLegal(LEGAL_URLS.terms)}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Terms of Use"
+                  onPress={() => openLegal(LEGAL_URLS.terms)}>
                   <Text className="font-label text-[11px] uppercase leading-4 tracking-[0.08em] text-on-surface-variant">
                     Terms of Use
                   </Text>
                 </Pressable>
-                <Pressable onPress={() => openLegal(LEGAL_URLS.privacy)}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Privacy Policy"
+                  onPress={() => openLegal(LEGAL_URLS.privacy)}>
                   <Text className="font-label text-[11px] uppercase leading-4 tracking-[0.08em] text-on-surface-variant">
                     Privacy Policy
                   </Text>
@@ -345,14 +355,16 @@ export default function SaveJourneyScreen() {
               ) : null}
               {!afterPaywall && !beforePaywall && !premium && !fromProfileFlow ? (
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Want full access? Sign in to unlock"
                   onPress={() =>
-                    router.push({
+                    router.replace({
                       pathname: '/onboarding/account',
                       params: { seed: mergedSeed, toPaywall: '1' },
                     })
                   }
                   className="items-center pb-1">
-                  <Text className="font-body text-[13px]" style={{ color: '#22d3ee' }}>
+                  <Text className="font-body text-[13px] text-cyan">
                     Want full access? Sign in to unlock
                   </Text>
                 </Pressable>

@@ -40,7 +40,7 @@ export function HomeHero({ greeting }: HomeHeroProps) {
             className="font-headline text-[34px] text-on-surface"
             style={{ lineHeight: 42, paddingBottom: 2 }}
             accessibilityRole="header">
-            {greeting} ✨
+            {greeting}
           </Text>
         </View>
       </MotiView>

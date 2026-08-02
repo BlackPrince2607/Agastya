@@ -233,16 +233,18 @@ export default function PartnerPalmAnalysisScreen() {
         <CosmicDotGrid />
         <View className="flex-1 justify-between px-7 pb-16 pt-12">
           <View className="items-center gap-5">
-            <GradientText className="font-label text-[12px] uppercase tracking-[0.5em] text-cyan">
+            <GradientText className="font-label text-[12px] uppercase tracking-[0.12em] text-cyan">
               Reading partner palm
             </GradientText>
             {sampleBadge ? (
-              <Text className="font-body text-[12px] text-amber-200/90">{SAMPLE_READING_BADGE}</Text>
+              <Text className="max-w-[320px] text-center font-body text-[12px] leading-5 text-amber-200/90">
+                {SAMPLE_READING_BADGE}
+              </Text>
             ) : null}
             <View className="relative items-center justify-center">
               <AnalyzingSeal diameter={220} hideCenterGlyph progress={pct} />
               <View className="pointer-events-none absolute items-center justify-center gap-1">
-                <Text className="font-label text-[28px] font-semibold text-on-surface/95">{pct}%</Text>
+                <Text className="font-headline text-[28px] text-on-surface/95">{pct}%</Text>
               </View>
             </View>
           </View>

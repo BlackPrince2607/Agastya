@@ -21,9 +21,9 @@
 </head>
 <body>
 <div class="container">
-  <a class="back" href="https://agastya.app">← agastya.app</a>
+  <a class="back" href="https://sharvo.online">← sharvo.online</a>
   <h1>Privacy Policy</h1>
-  <p class="meta">Effective date: June 6, 2026 &nbsp;·&nbsp; Last updated: June 6, 2026</p>
+  <p class="meta">Effective date: August 1, 2026 &nbsp;·&nbsp; Last updated: August 1, 2026</p>
 
   <p>Agastya ("we", "our", or "us") operates the Agastya mobile application and associated services. This Privacy Policy explains what information we collect, how we use it, and your rights.</p>
   <p><strong>Agastya is designed for entertainment and personal reflection only.</strong> We do not provide medical, legal, financial, or psychological advice.</p>
@@ -31,18 +31,19 @@
   <h2>1. Information We Collect</h2>
   <ul>
     <li><strong>Profile data you provide:</strong> display name, gender (optional), and focus areas you choose during onboarding.</li>
-    <li><strong>Palm image:</strong> a photo taken during the palm-scan step. This image is sent to our servers solely to generate your reading and may be stored in a private cloud bucket tied to your session. It is never shared with third parties or used for training AI models.</li>
+    <li><strong>Palm image:</strong> a photo taken or uploaded during the palm-scan step. This image is sent to our servers solely to generate your reading and may be stored in a private cloud bucket tied to your session. It is never sold or used to train AI models.</li>
     <li><strong>Session and device identifiers:</strong> a randomly generated session ID and device install ID used to restore your reading across app launches.</li>
     <li><strong>Email address (optional):</strong> only if you choose to sign in for cross-device sync. We do not send marketing email without your explicit opt-in.</li>
-    <li><strong>Analytics events:</strong> pseudonymous event data (e.g. "paywall viewed", "reading generated") sent to PostHog or Mixpanel. No real name, email, or payment data is included in analytics events.</li>
-    <li><strong>Crash reports:</strong> error and crash data sent to Sentry, including device type and app version. No personal content is included.</li>
+    <li><strong>Purchase metadata:</strong> whether Premium is unlocked, payment provider (Razorpay or Google Play), and related checkout identifiers. We do not store full payment card numbers.</li>
+    <li><strong>Analytics events:</strong> pseudonymous event data (e.g. "paywall viewed", "reading generated") sent to PostHog or Mixpanel when configured. No palm images or message contents are included.</li>
+    <li><strong>Crash reports:</strong> error and crash data sent to Sentry, including device type and app version. Personal content is masked where possible.</li>
   </ul>
 
   <h2>2. How We Use Your Information</h2>
   <ul>
     <li>To generate and display your personalised palm reading, daily tasks, predictions, and AI Guide responses.</li>
     <li>To save your reading and restore it across devices when you sign in.</li>
-    <li>To process subscription payments via Razorpay and Google Play billing. We do not store payment card data.</li>
+    <li>To process one-time Premium unlocks via Razorpay Payment Links (alternative billing in India under Google Play User Choice) and/or Google Play Billing. We do not store payment card data.</li>
     <li>To diagnose crashes and improve app reliability via Sentry.</li>
     <li>To understand aggregate usage patterns via anonymous analytics.</li>
   </ul>
@@ -51,19 +52,23 @@
   <p>We do not sell your personal data. We share data only with:</p>
   <ul>
     <li><strong>Supabase</strong> — database and storage provider for session data and palm images.</li>
-    <li><strong>Groq</strong> — AI inference provider for palm analysis and guide responses. Data sent to Groq is governed by their <a href="https://groq.com/privacy-policy/" target="_blank">privacy policy</a>.</li>
-    <li><strong>Razorpay</strong> — payment processing for alternative billing in India. Governed by their <a href="https://razorpay.com/privacy/" target="_blank">privacy policy</a>.</li>
-    <li><strong>Google Play</strong> — subscription billing when users choose Google Play. Governed by Google&apos;s privacy policy.</li>
-    <li><strong>Apple / Google</strong> — in-app purchase processing.</li>
-    <li><strong>Sentry</strong> — crash reporting. No PII in payloads.</li>
-    <li><strong>PostHog / Mixpanel</strong> — analytics. Pseudonymous identifiers only.</li>
+    <li><strong>OpenRouter</strong> — AI inference routing for palm analysis and guide responses. Data sent through OpenRouter is governed by OpenRouter and the underlying model provider policies.</li>
+    <li><strong>Razorpay</strong> — payment processing for alternative billing (hosted Payment Link). Governed by their <a href="https://razorpay.com/privacy/" target="_blank" rel="noopener">privacy policy</a>.</li>
+    <li><strong>Google Play</strong> — billing when you choose Google Play in the User Choice dialog, and optional External Transactions reporting for alternative billing.</li>
+    <li><strong>Sentry</strong> — crash reporting.</li>
+    <li><strong>PostHog / Mixpanel</strong> — analytics (when enabled). Pseudonymous identifiers only.</li>
   </ul>
 
   <h2>4. Data Retention</h2>
-  <p>Session data is retained for up to 12 months of inactivity. Palm images are retained for up to 90 days. You may request deletion at any time by contacting us.</p>
+  <p>Session data is retained for up to 12 months of inactivity. Palm images are retained for up to 90 days. You may request deletion at any time.</p>
 
-  <h2>5. Your Rights</h2>
-  <p>Depending on your jurisdiction, you may have rights to access, correct, delete, or export your personal data. To exercise any of these rights, email us at <a href="mailto:privacy@agastya.app">privacy@agastya.app</a>.</p>
+  <h2>5. Your Rights &amp; Account Deletion</h2>
+  <p>Depending on your jurisdiction, you may have rights to access, correct, delete, or export your personal data.</p>
+  <ul>
+    <li><strong>In the app:</strong> open Profile → Delete account (requires sign-in).</li>
+    <li><strong>On the web:</strong> use <a href="https://sharvo.online/delete-account">https://sharvo.online/delete-account</a>.</li>
+    <li><strong>By email:</strong> <a href="mailto:privacy@sharvo.online">privacy@sharvo.online</a>.</li>
+  </ul>
 
   <h2>6. Children</h2>
   <p>Agastya is not directed at children under 13 (or 16 in the EU). We do not knowingly collect data from children. If you believe a child has provided us with personal data, please contact us and we will delete it.</p>
@@ -75,7 +80,8 @@
   <p>We may update this policy from time to time. We will notify you of material changes through the app or by email.</p>
 
   <h2>9. Contact</h2>
-  <p>For privacy questions or data requests: <a href="mailto:privacy@agastya.app">privacy@agastya.app</a></p>
+  <p>For privacy questions or data requests: <a href="mailto:privacy@sharvo.online">privacy@sharvo.online</a></p>
+  <p>Support: <a href="https://sharvo.online/support">https://sharvo.online/support</a></p>
 </div>
 </body>
 </html>

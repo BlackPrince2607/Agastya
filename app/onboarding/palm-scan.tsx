@@ -151,7 +151,10 @@ export default function PalmScanScreen() {
               variant="ghost"
               label={uploadBusy ? GALLERY_OPENING : 'Upload from gallery'}
               disabled={uploadBusy}
-              onPress={() => void uploadFromGallery(hand)}
+              onPress={() => {
+                void triggerLightTap();
+                void uploadFromGallery(hand);
+              }}
             />
           }
         />
@@ -177,11 +180,14 @@ export default function PalmScanScreen() {
               </Text>
             </View>
             <View className="gap-3">
-              <CosmicButton variant="ghost" label="Allow camera" onPress={() => requestPermission()} />
+              <CosmicButton gradient="nebulaMd3" label="Allow camera" onPress={() => requestPermission()} />
               <CosmicButton
                 variant="ghost"
                 label="Upload from gallery instead"
-                onPress={() => void uploadFromGallery(selectedHand)}
+                onPress={() => {
+                  void triggerLightTap();
+                  void uploadFromGallery(selectedHand);
+                }}
               />
               <CosmicButton variant="ghost" label="Back to checklist" onPress={() => setStep('briefing')} />
             </View>
@@ -277,8 +283,12 @@ export default function PalmScanScreen() {
 
             <Pressable
               accessibilityRole="button"
+              accessibilityLabel="Upload palm photo from gallery"
               disabled={uploadBusy || capturing}
-              onPress={() => void uploadFromGallery(hand)}
+              onPress={() => {
+                void triggerLightTap();
+                void uploadFromGallery(hand);
+              }}
               className="items-center py-2 active:opacity-75">
               <Text className="font-label text-[13px] uppercase tracking-[0.08em] text-on-surface-variant">
                 {uploadBusy ? GALLERY_OPENING : 'Upload from gallery'}

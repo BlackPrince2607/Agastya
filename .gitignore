@@ -45,6 +45,9 @@ yarn-error.*
 .env*.local
 backend/.env
 
+# Google Play service account (EAS submit)
+google-play-key.json
+
 # Python
 backend/.venv/
 backend/venv/

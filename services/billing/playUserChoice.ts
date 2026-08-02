@@ -69,7 +69,7 @@ export async function launchPlayUserChoiceBilling(options?: {
   try {
     const productId =
       options?.productId ??
-      (process.env.EXPO_PUBLIC_PLAY_PRODUCT_MONTHLY || 'premium_monthly');
+      (process.env.EXPO_PUBLIC_PLAY_PRODUCT_ID || 'premium_unlock');
     const result = await native.launchUserChoiceBilling(productId, options?.offerToken);
     if (result.outcome === 'alternative_billing' && result.externalTransactionToken) {
       return {

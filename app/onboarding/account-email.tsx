@@ -15,6 +15,7 @@ import { OnboardingScroll } from '@/components/layout/OnboardingScroll';
 import { DecorativePalmArt } from '@/components/onboarding/DecorativePalmArt';
 import { OnboardingHeader } from '@/components/onboarding/OnboardingHeader';
 import { CosmicTextField, GlassCard, PrimaryButton } from '@/components/ui';
+import { ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS } from '@/constants/onboarding';
 import { colors } from '@/constants/theme';
 import {
   AUTH_ACCOUNT_EXISTS_HINT,
@@ -237,9 +238,14 @@ export default function AccountEmailScreen() {
 
   return (
     <CosmicScreen variant="stitch">
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1">
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="flex-1">
         <OnboardingScroll>
-          <OnboardingHeader showBack useClose />
+          <OnboardingHeader
+            step={ONBOARDING_STEPS.account}
+            total={ONBOARDING_TOTAL_STEPS}
+            showBack
+            useClose
+          />
 
           <View className="overflow-hidden rounded-glass border border-white/10 shadow-aura" style={{ aspectRatio: 4 / 3 }}>
             <DecorativePalmArt opacity={0.82} resizeMode="cover" style={{ width: '100%', height: '100%' }} />
@@ -275,6 +281,8 @@ export default function AccountEmailScreen() {
               showPasswordToggle
               autoCapitalize="none"
               autoCorrect={false}
+              textContentType={mode === 'signin' ? 'password' : 'newPassword'}
+              autoComplete={mode === 'signin' ? 'password' : 'password-new'}
               placeholder={mode === 'signin' ? 'Your password' : 'Choose a password'}
               value={password}
               onChangeText={setPassword}
@@ -288,6 +296,8 @@ export default function AccountEmailScreen() {
                 showPasswordToggle
                 autoCapitalize="none"
                 autoCorrect={false}
+                textContentType="newPassword"
+                autoComplete="password-new"
                 placeholder="Repeat password"
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
@@ -311,8 +321,13 @@ export default function AccountEmailScreen() {
             ) : null}
 
             {mode === 'signin' ? (
-              <Pressable onPress={forgotPassword} disabled={busy} className="items-center py-2">
-                <Text className="font-body text-[13px] text-success">Forgot password?</Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Forgot password?"
+                onPress={forgotPassword}
+                disabled={busy}
+                className="items-center py-2">
+                <Text className="font-body text-[13px] text-primary">Forgot password?</Text>
               </Pressable>
             ) : null}
 
@@ -336,6 +351,10 @@ export default function AccountEmailScreen() {
             ) : null}
 
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={
+                mode === 'signin' ? 'New here? Create an account' : 'Already have an account? Sign in'
+              }
               onPress={() => setMode(mode === 'signin' ? 'signup' : 'signin')}
               disabled={busy}
               className="items-center py-2">

@@ -3,13 +3,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
 import { colors } from '@/constants/theme';
 
-import { EmptyState, LoadingBlock, PageTitle, PremiumLockGate } from '@/components/feedback';
+import { EmptyState, InlineError, PageTitle, PremiumLockGate } from '@/components/feedback';
 import { MainTabScroll } from '@/components/layout/MainTabScroll';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { MainCosmicHeader } from '@/components/layout/MainCosmicHeader';
 import { ProgressRing } from '@/components/tasks/ProgressRing';
 import { TaskCard } from '@/components/tasks/TaskCard';
-import { GlassCard, Icon } from '@/components/ui';
+import { GlassCard, Icon, SkeletonBlock } from '@/components/ui';
 import {
   TASKS_ALL_DONE,
   TASKS_EMPTY_NO_PALM,
@@ -57,8 +57,18 @@ export default function TasksScreen() {
     }
   };
 
+  const retryReflectionSync = () => {
+    if (!sessionId) return;
+    setReflectionSyncError(false);
+    void submitDailyReflection({ sessionId }).catch(() => {
+      setReflectionSyncError(true);
+    });
+  };
+
   const isoToday = utcTodayIso();
-  const list = tasks.length ? tasks : LOCAL_TASKS;
+  const dayStale = taskDate !== isoToday;
+  const showTaskSkeleton = loading && palmAnalysis && (tasks.length === 0 || dayStale);
+  const list = showTaskSkeleton ? [] : tasks.length ? tasks : LOCAL_TASKS;
   const doneCount = list.filter((t) => completedIds.includes(t.id)).length;
   const allDone = doneCount === list.length && list.length > 0;
 
@@ -138,6 +148,8 @@ export default function TasksScreen() {
       <PremiumLockGate
         title="Daily rituals are a Pro feature"
         body="Unlock personalized rituals tied to your palm reading and focus areas."
+        returnHref="/(main)/home"
+        returnLabel="Back to Home"
       />
     );
   }
@@ -167,22 +179,23 @@ export default function TasksScreen() {
         <PageTitle title="Today’s Rituals" subtitle={focusSubtitle} />
 
         {reflectionSyncError ? (
-          <Text className="mb-2 px-1 font-body text-[13px] text-on-surface-variant">
-            Ritual saved on this device, but we couldn&apos;t sync your reflection to the cloud. It will retry next time
-            you&apos;re online.
-          </Text>
+          <InlineError
+            message="Ritual saved on this device, but we couldn't sync your reflection to the cloud."
+            onRetry={retryReflectionSync}
+          />
         ) : null}
 
         <View className="items-center overflow-visible py-2">
-          <ProgressRing done={doneCount} total={list.length} />
+          <ProgressRing
+            done={showTaskSkeleton ? 0 : doneCount}
+            total={showTaskSkeleton ? 3 : list.length || 3}
+          />
           <Text className="mt-3 font-body text-[14px] text-on-surface-variant">
             {loading ? TASKS_LOADING : allDone ? TASKS_ALL_DONE : TASKS_PROGRESS_HINT}
           </Text>
         </View>
 
-        {loading && list.length === 0 ? <LoadingBlock variant="skeleton" message={TASKS_LOADING} /> : null}
-
-        {allDone ? (
+        {allDone && !showTaskSkeleton ? (
           <GlassCard glow className="w-full" innerClassName="flex-row items-center gap-3 p-5">
             <Icon name="auto_awesome" size={24} color={colors.primary} />
             <Text className="flex-1 font-body-medium text-[15px] leading-6 text-on-surface">
@@ -191,17 +204,31 @@ export default function TasksScreen() {
           </GlassCard>
         ) : null}
 
-        <View className="w-full gap-3" style={{ flexGrow: 0 }}>
-          {list.map((task) => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              completed={completedIds.includes(task.id)}
-              onToggle={() => markComplete(task.id)}
-              onPress={() => router.push({ pathname: '/task/[id]', params: { id: task.id } })}
-            />
-          ))}
-        </View>
+        {showTaskSkeleton ? (
+          <View className="w-full gap-3">
+            {[0, 1, 2].map((i) => (
+              <GlassCard key={i} muted innerClassName="flex-row items-center gap-3 px-4 py-3.5">
+                <SkeletonBlock height={40} width={40} radius={20} />
+                <View className="min-w-0 flex-1 gap-2">
+                  <SkeletonBlock height={16} width="68%" />
+                  <SkeletonBlock height={13} width="88%" />
+                </View>
+              </GlassCard>
+            ))}
+          </View>
+        ) : (
+          <View className="w-full gap-3" style={{ flexGrow: 0 }}>
+            {list.map((task) => (
+              <TaskCard
+                key={task.id}
+                task={task}
+                completed={completedIds.includes(task.id)}
+                onToggle={() => markComplete(task.id)}
+                onPress={() => router.push({ pathname: '/task/[id]', params: { id: task.id } })}
+              />
+            ))}
+          </View>
+        )}
       </MainTabScroll>
     </CosmicScreen>
   );

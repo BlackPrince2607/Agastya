@@ -4,9 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   Keyboard,
   Platform,
-  Pressable,
   ScrollView,
-  Text,
   TextInput,
   View,
 } from 'react-native';
@@ -15,11 +13,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChatBubble } from '@/components/chat/ChatBubble';
 import { SuggestionChips } from '@/components/chat/SuggestionChips';
 import { TypingIndicator } from '@/components/chat/TypingIndicator';
-import { InlineError, PremiumLockGate } from '@/components/feedback';
+import { InlineError, PageTitle, PremiumLockGate } from '@/components/feedback';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { ScreenBody } from '@/components/layout/ScreenBody';
-import { GlassCard, Icon } from '@/components/ui';
-import { TAB_BAR_CLEARANCE } from '@/constants/layout';
+import { GlassCard, Icon, PressableScale } from '@/components/ui';
+import { TAB_BAR_BODY_HEIGHT } from '@/constants/layout';
 import { colors, gradients } from '@/constants/theme';
 import {
   CHAT_PLACEHOLDER_EMPTY,
@@ -27,6 +25,7 @@ import {
   GUIDE_INTRO,
 } from '@/constants/userCopy';
 import { useLayoutMetrics } from '@/hooks/useLayoutMetrics';
+import { triggerMedium } from '@/hooks/useHapticTap';
 import { AnalyticsEvent, track } from '@/services/analytics';
 import { isApiConfigured, isMisconfiguredProductionApi, getApiHostLabel } from '@/services/env';
 import { requestGuideReply } from '@/services/agastyaApi';
@@ -62,6 +61,7 @@ export default function ChatScreen() {
   const [error, setError] = useState<string | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [replyBusy, setReplyBusy] = useState(false);
+  const [composerHeight, setComposerHeight] = useState(120);
   const scrollRef = useRef<ScrollView>(null);
   const inputRef = useRef<TextInput>(null);
   const deliveryGenRef = useRef(0);
@@ -100,7 +100,7 @@ export default function ChatScreen() {
   useEffect(() => {
     const id = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
     return () => clearTimeout(id);
-  }, [messages.length, isTyping]);
+  }, [messages.length, isTyping, composerHeight]);
 
   useEffect(() => {
     return () => {
@@ -135,22 +135,9 @@ export default function ChatScreen() {
     setSuggestions(nextSuggestions);
   };
 
-  const dispatch = async () => {
-    const trimmed = input.trim();
-    if (!trimmed || replyBusy || isTyping) return;
-
-    const isFirstMessage = messages.length === 0;
-    if (isFirstMessage) {
-      track(AnalyticsEvent.CHAT_STARTED);
-    }
-
+  const requestReplyForCurrentTranscript = async () => {
     setError(null);
     clearSuggestions();
-    addMessage('you', trimmed);
-    setInput('');
-    inputRef.current?.blur();
-    Keyboard.dismiss();
-    setKeyboardHeight(0);
     setReplyBusy(true);
     setTyping(true);
 
@@ -183,12 +170,37 @@ export default function ChatScreen() {
     setReplyBusy(false);
   };
 
+  const dispatch = async (textOverride?: string) => {
+    const trimmed = (textOverride ?? input).trim();
+    if (!trimmed || replyBusy || isTyping) return;
+
+    const isFirstMessage = messages.length === 0;
+    if (isFirstMessage) {
+      track(AnalyticsEvent.CHAT_STARTED);
+    }
+
+    addMessage('you', trimmed);
+    setInput('');
+    inputRef.current?.blur();
+    Keyboard.dismiss();
+    setKeyboardHeight(0);
+    await requestReplyForCurrentTranscript();
+  };
+
+  const retryLastReply = () => {
+    if (replyBusy || isTyping) return;
+    if (!messages.some((m) => m.role === 'you')) return;
+    void requestReplyForCurrentTranscript();
+  };
+
+  // Match main tab bar height so the composer sits flush above Home/Chat/Tasks/Profile.
   const tabBarInset = Math.max(insets.bottom, Platform.OS === 'web' ? 14 : 10);
-  const dockBottom = TAB_BAR_CLEARANCE + tabBarInset;
-  const inputRowHeight = 52;
-  const empty = messages.length === 0 || (messages.length > 0 && !messages.some((m) => m.role === 'you'));
+  const dockBottom = TAB_BAR_BODY_HEIGHT + tabBarInset + 6;
+  const inputMinHeight = 48;
+  const inputMaxHeight = 88;
+  const hasUserMessages = messages.some((m) => m.role === 'you');
+  const showSuggestions = suggestions.length > 0 && !replyBusy && !isTyping;
   const keyboardOpen = keyboardHeight > 0;
-  // Lift composer only while keyboard is visible. Android resize handles layout; iOS needs explicit inset.
   const composerBottom = keyboardOpen
     ? Platform.OS === 'ios'
       ? keyboardHeight + 8
@@ -200,6 +212,8 @@ export default function ChatScreen() {
       <PremiumLockGate
         title="Guide is a Pro feature"
         body="Unlock unlimited conversations about your reading, focus areas, and what comes next."
+        returnHref="/(main)/home"
+        returnLabel="Back to Home"
       />
     );
   }
@@ -216,7 +230,7 @@ export default function ChatScreen() {
                 <Icon name="auto_awesome" size={20} color={colors.primary} />
               </View>
               <View className="min-w-0 flex-1">
-                <Text className="font-headline text-[20px] leading-7 text-on-surface">Guide</Text>
+                <PageTitle title="Guide" />
               </View>
             </View>
 
@@ -226,7 +240,12 @@ export default function ChatScreen() {
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode="on-drag"
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ gap: 0, paddingHorizontal: 8, paddingTop: 12, paddingBottom: 16 }}>
+              contentContainerStyle={{
+                gap: 0,
+                paddingHorizontal: 8,
+                paddingTop: 12,
+                paddingBottom: composerHeight + 16,
+              }}>
               {messages.map((m, i) => {
                 const prev = messages[i - 1];
                 const next = messages[i + 1];
@@ -242,13 +261,6 @@ export default function ChatScreen() {
                   />
                 );
               })}
-              {empty && messages.length <= 2 ? (
-                <View className="mt-6 items-center px-4">
-                  <Text className="text-center font-body text-[13px] leading-5 text-on-surface-variant/80">
-                    Start with a suggestion below, or type whatever is on your mind.
-                  </Text>
-                </View>
-              ) : null}
               {isTyping ? (
                 <View style={{ marginTop: 10 }}>
                   <TypingIndicator />
@@ -259,18 +271,21 @@ export default function ChatScreen() {
         </View>
 
         <View
+          onLayout={(e) => setComposerHeight(e.nativeEvent.layout.height)}
           style={{ paddingHorizontal: horizontalPad, paddingBottom: composerBottom, paddingTop: 8 }}
           className="border-t border-white/[0.06] bg-background/95">
           <ScreenBody>
             <View className="w-full gap-2">
-              {error ? <InlineError message={error} onDismiss={() => setError(null)} /> : null}
+              {error ? (
+                <InlineError message={error} onDismiss={() => setError(null)} onRetry={retryLastReply} />
+              ) : null}
 
-              {suggestions.length > 0 && !replyBusy && !isTyping ? (
+              {showSuggestions ? (
                 <SuggestionChips
                   suggestions={suggestions}
                   onSelect={(text) => {
                     removeSuggestion(text);
-                    setInput(text);
+                    void dispatch(text);
                   }}
                 />
               ) : null}
@@ -280,33 +295,46 @@ export default function ChatScreen() {
                   ref={inputRef}
                   value={input}
                   onChangeText={setInput}
-                  placeholder={empty ? CHAT_PLACEHOLDER_EMPTY : CHAT_PLACEHOLDER_FOLLOW}
+                  placeholder={!hasUserMessages ? CHAT_PLACEHOLDER_EMPTY : CHAT_PLACEHOLDER_FOLLOW}
                   placeholderTextColor={colors.placeholder}
                   className="min-w-0 flex-1 font-body text-[15px] text-on-surface"
                   style={{
-                    height: inputRowHeight,
+                    minHeight: inputMinHeight,
+                    maxHeight: inputMaxHeight,
                     lineHeight: 20,
                     paddingHorizontal: 14,
-                    paddingVertical: Platform.OS === 'ios' ? 15 : 14,
+                    paddingTop: Platform.OS === 'ios' ? 14 : 12,
+                    paddingBottom: Platform.OS === 'ios' ? 14 : 12,
                     margin: 0,
                     textAlignVertical: 'center',
                     ...(Platform.OS === 'android' ? { includeFontPadding: false } : null),
                     ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as Record<string, string>) : null),
                   }}
-                  multiline={false}
+                  multiline
+                  scrollEnabled
                   editable={!replyBusy && !isTyping}
                   onSubmitEditing={() => void dispatch()}
                   returnKeyType="send"
-                  blurOnSubmit
+                  blurOnSubmit={false}
                   accessibilityLabel="Message to Agastya"
                 />
-                <Pressable
-                  onPress={() => void dispatch()}
+                <PressableScale
+                  onPress={() => {
+                    void triggerMedium();
+                    void dispatch();
+                  }}
                   disabled={replyBusy || isTyping || !input.trim()}
+                  haptic={false}
                   accessibilityRole="button"
-                  accessibilityLabel="Send"
-                  className="shrink-0"
-                  style={{ opacity: replyBusy || isTyping || !input.trim() ? 0.45 : 1 }}>
+                  accessibilityLabel="Send message"
+                  accessibilityState={{
+                    disabled: replyBusy || isTyping || !input.trim(),
+                    busy: replyBusy || isTyping,
+                  }}
+                  scaleTo={0.92}
+                  style={{
+                    opacity: replyBusy || isTyping || !input.trim() ? 0.45 : 1,
+                  }}>
                   <LinearGradient
                     colors={[...gradients.nebula]}
                     style={{
@@ -318,7 +346,7 @@ export default function ChatScreen() {
                     }}>
                     <Icon name="send" size={20} color={colors.onPrimary} />
                   </LinearGradient>
-                </Pressable>
+                </PressableScale>
               </GlassCard>
             </View>
           </ScreenBody>

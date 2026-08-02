@@ -10,6 +10,7 @@ import MainTabBarBlurBackground from '@/components/navigation/MainTabBarBlurBack
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { TAB_BAR_BODY_HEIGHT } from '@/constants/layout';
 import { colors } from '@/constants/theme';
+import { triggerLightTap } from '@/hooks/useHapticTap';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { usePersistHydration } from '@/hooks/usePersistHydration';
 import { requiresSupabaseSignIn } from '@/services/authConfig';
@@ -128,12 +129,13 @@ export default function MainTabsLayout() {
           borderTopRightRadius: 36,
         },
         tabBarBackground: () => <MainTabBarBlurBackground />,
-        tabBarActiveTintColor: colors.growth,
+        tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: 'rgba(232,225,229,0.45)',
         tabBarActiveBackgroundColor: 'transparent',
       }}>
       <Tabs.Screen
         name="home"
+        listeners={{ tabPress: () => void triggerLightTap() }}
         options={{
           title: 'Home',
           tabBarIcon: ({ color, focused }) => <Glyph name="auto_awesome" color={color} focused={focused} />,
@@ -141,6 +143,7 @@ export default function MainTabsLayout() {
       />
       <Tabs.Screen
         name="chat"
+        listeners={{ tabPress: () => void triggerLightTap() }}
         options={{
           title: 'Chat',
           tabBarIcon: ({ color, focused }) => <Glyph name="auto_fix_high" color={color} focused={focused} />,
@@ -148,14 +151,20 @@ export default function MainTabsLayout() {
       />
       <Tabs.Screen
         name="tasks"
+        listeners={{ tabPress: () => void triggerLightTap() }}
         options={{
           title: 'Tasks',
           tabBarBadge: tasksTabBadge,
+          tabBarBadgeAccessibilityLabel:
+            tasksTabBadge != null
+              ? `${tasksRemaining} ${tasksRemaining === 1 ? 'task' : 'tasks'} remaining`
+              : undefined,
           tabBarIcon: ({ color, focused }) => <Glyph name="task_alt" color={color} focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="profile"
+        listeners={{ tabPress: () => void triggerLightTap() }}
         options={{
           title: 'Profile',
           tabBarIcon: ({ color, focused }) => <Glyph name="person" color={color} focused={focused} />,

@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CosmicDotGrid } from '@/components/layout/CosmicDotGrid';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
+import { StickyActionBar, STICKY_ACTION_BAR_COMFORTABLE } from '@/components/layout/StickyActionBar';
 import { HandToggleRow } from '@/components/onboarding/HandToggle';
 import { PalmScanFrame } from '@/components/onboarding/PalmScanFrame';
 import { OnboardingHeader } from '@/components/onboarding/OnboardingHeader';
@@ -74,7 +75,7 @@ export function PalmScanBriefing({
           contentContainerStyle={{
             paddingHorizontal: PAGE_PADDING,
             paddingTop: 8,
-            paddingBottom: 16,
+            paddingBottom: STICKY_ACTION_BAR_COMFORTABLE + insets.bottom,
           }}>
           <OnboardingHeader step={ONBOARDING_STEPS.palmScan} total={ONBOARDING_TOTAL_STEPS} />
 
@@ -124,9 +125,7 @@ export function PalmScanBriefing({
           </View>
         </ScrollView>
 
-        <View
-          className="gap-3 border-t border-white/10 bg-cosmic-void/90 pt-4"
-          style={{ paddingBottom: Math.max(insets.bottom, 16), paddingHorizontal: PAGE_PADDING }}>
+        <StickyActionBar contentStyle={{ gap: 12 }}>
           {beforePrimary}
           <CosmicButton
             gradient="nebulaMd3"
@@ -136,6 +135,7 @@ export function PalmScanBriefing({
           />
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel="More tips for a better palm reading"
             onPress={() => {
               void triggerLightTap();
               Alert.alert(
@@ -148,7 +148,7 @@ export function PalmScanBriefing({
               More tips
             </Text>
           </Pressable>
-        </View>
+        </StickyActionBar>
       </View>
     </CosmicScreen>
   );

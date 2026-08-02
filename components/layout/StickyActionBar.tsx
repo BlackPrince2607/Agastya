@@ -14,6 +14,10 @@ type StickyActionBarProps = PropsWithChildren<{
 
 export const STICKY_ACTION_BAR_SINGLE = 128;
 export const STICKY_ACTION_BAR_COMFORTABLE = 188;
+/** Two CTAs plus helper caption (report preview). */
+export const STICKY_ACTION_BAR_DOUBLE = 280;
+/** Primary CTA, secondary actions, and trust row (paywall). */
+export const STICKY_ACTION_BAR_TALL = 320;
 
 /** Bottom dock for onboarding CTAs with a strong scrim for readability. */
 export function StickyActionBar({

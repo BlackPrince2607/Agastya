@@ -1,4 +1,4 @@
-import type { PropsWithChildren } from 'react';
+import { forwardRef, type PropsWithChildren } from 'react';
 import { ScrollView, type ScrollViewProps } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -15,21 +15,25 @@ type StackScrollProps = PropsWithChildren<
 };
 
 /** Scroll container for pushed stack screens (no tab-bar clearance). */
-export function StackScroll({
-  children,
-  horizontalPadding,
-  sectionGap = MAIN_SECTION_GAP,
-  bottomInset = 32,
-  contentContainerStyle,
-  showsVerticalScrollIndicator = false,
-  keyboardShouldPersistTaps = 'handled',
-}: StackScrollProps) {
+export const StackScroll = forwardRef<ScrollView, StackScrollProps>(function StackScroll(
+  {
+    children,
+    horizontalPadding,
+    sectionGap = MAIN_SECTION_GAP,
+    bottomInset = 32,
+    contentContainerStyle,
+    showsVerticalScrollIndicator = false,
+    keyboardShouldPersistTaps = 'handled',
+  },
+  ref,
+) {
   const insets = useSafeAreaInsets();
   const { horizontalPad } = useLayoutMetrics();
   const pad = horizontalPadding ?? Math.max(PAGE_PADDING, horizontalPad);
 
   return (
     <ScrollView
+      ref={ref}
       showsVerticalScrollIndicator={showsVerticalScrollIndicator}
       keyboardShouldPersistTaps={keyboardShouldPersistTaps}
       contentContainerStyle={[
@@ -45,7 +49,7 @@ export function StackScroll({
       <ScreenBody style={{ gap: sectionGap }}>{children}</ScreenBody>
     </ScrollView>
   );
-}
+});
 
 /** Default section gap for stack screens that need tighter rhythm. */
 export const STACK_SECTION_GAP = SECTION_GAP;

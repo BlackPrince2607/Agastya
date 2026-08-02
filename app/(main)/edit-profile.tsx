@@ -14,13 +14,13 @@ import {
 } from '@/components/profile/FloatingActionBar';
 import { FocusTopicsPicker, validateFocusTopics } from '@/components/profile/FocusTopicsPicker';
 import { FormSection } from '@/components/profile/FormSection';
-import { PrimaryGradientButton } from '@/components/profile/PrimaryGradientButton';
 import { alertProfileValidationError, GENDER_OPTIONS } from '@/components/profile/ProfileBasicsForm';
 import { SelectionCard } from '@/components/profile/SelectionCard';
-import { CosmicTextField, Icon } from '@/components/ui';
+import { CosmicTextField, Icon, PrimaryButton } from '@/components/ui';
 import type { AvatarId } from '@/constants/avatars';
 import { MAIN_SECTION_GAP } from '@/constants/layout';
 import { colors } from '@/constants/theme';
+import { triggerSuccess } from '@/hooks/useHapticTap';
 import { patchSessionProfile } from '@/services/agastyaApi';
 import { isApiConfigured } from '@/services/env';
 import { syncProfileRemote } from '@/services/identity';
@@ -56,6 +56,7 @@ export default function EditProfileScreen() {
   const [topics, setTopics] = useState<FocusTopic[]>(() => hydrateEditForm().topics);
   const [savePhase, setSavePhase] = useState<SavePhase>('idle');
   const [saveMessageIndex, setSaveMessageIndex] = useState(0);
+  const [syncDeferred, setSyncDeferred] = useState(false);
 
   // Tab screens stay mounted — reset so Save is available again on revisit.
   useFocusEffect(
@@ -67,6 +68,7 @@ export default function EditProfileScreen() {
       setTopics(next.topics);
       setSavePhase('idle');
       setSaveMessageIndex(0);
+      setSyncDeferred(false);
     }, []),
   );
 
@@ -89,6 +91,7 @@ export default function EditProfileScreen() {
 
     setSavePhase('saving');
     setSaveMessageIndex(0);
+    setSyncDeferred(false);
 
     // Apply locally first so Profile reflects changes immediately on return.
     setProfileBasics({ displayName: name.trim(), gender, avatarId: avatarId ?? null });
@@ -108,11 +111,12 @@ export default function EditProfileScreen() {
         });
       }
     } catch {
-      // Local profile is already updated — still return to settings.
+      setSyncDeferred(true);
     }
 
     setSavePhase('success');
-    await new Promise((r) => setTimeout(r, 450));
+    void triggerSuccess();
+    await new Promise((r) => setTimeout(r, 900));
     setSavePhase('idle');
     router.replace('/(main)/profile');
   };
@@ -194,18 +198,25 @@ export default function EditProfileScreen() {
                 from={{ opacity: 0, scale: 0.94 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ type: 'spring', damping: 16, stiffness: 240 }}
-                className="mb-1 flex-row items-center justify-center gap-2">
-                <Icon name="check_circle" size={18} color={colors.cyan} />
-                <Text
-                  className="font-body-medium text-[14px]"
-                  style={{ color: colors.cyan }}
-                  maxFontSizeMultiplier={1.3}
-                  accessibilityLiveRegion="polite">
-                  Profile Updated
-                </Text>
+                className="mb-1 items-center gap-1">
+                <View className="flex-row items-center justify-center gap-2">
+                  <Icon name="check_circle" size={18} color={colors.cyan} />
+                  <Text
+                    className="font-body-medium text-[14px]"
+                    style={{ color: colors.cyan }}
+                    maxFontSizeMultiplier={1.3}
+                    accessibilityLiveRegion="polite">
+                    Profile Updated
+                  </Text>
+                </View>
+                {syncDeferred ? (
+                  <Text className="text-center font-body text-[13px] text-on-surface-variant">
+                    Saved on device; sync later
+                  </Text>
+                ) : null}
               </MotiView>
             ) : null}
-            <PrimaryGradientButton
+            <PrimaryButton
               label={ctaLabel}
               disabled={busy}
               onPress={() => void handleSave()}

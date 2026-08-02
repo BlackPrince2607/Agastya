@@ -10,7 +10,7 @@ import { MainTabScroll } from '@/components/layout/MainTabScroll';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { MainCosmicHeader } from '@/components/layout/MainCosmicHeader';
 import { MotiView } from '@/components/moti/MotiView';
-import { LoadingBlock, SectionHeader } from '@/components/feedback';
+import { LoadingBlock, SectionHeader, InlineError } from '@/components/feedback';
 import {
   GlassCard,
   Icon,
@@ -109,6 +109,9 @@ export default function HomeDashboardScreen() {
   const [guidanceLoading, setGuidanceLoading] = useState(false);
   const [weeklyLoading, setWeeklyLoading] = useState(false);
   const [guidanceError, setGuidanceError] = useState(false);
+  const [guidanceRetryKey, setGuidanceRetryKey] = useState(0);
+  const [weeklyError, setWeeklyError] = useState(false);
+  const [weeklyRetryKey, setWeeklyRetryKey] = useState(0);
   const [continueHint, setContinueHint] = useState<string | null>(null);
   const [consistencyNote, setConsistencyNote] = useState<string | null>(null);
   const hasLocalGuidance = useRef(false);
@@ -194,8 +197,8 @@ export default function HomeDashboardScreen() {
       active = false;
     };
     // Intentionally omit streak/focusTopics — they must not re-trigger guidance fetches.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- identity-only refresh
-  }, [palmAnalysis, sessionId, setFocusTheme]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- identity-only refresh; guidanceRetryKey triggers manual retry
+  }, [palmAnalysis, sessionId, setFocusTheme, guidanceRetryKey]);
 
   useEffect(() => {
     if (!palmAnalysis || !sessionId || !shouldShowWeeklyOnHome()) {
@@ -204,6 +207,7 @@ export default function HomeDashboardScreen() {
     }
     let active = true;
     setWeeklyLoading(true);
+    setWeeklyError(false);
     void (async () => {
       const local = await readThisWeeksLocalSummary();
       if (!active) return;
@@ -240,7 +244,7 @@ export default function HomeDashboardScreen() {
           currentChapter: res.currentChapter ?? null,
         });
       } catch {
-        /* keep Home usable without weekly card */
+        if (active) setWeeklyError(true);
       } finally {
         if (active) setWeeklyLoading(false);
       }
@@ -248,7 +252,7 @@ export default function HomeDashboardScreen() {
     return () => {
       active = false;
     };
-  }, [palmAnalysis, sessionId]);
+  }, [palmAnalysis, sessionId, weeklyRetryKey]);
 
   // Palm-fallback insight still counts as viewing Today's Guidance.
   useEffect(() => {
@@ -341,10 +345,10 @@ export default function HomeDashboardScreen() {
             ) : (
               <View className="gap-2">
                 {guidanceError && !guidance ? (
-                  <Text className="px-1 font-body text-[13px] text-on-surface-variant">
-                    Couldn&apos;t refresh today&apos;s guidance — showing a palm-based fallback. Pull away and return to
-                    retry.
-                  </Text>
+                  <InlineError
+                    message="Couldn't refresh today's guidance — showing a palm-based fallback."
+                    onRetry={() => setGuidanceRetryKey((k) => k + 1)}
+                  />
                 ) : null}
                 <InsightCard
                   eyebrow="Today's Guidance"
@@ -379,10 +383,17 @@ export default function HomeDashboardScreen() {
               from={{ opacity: 0, translateY: 12 }}
               animate={{ opacity: 1, translateY: 0 }}
               transition={{ type: 'timing', duration: 480, delay: 90 }}>
-              <GlassCard muted className="w-full" innerClassName="p-5">
+              <GlassCard glow className="w-full" innerClassName="p-5">
                 <LoadingBlock variant="skeleton" compact message={HOME_WEEKLY_LOADING} />
               </GlassCard>
             </MotiView>
+          </HomeSection>
+        ) : weeklyError && palmAnalysis && shouldShowWeeklyOnHome() ? (
+          <HomeSection>
+            <InlineError
+              message="Couldn't load this week's guidance."
+              onRetry={() => setWeeklyRetryKey((k) => k + 1)}
+            />
           </HomeSection>
         ) : null}
 
@@ -413,7 +424,12 @@ export default function HomeDashboardScreen() {
                   Full report chapters, long-range forecasts, compatibility, and unlimited chat.
                 </Text>
               </Pressable>
-              <Pressable onPress={() => setDismissedUpgrade(true)} hitSlop={12} accessibilityLabel="Dismiss upgrade">
+              <Pressable
+                onPress={() => setDismissedUpgrade(true)}
+                hitSlop={12}
+                accessibilityRole="button"
+                accessibilityLabel="Dismiss upgrade"
+                className="h-11 w-11 shrink-0 items-center justify-center active:opacity-80">
                 <Icon name="close" size={16} color="rgba(232,225,229,0.4)" />
               </Pressable>
             </GlassCard>
@@ -432,13 +448,22 @@ export default function HomeDashboardScreen() {
             from={{ opacity: 0, translateY: 10 }}
             animate={{ opacity: 1, translateY: 0 }}
             transition={{ type: 'timing', duration: 480, delay: 180 }}>
-            <ProgressCard
-              completed={palmAnalysis ? doneCount : 0}
-              total={taskTotal > 0 ? taskTotal : 3}
-              footnote={progressFootnote}
-              streak={streak > 0 ? streak : undefined}
-              value={taskTotal > 0 ? Math.round((doneCount / taskTotal) * 100) : 0}
-            />
+            {palmAnalysis ? (
+              <ProgressCard
+                completed={doneCount}
+                total={taskTotal > 0 ? taskTotal : 3}
+                footnote={progressFootnote}
+                streak={streak > 0 ? streak : undefined}
+                value={taskTotal > 0 ? Math.round((doneCount / taskTotal) * 100) : 0}
+              />
+            ) : (
+              <ProgressCard
+                completed={0}
+                total={0}
+                footnote="Scan to begin rituals"
+                emptyLabel="Scan to begin rituals"
+              />
+            )}
           </MotiView>
         </HomeSection>
       </MainTabScroll>

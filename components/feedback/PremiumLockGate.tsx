@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, type Href } from 'expo-router';
 import { Text, View } from 'react-native';
 
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
@@ -11,9 +11,18 @@ type PremiumLockGateProps = {
   title: string;
   body: string;
   returnLabel?: string;
+  /** Where the secondary CTA navigates; defaults to report preview. */
+  returnHref?: Href;
 };
 
-export function PremiumLockGate({ title, body, returnLabel = 'Back to preview' }: PremiumLockGateProps) {
+export function PremiumLockGate({
+  title,
+  body,
+  returnLabel = 'Back to preview',
+  returnHref,
+}: PremiumLockGateProps) {
+  const backHref = returnHref ?? previewReportHref();
+
   return (
     <CosmicScreen variant="stitch">
       <View className="flex-1 items-center justify-center gap-6 px-8">
@@ -28,7 +37,7 @@ export function PremiumLockGate({ title, body, returnLabel = 'Back to preview' }
             label="Unlock full access"
             onPress={() => router.push(paywallRouteParams('/onboarding/report-preview'))}
           />
-          <PrimaryButton variant="ghost" label={returnLabel} onPress={() => router.replace(previewReportHref())} />
+          <PrimaryButton variant="ghost" label={returnLabel} onPress={() => router.replace(backHref)} />
         </View>
       </View>
     </CosmicScreen>

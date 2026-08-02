@@ -2,7 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { EmptyState } from '@/components/feedback';
+import { EmptyState, PageTitle } from '@/components/feedback';
 import { BackButton } from '@/components/layout/BackButton';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { StickyActionBar, STICKY_ACTION_BAR_SINGLE } from '@/components/layout/StickyActionBar';
@@ -15,6 +15,7 @@ import {
   TASK_DETAIL_MISSING,
 } from '@/constants/userCopy';
 import { GlassCard, PrimaryButton } from '@/components/ui';
+import { triggerSuccess } from '@/hooks/useHapticTap';
 import { submitDailyReflection } from '@/services/agastyaApi';
 import { useSessionStore } from '@/store/sessionStore';
 import { useTaskStore } from '@/store/taskStore';
@@ -84,13 +85,12 @@ export default function TaskDetailScreen() {
             paddingBottom: insets.bottom + STICKY_ACTION_BAR_SINGLE,
             gap: 20,
           }}>
-          <View className="mt-2 gap-3">
-            <Text className="font-headline text-[34px] leading-[40px] text-on-surface">{task.text}</Text>
-            <Text className="font-body text-[16px] leading-7 text-on-surface-variant">{task.description}</Text>
+          <View className="mt-2">
+            <PageTitle title={task.text} subtitle={task.description} />
           </View>
 
           {task.examples.length > 0 ? (
-            <GlassCard className="w-full gap-3 p-5">
+            <GlassCard className="w-full" innerClassName="gap-3 p-5">
               <Text className="font-label text-[12px] uppercase tracking-[0.14em] text-primary">
                 {isReflection ? 'A few prompts' : 'Try one of these'}
               </Text>
@@ -108,13 +108,17 @@ export default function TaskDetailScreen() {
           <PrimaryButton
             label={completeLabel}
             variant={completed ? 'ghost' : 'primary'}
-            onPress={() => {
+            onPress={async () => {
               const completing = !completed;
               toggleComplete(task.id);
               if (completing && isReflection && sessionId) {
                 void submitDailyReflection({ sessionId }).catch(() => undefined);
               }
-              if (!completed) goBack({ pathname: `/task/${task.id}` });
+              if (!completed) {
+                await triggerSuccess();
+                await new Promise((resolve) => setTimeout(resolve, 280));
+                goBack({ pathname: `/task/${task.id}` });
+              }
             }}
           />
         </StickyActionBar>

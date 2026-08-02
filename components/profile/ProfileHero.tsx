@@ -80,21 +80,25 @@ export function ProfileHero({
       </GlassCard>
 
       <GlassCard muted className="w-full overflow-hidden" innerClassName="flex-row p-0">
-        <ProfileActionCard
-          title="Edit Profile"
-          icon="edit"
-          onPress={onEditPress}
-          accessibilityLabel="Edit Profile"
-          accessibilityHint="Opens edit profile"
-        />
+        <View className="min-w-0 flex-1">
+          <ProfileActionCard
+            title="Edit Profile"
+            icon="edit"
+            onPress={onEditPress}
+            accessibilityLabel="Edit Profile"
+            accessibilityHint="Opens edit profile"
+          />
+        </View>
         <View className="w-px self-stretch bg-white/10" accessibilityElementsHidden importantForAccessibility="no" />
-        <ProfileActionCard
-          title="Share"
-          icon={shareIcon}
-          onPress={onSharePress}
-          accessibilityLabel="Share Agastya"
-          accessibilityHint="Opens the share sheet to invite a friend"
-        />
+        <View className="min-w-0 flex-1">
+          <ProfileActionCard
+            title="Share"
+            icon={shareIcon}
+            onPress={onSharePress}
+            accessibilityLabel="Share Agastya"
+            accessibilityHint="Opens the share sheet to invite a friend"
+          />
+        </View>
       </GlassCard>
     </MotiView>
   );

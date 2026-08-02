@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
 from typing import Annotated, Literal
 from urllib.parse import parse_qsl, quote, urlencode, urlparse, urlunparse
 
@@ -180,7 +179,8 @@ async def create_razorpay_payment_link(
             status_code=401,
             detail="Sign in required before starting checkout",
         )
-    amount = razorpay_client.amount_for_period(settings, body.billing_period)
+    amount = razorpay_client.amount_for_premium(settings)
+    billing_period = "lifetime"
 
     intent = await billing_intents.create_checkout_intent(
         settings,
@@ -188,7 +188,7 @@ async def create_razorpay_payment_link(
         device_install_id=body.device_install_id,
         supabase_user_id=str(supabase_user_id) if supabase_user_id else None,
         provider="razorpay",
-        billing_period=body.billing_period,
+        billing_period=billing_period,
         amount=amount,
         currency="INR",
         success_url=body.success_url,
@@ -203,8 +203,8 @@ async def create_razorpay_payment_link(
     notes: dict[str, str] = {
         "session_id": body.session_id,
         "device_install_id": body.device_install_id,
-        "billing_period": body.billing_period,
-        "plan": body.billing_period,
+        "billing_period": billing_period,
+        "plan": billing_period,
         "checkout_intent_id": intent_id,
     }
     if supabase_user_id:
@@ -218,7 +218,7 @@ async def create_razorpay_payment_link(
             settings,
             amount_paise=amount,
             currency="INR",
-            description=f"Agastya Premium ({body.billing_period})",
+            description="Agastya Premium (lifetime)",
             customer_notes=notes,
             callback_url=callback_url,
         )
@@ -244,9 +244,6 @@ async def _grant_razorpay_premium_from_intent(
 ) -> RazorpayConfirmPaymentResponse:
     session_id = str(intent.get("session_id") or "")
     supabase_user_id = intent.get("supabase_user_id")
-    billing_period = str(intent.get("billing_period") or "monthly")
-    days = razorpay_client.premium_expiry_days(billing_period)
-    expires = datetime.now(timezone.utc) + timedelta(days=days)
 
     await billing_intents.mark_intent_paid(
         settings,
@@ -259,7 +256,7 @@ async def _grant_razorpay_premium_from_intent(
         True,
         settings,
         premium_source="razorpay",
-        premium_expires_at=expires,
+        clear_expires=True,
     )
     if supabase_user_id:
         await session_repository.set_premium_by_user(
@@ -267,14 +264,14 @@ async def _grant_razorpay_premium_from_intent(
             True,
             settings,
             premium_source="razorpay",
-            premium_expires_at=expires,
+            clear_expires=True,
         )
 
     if not ok and not settings.supabase_enabled:
         # Local/dev without Supabase — still unlock in-memory session bucket.
         bkt.is_premium = True
         bkt.premium_source = "razorpay"
-        bkt.premium_expires_at = expires
+        bkt.premium_expires_at = None
         ok = True
 
     if not ok:
@@ -282,7 +279,7 @@ async def _grant_razorpay_premium_from_intent(
 
     bkt.is_premium = True
     bkt.premium_source = "razorpay"
-    bkt.premium_expires_at = expires
+    bkt.premium_expires_at = None
 
     # Same Play ExternalTransactions path as the Razorpay webhook — confirm-only
     # unlocks must still enqueue/report when a User Choice token is present.
@@ -428,7 +425,7 @@ async def verify_google_play_purchase(
     body: GooglePlayVerifyBody,
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> GooglePlayVerifyResponse:
-    """Verify Play subscription purchase and grant premium (Play User Choice path)."""
+    """Verify Play one-time product purchase and grant lifetime premium."""
     await _hydrate(body.session_id, settings)
     bkt = bucket(body.session_id)
     assert_device_binding(
@@ -450,35 +447,22 @@ async def verify_google_play_purchase(
             return GooglePlayVerifyResponse(is_premium=True, source="google_play")
         raise HTTPException(status_code=409, detail="Purchase token already processed")
 
-    sub = await play_purchase_verify.verify_subscription_purchase(
+    product = await play_purchase_verify.verify_product_purchase(
         settings,
         purchase_token=body.purchase_token,
         product_id=body.product_id,
     )
-    if sub is None:
+    if product is None:
         raise HTTPException(status_code=402, detail="Purchase verification failed")
 
     supabase_user_id = bkt.meta.get("supabaseUserId")
-    expires: datetime | None = None
-    line_items = sub.get("lineItems") or []
-    if line_items:
-        expiry_raw = line_items[0].get("expiryTime")
-        if expiry_raw:
-            try:
-                expires = datetime.fromisoformat(str(expiry_raw).replace("Z", "+00:00"))
-            except ValueError:
-                pass
-    if expires is None:
-        period = "annual" if "annual" in body.product_id else "monthly"
-        days = 365 if period == "annual" else 30
-        expires = datetime.now(timezone.utc) + timedelta(days=days)
 
     ok = await session_repository.set_premium_by_session(
         body.session_id,
         True,
         settings,
         premium_source="google_play",
-        premium_expires_at=expires,
+        clear_expires=True,
     )
     if supabase_user_id:
         await session_repository.set_premium_by_user(
@@ -486,7 +470,7 @@ async def verify_google_play_purchase(
             True,
             settings,
             premium_source="google_play",
-            premium_expires_at=expires,
+            clear_expires=True,
         )
 
     if not ok:
@@ -494,6 +478,6 @@ async def verify_google_play_purchase(
 
     bkt.is_premium = True
     bkt.premium_source = "google_play"
-    bkt.premium_expires_at = expires
+    bkt.premium_expires_at = None
 
     return GooglePlayVerifyResponse(is_premium=True, source="google_play")

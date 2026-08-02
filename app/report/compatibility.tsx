@@ -18,6 +18,8 @@ export default function CompatibilityScreen() {
       <PremiumLockGate
         title="Compatibility is a Pro feature"
         body="Unlock full access to compare palm readings, see match scores, and explore how you connect."
+        returnHref="/(main)/profile"
+        returnLabel="Back to Profile"
       />
     );
   }

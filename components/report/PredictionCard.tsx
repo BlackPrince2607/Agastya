@@ -44,6 +44,7 @@ type PredictionCardProps = {
 
 export function PredictionCard({ category, headline, detail, locked }: PredictionCardProps) {
   const meta = CATEGORY_META[category];
+  const teaserHeadline = `Unlock your ${meta.label.toLowerCase()} insight`;
 
   return (
     <GlassCard className="w-full overflow-hidden p-0">
@@ -65,7 +66,15 @@ export function PredictionCard({ category, headline, detail, locked }: Predictio
           </View>
           {locked ? <Icon name="lock" size={16} color="rgba(232,225,229,0.4)" /> : null}
         </View>
-        <Text className="font-headline-md text-[20px] leading-7 text-on-surface">{headline}</Text>
+        {locked ? (
+          <Text
+            className="font-headline-md text-[20px] leading-7 text-on-surface-variant"
+            accessibilityLabel={`${meta.label} prediction locked. ${teaserHeadline}`}>
+            {teaserHeadline}
+          </Text>
+        ) : (
+          <Text className="font-headline-md text-[20px] leading-7 text-on-surface">{headline}</Text>
+        )}
         <Text
           className="font-body text-[14px] leading-6 text-on-surface-variant"
           numberOfLines={locked ? 1 : undefined}

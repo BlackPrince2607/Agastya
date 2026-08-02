@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
@@ -18,7 +18,11 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["webhooks"])
 
-# Google Play RTDN notification types (subscriptions).
+# Google Play RTDN — one-time products (lifetime unlock).
+_OT_PURCHASED = 1
+_OT_CANCELED = 2
+
+# Legacy subscription notification types (kept for older tokens).
 _RTDN_GRANT_TYPES = {1, 2, 4, 7}  # RECOVERED, RENEWED, PURCHASED, RESTARTED
 _RTDN_REVOKE_TYPES = {12, 13}  # REVOKED, EXPIRED
 _RTDN_GRACE_TYPES = {6}  # IN_GRACE_PERIOD
@@ -296,12 +300,10 @@ async def _handle_razorpay_paid(
 
         session_id = None
         supabase_user_id = None
-        billing_period = "monthly"
 
         if intent:
             session_id = intent.get("session_id")
             supabase_user_id = intent.get("supabase_user_id")
-            billing_period = intent.get("billing_period") or "monthly"
             amount_paise = int(intent.get("amount") or amount_paise)
             await billing_intents.mark_intent_paid(
                 settings,
@@ -311,7 +313,6 @@ async def _handle_razorpay_paid(
         elif notes:
             session_id = notes.get("session_id")
             supabase_user_id = notes.get("supabase_user_id")
-            billing_period = notes.get("billing_period") or notes.get("plan") or "monthly"
 
         if not session_id and not supabase_user_id:
             logger.warning(
@@ -323,9 +324,6 @@ async def _handle_razorpay_paid(
             await billing_idempotency.fail_webhook_events("razorpay", claimed, settings)
             raise HTTPException(status_code=500, detail="Missing session identifiers")
 
-        days = razorpay_client.premium_expiry_days(str(billing_period))
-        expires = datetime.now(timezone.utc) + timedelta(days=days)
-
         ok = await _apply_premium_to_ids(
             settings,
             str(session_id) if session_id else None,
@@ -333,7 +331,7 @@ async def _handle_razorpay_paid(
             True,
             f"Razorpay {event_type}",
             premium_source="razorpay",
-            premium_expires_at=expires,
+            clear_expires=True,
         )
         if not ok and settings.supabase_enabled and not settings.debug:
             await billing_idempotency.fail_webhook_events("razorpay", claimed, settings)
@@ -422,8 +420,10 @@ async def google_play_rtdn_webhook(
             raise HTTPException(status_code=400, detail="Invalid RTDN payload") from exc
 
         sub_note = decoded.get("subscriptionNotification") or {}
-        notification_type = int(sub_note.get("notificationType") or 0)
-        purchase_token = str(sub_note.get("purchaseToken") or "")
+        ot_note = decoded.get("oneTimeProductNotification") or {}
+        purchase_token = str(
+            ot_note.get("purchaseToken") or sub_note.get("purchaseToken") or ""
+        )
 
         if not purchase_token:
             test_note = decoded.get("testNotification")
@@ -451,24 +451,58 @@ async def google_play_rtdn_webhook(
                 )
             return {"status": "ignored"}
 
+        # Preferred path: one-time product (lifetime unlock).
+        if ot_note:
+            notification_type = int(ot_note.get("notificationType") or 0)
+            product_id = str(ot_note.get("sku") or "premium_unlock")
+            if notification_type == _OT_PURCHASED:
+                product = await play_purchase_verify.verify_product_purchase(
+                    settings,
+                    purchase_token=purchase_token,
+                    product_id=product_id,
+                )
+                await _apply_premium_to_ids(
+                    settings,
+                    session_id,
+                    None,
+                    product is not None,
+                    f"Google Play RTDN one-time type={notification_type}",
+                    premium_source="google_play" if product else None,
+                    clear_expires=True,
+                )
+            elif notification_type == _OT_CANCELED:
+                await _apply_premium_to_ids(
+                    settings,
+                    session_id,
+                    None,
+                    False,
+                    f"Google Play RTDN one-time type={notification_type}",
+                    clear_expires=True,
+                )
+            if claimed:
+                await billing_idempotency.complete_webhook_events(
+                    "google_play", claimed, settings
+                )
+            return {"status": "ok"}
+
+        notification_type = int(sub_note.get("notificationType") or 0)
+
         if notification_type in _RTDN_GRANT_TYPES | _RTDN_GRACE_TYPES:
-            product_id = str(sub_note.get("subscriptionId") or "premium_monthly")
-            sub = await play_purchase_verify.verify_subscription_purchase(
+            product_id = str(sub_note.get("subscriptionId") or "premium_unlock")
+            # Prefer product verify; fall back to subscription for legacy SKUs.
+            product = await play_purchase_verify.verify_product_purchase(
                 settings,
                 purchase_token=purchase_token,
                 product_id=product_id,
             )
-            is_premium = sub is not None
-            expires: datetime | None = None
-            if sub:
-                line_items = sub.get("lineItems") or []
-                if line_items and line_items[0].get("expiryTime"):
-                    try:
-                        expires = datetime.fromisoformat(
-                            str(line_items[0]["expiryTime"]).replace("Z", "+00:00")
-                        )
-                    except ValueError:
-                        pass
+            is_premium = product is not None
+            if not is_premium:
+                sub = await play_purchase_verify.verify_subscription_purchase(
+                    settings,
+                    purchase_token=purchase_token,
+                    product_id=product_id,
+                )
+                is_premium = sub is not None
             await _apply_premium_to_ids(
                 settings,
                 session_id,
@@ -476,8 +510,7 @@ async def google_play_rtdn_webhook(
                 is_premium,
                 f"Google Play RTDN type={notification_type}",
                 premium_source="google_play" if is_premium else None,
-                premium_expires_at=expires,
-                clear_expires=not is_premium,
+                clear_expires=True,
             )
             if claimed:
                 await billing_idempotency.complete_webhook_events(
@@ -500,15 +533,22 @@ async def google_play_rtdn_webhook(
                 )
             return {"status": "ok"}
 
-        # CANCELED (3) — keep premium until expiry; verify current state.
+        # CANCELED (3) on legacy subs — revoke only when purchase no longer valid.
         if notification_type == 3:
-            product_id = str(sub_note.get("subscriptionId") or "premium_monthly")
-            sub = await play_purchase_verify.verify_subscription_purchase(
+            product_id = str(sub_note.get("subscriptionId") or "premium_unlock")
+            product = await play_purchase_verify.verify_product_purchase(
                 settings,
                 purchase_token=purchase_token,
                 product_id=product_id,
             )
-            is_premium = sub is not None
+            is_premium = product is not None
+            if not is_premium:
+                sub = await play_purchase_verify.verify_subscription_purchase(
+                    settings,
+                    purchase_token=purchase_token,
+                    product_id=product_id,
+                )
+                is_premium = sub is not None
             await _apply_premium_to_ids(
                 settings,
                 session_id,

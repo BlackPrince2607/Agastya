@@ -1,6 +1,7 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
+import { runOnJS, useAnimatedReaction, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { MotiView } from '@/components/moti/MotiView';
 import { CosmicDotGrid } from '@/components/layout/CosmicDotGrid';
@@ -70,11 +71,19 @@ export default function AnalysisScreen() {
 
   const [flowPhase, setFlowPhase] = useState<FlowPhase>('working');
   const [stage, setStage] = useState<WorkStage>(0);
-  const [pct, setPct] = useState(8);
+  const animatedPct = useSharedValue(8);
+  const [displayPct, setDisplayPct] = useState(8);
   const [sampleBadge, setSampleBadge] = useState(false);
   const [retryMessage, setRetryMessage] = useState(PALM_RETRY_TITLE);
   const [retryReasons, setRetryReasons] = useState<string[]>([...PALM_RETRY_REASONS_DEFAULT]);
   const runIdRef = useRef(0);
+
+  useAnimatedReaction(
+    () => animatedPct.value,
+    (value) => {
+      runOnJS(setDisplayPct)(Math.round(value));
+    },
+  );
 
   const showRetry = useCallback((message: string, reasons?: string[]) => {
     setRetryMessage(message || PALM_RETRY_TITLE);
@@ -97,7 +106,8 @@ export default function AnalysisScreen() {
     setReadingSeed(resolvedSeed);
     setFlowPhase('working');
     setStage(0);
-    setPct(8);
+    animatedPct.value = 8;
+    setDisplayPct(8);
     setSampleBadge(false);
 
     let cancelled = false;
@@ -105,7 +115,7 @@ export default function AnalysisScreen() {
     const advance = (next: WorkStage) => {
       if (cancelled || runId !== runIdRef.current) return;
       setStage(next);
-      setPct(stagePct(next));
+      animatedPct.value = withTiming(stagePct(next), { duration: 900 });
     };
 
     void (async () => {
@@ -221,7 +231,7 @@ export default function AnalysisScreen() {
 
         if (cancelled || runId !== runIdRef.current) return;
         advance(4);
-        setPct(100);
+        animatedPct.value = withTiming(100, { duration: 600 });
         track(AnalyticsEvent.REPORT_GENERATED, { mode: 'preview' });
         useSessionStore.getState().setSkipCloudRestore(false);
         void scheduleReadyNotification();
@@ -291,12 +301,15 @@ export default function AnalysisScreen() {
   }
 
   const caption = STAGE_LABELS[stage] ?? ANALYSIS_STAGE_UPLOADING;
+  const progressLabel = `${caption}, ${displayPct} percent complete`;
 
   return (
     <CosmicScreen>
       <View className="flex-1">
         <CosmicDotGrid />
-        <View className="flex-1 justify-between px-7 pb-16 pt-2">
+        <View
+          className="flex-1 justify-between pb-16 pt-2"
+          style={{ paddingHorizontal: PAGE_PADDING }}>
           <OnboardingHeader step={ONBOARDING_STEPS.analysis} total={ONBOARDING_TOTAL_STEPS} showBack={false} />
 
           <View className="items-center gap-5">
@@ -309,9 +322,14 @@ export default function AnalysisScreen() {
               </Text>
             ) : null}
             <View className="relative items-center justify-center">
-              <AnalyzingSeal diameter={244} hideCenterGlyph progress={pct} />
+              <AnalyzingSeal
+                diameter={244}
+                hideCenterGlyph
+                progress={displayPct}
+                accessibilityLabel={progressLabel}
+              />
               <View className="pointer-events-none absolute items-center justify-center gap-1">
-                <Text className="font-label text-[28px] font-semibold text-on-surface/95">{pct}%</Text>
+                <Text className="font-label text-[28px] font-semibold text-on-surface/95">{displayPct}%</Text>
               </View>
             </View>
           </View>
@@ -345,10 +363,15 @@ export default function AnalysisScreen() {
               })}
             </View>
 
-            <View className="h-1.5 overflow-hidden rounded-full bg-white/10">
+            <View
+              className="h-1.5 overflow-hidden rounded-full bg-white/10"
+              accessible
+              accessibilityRole="progressbar"
+              accessibilityValue={{ min: 0, max: 100, now: displayPct }}
+              accessibilityLabel={progressLabel}>
               <View
                 className="h-full rounded-full bg-cyan"
-                style={{ width: `${Math.min(100, Math.round(pct))}%` }}
+                style={{ width: `${Math.min(100, displayPct)}%` }}
               />
             </View>
           </View>

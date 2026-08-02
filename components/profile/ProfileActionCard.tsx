@@ -27,9 +27,9 @@ export function ProfileActionCard({
       scaleTo={0.98}
       accessibilityLabel={accessibilityLabel ?? title}
       accessibilityHint={accessibilityHint}
-      style={{ flex: 1, minWidth: 0 }}>
+      style={{ width: '100%' }}>
       <View
-        className="flex-row items-center justify-center gap-2"
+        className="w-full flex-row items-center justify-center gap-2"
         style={{ paddingHorizontal: 12, paddingVertical: 14 }}>
         <View
           className="h-8 w-8 items-center justify-center rounded-xl border border-white/10"

@@ -36,75 +36,57 @@ Small, palm-aligned actions delivered each morning. Not a to-do list — a livin
 
 ---
 
-## Keywords (iOS — comma separated, max 100 chars)
-palm reading, palmistry, astrology, AI, daily horoscope, life path, compatibility, spiritual guide, self discovery, tarot
-
-## Category (iOS)
-Primary: Entertainment  
-Secondary: Lifestyle
-
 ## Category (Google Play)
 Lifestyle
 
 ## Content Rating
-4+ (iOS) / Everyone (Google Play)
-
-## Age Rating Notes
-- No user-generated content shared publicly
-- No violence, mature themes, or explicit content
-- Contains in-app purchases
+Everyone (Google Play) — contains in-app purchases (one-time)
 
 ---
 
 ## Pricing & In-App Purchases
 
-| Product | Price | Duration |
+| Product | Price | Type |
 |---|---|---|
-| Agastya Pro — Monthly | $9.99 | 1 month (auto-renewing) |
-| Agastya Pro — Annual | $59.99 | 1 year (auto-renewing) |
+| Agastya Premium (`premium_unlock`) | ₹4,999 | One-time lifetime unlock |
 
-7-day free trial included with both plans.
+No auto-renewing subscriptions. Android India may offer Google Play Billing or Razorpay (User Choice).
 
 ---
 
-## Required Screenshot Sizes
+## Play listing assets (in this repo)
 
-### iOS (App Store Connect)
-| Device | Resolution | Count |
-|---|---|---|
-| iPhone 6.9" (Pro Max) | 1320 × 2868 | 3–10 |
-| iPhone 6.5" | 1242 × 2688 | 3–10 |
-| iPad 13" (Pro) | 2064 × 2752 | 3–10 |
-
-### Android (Google Play)
-| Asset | Resolution |
+| Asset | Path |
 |---|---|
-| Phone screenshots | Min 320dp, Max 3840px |
-| Feature graphic | 1024 × 500 px |
-| Icon | 512 × 512 px |
+| Feature graphic 1024×500 | `store-assets/play/feature-graphic-1024x500.png` |
+| High-res icon 512×512 | `store-assets/play/icon-512.png` |
+| Screenshots | Capture into `store-assets/play/screenshots/` (see README there) |
 
 ### Recommended Screenshot Sequence
-1. Palm scan camera (the ritual)
-2. Analysis loading animation
-3. Full palm report — Overview tab
-4. AI Guide chat conversation
-5. Daily tasks with progress ring
-6. Compatibility screen
-7. Paywall (pro features list)
+1. Palm scan camera
+2. Analysis loading
+3. Full palm report — Overview
+4. AI Guide chat
+5. Daily tasks with progress
+6. Compatibility
+7. Paywall (one-time Premium)
 
 ---
 
 ## Support URL
-https://agastya.app/support
+https://sharvo.online/support
 
 ## Marketing URL
-https://agastya.app
+https://sharvo.online
 
 ## Privacy Policy URL
-https://agastya.app/privacy
+https://sharvo.online/privacy
 
 ## Terms of Use URL
-https://agastya.app/terms
+https://sharvo.online/terms
+
+## Account deletion URL (Play Console)
+https://sharvo.online/delete-account
 
 ## Developer/Contact Email
-support@agastya.app
+support@sharvo.online

@@ -114,6 +114,8 @@ class Settings(BaseSettings):
     razorpay_key_id: str | None = None
     razorpay_key_secret: str | None = None
     razorpay_webhook_secret: str | None = None
+    # Lifetime one-time unlock (preferred). Monthly/annual kept as fallback for older env files.
+    razorpay_amount_premium_paise: int | None = None
     razorpay_amount_monthly_paise: int | None = None
     razorpay_amount_annual_paise: int | None = None
     billing_razorpay_enabled: bool = False
@@ -169,12 +171,22 @@ class Settings(BaseSettings):
         return out
 
     @property
+    def razorpay_premium_amount_paise(self) -> int | None:
+        """Single lifetime price in paise (default ₹4,999 = 499900)."""
+        if self.razorpay_amount_premium_paise:
+            return int(self.razorpay_amount_premium_paise)
+        if self.razorpay_amount_annual_paise:
+            return int(self.razorpay_amount_annual_paise)
+        if self.razorpay_amount_monthly_paise:
+            return int(self.razorpay_amount_monthly_paise)
+        return None
+
+    @property
     def razorpay_configured(self) -> bool:
         return bool(
             self.razorpay_key_id
             and self.razorpay_key_secret
-            and self.razorpay_amount_monthly_paise
-            and self.razorpay_amount_annual_paise
+            and self.razorpay_premium_amount_paise
         )
 
     @property

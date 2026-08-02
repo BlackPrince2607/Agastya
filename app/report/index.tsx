@@ -1,9 +1,9 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
-import { Text, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ScrollView, Text, View } from 'react-native';
 import { colors } from '@/constants/theme';
 
-import { EmptyState, LoadingBlock } from '@/components/feedback';
+import { EmptyState, LoadingBlock, PageTitle, StatusPill } from '@/components/feedback';
 import { BackButton } from '@/components/layout/BackButton';
 import { StackScroll } from '@/components/layout/StackScroll';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
@@ -53,14 +53,29 @@ export default function ReportScreen() {
   const [active, setActive] = useState<ReportTab>(initialTab);
   const [period, setPeriod] = useState<PredictionPeriod>('month');
   const [predictionsLoading, setPredictionsLoading] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+
+  const selectTab = (next: ReportTab) => {
+    setActive(next);
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+  };
+
+  const selectPeriod = (next: PredictionPeriod) => {
+    setPeriod(next);
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+  };
 
   useEffect(() => {
     const next = TABS.find((t) => t.id === tab)?.id;
-    if (next) setActive(next as ReportTab);
+    if (next) {
+      setActive(next as ReportTab);
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+    }
   }, [tab]);
 
   const hasStoredReading = Boolean(previewReading || fullReading);
   const palm = palmAnalysis ?? FALLBACK_PALM;
+  const usingLocalPredictions = !predictionsCache?.[period];
 
   const dossier = useMemo(() => {
     const base =
@@ -116,7 +131,7 @@ export default function ReportScreen() {
   if (!palmAnalysis && !hasStoredReading) {
     return (
       <CosmicScreen variant="stitch">
-        <StackScroll>
+        <StackScroll ref={scrollRef}>
           <View className="w-full gap-5">
             <ReportHeader />
             <EmptyState
@@ -136,14 +151,23 @@ export default function ReportScreen() {
 
   return (
     <CosmicScreen variant="stitch">
-      <StackScroll>
+      <StackScroll ref={scrollRef}>
         <View className="w-full gap-5">
           <ReportHeader />
 
           {/* Pill tab bar */}
-          <View className="w-full flex-row flex-wrap gap-2">
+          <View
+            className="w-full flex-row flex-wrap gap-2"
+            accessibilityRole="tablist"
+            accessibilityLabel="Report sections">
             {TABS.map((t) => (
-              <PressableScale key={t.id} onPress={() => setActive(t.id)} scaleTo={0.97} accessibilityLabel={t.label}>
+              <PressableScale
+                key={t.id}
+                onPress={() => selectTab(t.id)}
+                scaleTo={0.97}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: active === t.id }}
+                accessibilityLabel={t.label}>
                 <View
                   className={`rounded-pill border px-5 py-2 ${
                     active === t.id ? 'border-transparent bg-primary/15' : 'border-white/12 bg-white/[0.04]'
@@ -167,7 +191,10 @@ export default function ReportScreen() {
                 <Text className="mt-3 font-body text-[15px] leading-7 text-on-surface-variant">{dossier.archetypeLine}</Text>
               </GlassCard>
               <GlassCard muted className={`w-full p-5 ${premium ? '' : 'opacity-80'}`}>
-                <Text className="font-headline-md text-[18px] text-on-surface">Your metrics</Text>
+                <Text className="font-headline text-[20px] text-on-surface">Your metrics</Text>
+                {!premium ? (
+                  <Text className="mt-1 font-body text-[13px] text-on-surface-variant">Preview metrics</Text>
+                ) : null}
                 <View className="mt-6 flex-row flex-wrap justify-around gap-x-4 gap-y-8">
                   <MetricDonut label="Love" value={dossier.metrics.love} />
                   <MetricDonut label="Career" value={dossier.metrics.career} />
@@ -177,7 +204,7 @@ export default function ReportScreen() {
               </GlassCard>
               <AuraNebulaCard aura={dossier.aura} />
               <GlassCard muted className="w-full p-5" innerClassName="gap-2.5">
-                <Text className="font-headline-md text-[18px] text-on-surface">Outlook</Text>
+                <Text className="font-headline text-[20px] text-on-surface">Outlook</Text>
                 <Text className="font-body text-[16px] leading-7 text-on-surface-variant">{dossier.boldPrediction}</Text>
               </GlassCard>
               {sections.map((sec) => (
@@ -189,14 +216,8 @@ export default function ReportScreen() {
 
           {active === 'lines' ? (
             <View className="w-full gap-4">
-              {palm.confidence != null ? (
+              {palm.fate_line || palm.quality_warnings?.length ? (
                 <GlassCard muted className="w-full p-4" innerClassName="gap-2">
-                  <Text className="font-label text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">
-                    Reading confidence
-                  </Text>
-                  <Text className="font-headline-md text-[18px] text-on-surface">
-                    {Math.round(palm.confidence * 100)}%
-                  </Text>
                   {palm.fate_line ? (
                     <Text className="font-body text-[14px] text-on-surface-variant">
                       Fate line: {palm.fate_line}
@@ -264,7 +285,7 @@ export default function ReportScreen() {
               </GlassCard>
 
               <GlassCard muted className="w-full p-5" innerClassName="gap-3">
-                <Text className="font-headline-md text-[18px] text-on-surface">Growth edges</Text>
+                <Text className="font-headline text-[20px] text-on-surface">Growth edges</Text>
                 <Text className="font-body text-[13px] leading-5 text-on-surface-variant">
                   Patterns worth watching with care — not flaws, invitations.
                 </Text>
@@ -276,7 +297,7 @@ export default function ReportScreen() {
               </GlassCard>
 
               <GlassCard muted className="w-full p-5" innerClassName="gap-4">
-                <Text className="font-headline-md text-[18px] text-on-surface">Your strengths</Text>
+                <Text className="font-headline text-[20px] text-on-surface">Your strengths</Text>
                 {persona.strengths.map((s) => (
                   <StrengthDots key={s.label} label={s.label} value={s.value} />
                 ))}
@@ -286,9 +307,18 @@ export default function ReportScreen() {
 
           {active === 'predictions' ? (
             <View className="w-full gap-4">
-              <View className="w-full flex-row gap-2">
+              <View
+                className="w-full flex-row gap-2"
+                accessibilityRole="tablist"
+                accessibilityLabel="Prediction period">
                 {PREDICTION_PERIODS.map((p) => (
-                  <PressableScale key={p.id} onPress={() => setPeriod(p.id)} scaleTo={0.97} accessibilityLabel={p.label}>
+                  <PressableScale
+                    key={p.id}
+                    onPress={() => selectPeriod(p.id)}
+                    scaleTo={0.97}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: period === p.id }}
+                    accessibilityLabel={p.label}>
                     <View
                       className={`rounded-pill border px-4 py-2 ${
                         period === p.id ? 'border-transparent bg-primary/15' : 'border-white/12 bg-white/[0.04]'
@@ -302,6 +332,10 @@ export default function ReportScreen() {
                   </PressableScale>
                 ))}
               </View>
+
+              {usingLocalPredictions && !predictionsLoading ? (
+                <StatusPill label="Sample forecast — sync when online" variant="offline" />
+              ) : null}
 
               {predictionsLoading && !predictionsCache?.[period] ? (
                 <LoadingBlock variant="skeleton" compact message={REPORT_PREDICTIONS_LOADING} />
@@ -344,11 +378,11 @@ export default function ReportScreen() {
 
 function ReportHeader() {
   return (
-    <View className="w-full flex-row items-center gap-3">
+    <View className="w-full flex-row items-start gap-3">
       <BackButton color={colors.growth} />
-      <Text className="font-headline text-[22px] text-on-surface" accessibilityRole="header">
-        Palm Report
-      </Text>
+      <View className="min-w-0 flex-1">
+        <PageTitle title="Palm Report" />
+      </View>
     </View>
   );
 }

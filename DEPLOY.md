@@ -38,7 +38,7 @@ cp env.example .env
 Fill in:
 - `EXPO_PUBLIC_AGASTYA_API_URL` — your deployed backend URL (e.g. `https://api.agastya.app`)
 - `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` — from Supabase Dashboard → Project Settings → API
-- `EXPO_PUBLIC_PLAY_PRODUCT_MONTHLY` and `EXPO_PUBLIC_PLAY_PRODUCT_ANNUAL` — Google Play subscription SKUs
+- `EXPO_PUBLIC_PLAY_PRODUCT_ID` — Google Play one-time managed product (`premium_unlock`)
 - `EXPO_PUBLIC_SENTRY_DSN` — from Sentry → React Native project → Client Keys
 - `EXPO_PUBLIC_POSTHOG_KEY` or `EXPO_PUBLIC_MIXPANEL_TOKEN` — from your analytics provider
 
@@ -184,8 +184,8 @@ See [`docs/billing-razorpay-only.md`](docs/billing-razorpay-only.md).
 ### Play Console (required)
 
 1. Enroll in **Billing Choice / User Choice Billing — India**.
-2. Create subscription products (`premium_monthly`, `premium_annual`) matching `EXPO_PUBLIC_PLAY_*` env vars.
-3. Configure **Real-Time Developer Notifications** (Pub/Sub) → `POST https://api.agastya.app/v1/webhooks/google-play?token=YOUR_RTDN_TOKEN`
+2. Create a **one-time** managed product `premium_unlock` matching `EXPO_PUBLIC_PLAY_PRODUCT_ID`.
+3. Configure **Real-Time Developer Notifications** (Pub/Sub) → `POST https://api.agastya.app/v1/webhooks/google-play?token=YOUR_RTDN_TOKEN` (one-time product + voided purchase notifications).
 4. Service account with Android Publisher API access → `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`.
 
 ### Backend env
@@ -193,7 +193,7 @@ See [`docs/billing-razorpay-only.md`](docs/billing-razorpay-only.md).
 | Variable | Purpose |
 |----------|---------|
 | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` | Razorpay Payment Links + webhooks |
-| `RAZORPAY_AMOUNT_MONTHLY_PAISE`, `RAZORPAY_AMOUNT_ANNUAL_PAISE` | INR pricing |
+| `RAZORPAY_AMOUNT_PREMIUM_PAISE` | Lifetime INR price (default 499900 = ₹4,999) |
 | `BILLING_RAZORPAY_ENABLED`, `BILLING_RAZORPAY_ANDROID_ENABLED` | Feature flags |
 | `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`, `PLAY_PACKAGE_NAME` | Play verify + ExternalTransactions |
 | `GOOGLE_PLAY_RTDN_VERIFICATION_TOKEN` | RTDN webhook auth |
@@ -207,7 +207,16 @@ Webhooks:
 
 - Razorpay webhook 401s / grant failures in logs / Sentry
 - Play report pending: `python -m scripts.retry_play_reports` (cron)
-- Unlock pending rate (paywall "Check subscription status" after checkout)
+- Unlock pending rate (paywall "Check premium status" after checkout)
+
+### Closed Testing submit
+
+```bash
+npx eas-cli build --platform android --profile production
+npx eas-cli submit --platform android --profile closed-testing --latest
+```
+
+`eas.json` submit profile `closed-testing` uses track `internal` (upload AAB for Closed/Internal testing — not production). Place the Play service account JSON at `./google-play-key.json` (gitignored).
 
 ---
 
@@ -299,18 +308,25 @@ And for Android App Links at `https://agastya.app/.well-known/assetlinks.json`:
   "target": {
     "namespace": "android_app",
     "package_name": "com.agastya.app",
-    "sha256_cert_fingerprints": ["YOUR_SIGNING_CERT_SHA256"]
+    "sha256_cert_fingerprints": ["YOUR_PLAY_APP_SIGNING_CERT_SHA256", "YOUR_UPLOAD_CERT_SHA256"]
   }
 }]
 ```
+
+**Important:** `package_name` must be exactly `com.agastya.app` (not `com.app.agastya`). Fingerprints come from Play Console → App integrity → App signing. Custom scheme `agastya://` works for auth/Razorpay return without verified App Links. Legal pages live on **sharvo.online**, not on this host.
 
 ---
 
 ## 9. Legal Pages
 
-Deploy the HTML files in `legal/` to your domain:
-- `legal/terms.html` → `https://agastya.app/terms`
-- `legal/privacy.html` → `https://agastya.app/privacy`
+Deploy the static site in `legal/` to **sharvo.online** (see `legal/README.md`):
+
+- `legal/privacy.html` → `https://sharvo.online/privacy`
+- `legal/terms.html` → `https://sharvo.online/terms`
+- `legal/support.html` → `https://sharvo.online/support`
+- `legal/delete-account.html` → `https://sharvo.online/delete-account`
+
+Play Console account deletion URL: `https://sharvo.online/delete-account`. Data Safety answers: `docs/play-console-data-safety.md`.
 
 ---
 
@@ -324,8 +340,7 @@ Add these secrets in GitHub → Settings → Secrets → Actions:
 | `EXPO_PUBLIC_AGASTYA_API_URL` | Your deployed backend URL |
 | `EXPO_PUBLIC_SUPABASE_URL` | Supabase project URL |
 | `EXPO_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key |
-| `EXPO_PUBLIC_PLAY_PRODUCT_MONTHLY` | Google Play monthly SKU |
-| `EXPO_PUBLIC_PLAY_PRODUCT_ANNUAL` | Google Play annual SKU |
+| `EXPO_PUBLIC_PLAY_PRODUCT_ID` | Google Play one-time SKU (`premium_unlock`) |
 | `EXPO_PUBLIC_SENTRY_DSN` | Sentry client DSN |
 | `EXPO_PUBLIC_POSTHOG_KEY` | PostHog key (optional) |
 | `RAILWAY_TOKEN` | Railway → Account Settings → Tokens (only if using GitHub Actions deploy; not needed for Railway native GitHub integration) |

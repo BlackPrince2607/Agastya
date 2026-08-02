@@ -7,10 +7,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MotiView } from '@/components/moti/MotiView';
 import { CosmicDotGrid } from '@/components/layout/CosmicDotGrid';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
+import { StickyActionBar, STICKY_ACTION_BAR_DOUBLE } from '@/components/layout/StickyActionBar';
 import { OnboardingHeader } from '@/components/onboarding/OnboardingHeader';
 import {
   AuraNebulaCard,
-  BlurContainer,
   CosmicButton,
   GradientText,
   ReportInsightCard,
@@ -88,7 +88,7 @@ export default function ReportPreviewScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{
             gap: 22,
-            paddingBottom: 280 + insets.bottom,
+            paddingBottom: STICKY_ACTION_BAR_DOUBLE + insets.bottom,
             paddingHorizontal: PAGE_PADDING,
             paddingTop: 8,
           }}>
@@ -190,7 +190,11 @@ export default function ReportPreviewScreen() {
           </View>
 
           <View className="relative overflow-hidden rounded-4xl border border-white/10">
-            <GlassCard muted className="p-5 opacity-40">
+            <GlassCard
+              muted
+              className="p-5 opacity-40"
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants">
               <Text
                 className="font-label text-[10px] uppercase tracking-[0.35em] text-primary"
                 style={{ lineHeight: 16, paddingTop: 2 }}>
@@ -206,7 +210,10 @@ export default function ReportPreviewScreen() {
                 <MetricDonut label="Growth" value={reading.metrics.growth} size={72} />
               </View>
             </GlassCard>
-            <View className="absolute inset-0 items-center justify-center rounded-4xl bg-cosmic-void/78 px-7 py-5">
+            <View
+              className="absolute inset-0 items-center justify-center rounded-4xl bg-cosmic-void/78 px-7 py-5"
+              accessibilityLabel="Life scores locked. Included with full access. Your full scores, aura palette, and complete prediction unlock when you upgrade."
+              accessibilityRole="text">
               <Text
                 className="text-center font-label text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan"
                 style={{ lineHeight: 18, paddingTop: 2 }}>
@@ -243,54 +250,49 @@ export default function ReportPreviewScreen() {
           </GlassCard>
         </ScrollView>
 
-        <BlurContainer
-          intensity={56}
-          className="absolute bottom-0 left-0 right-0 z-20 rounded-none border-t border-white/14 bg-cosmic-void/92 px-6 pt-4"
-          style={{ elevation: 24 }}>
-          <View style={{ paddingBottom: Math.max(insets.bottom, 16) }} className="gap-y-3">
-            {showUnlockCta ? (
-              <CosmicButton
-                gradient="nebulaMd3"
-                label="Unlock Premium"
-                onPress={() =>
-                  router.push({
-                    pathname: isSignedIn ? '/onboarding/paywall' : '/onboarding/account',
-                    params: isSignedIn
-                      ? { seed: mergedSeed }
-                      : { seed: mergedSeed, toPaywall: '1' },
-                  })
-                }
-              />
-            ) : null}
-            {isSignedIn ? (
-              <CosmicButton
-                variant={showUnlockCta ? 'ghost' : 'primary'}
-                label="Enter Agastya"
-                onPress={() => enterMainApp()}
-              />
-            ) : (
-              <CosmicButton
-                variant={showUnlockCta ? 'ghost' : 'primary'}
-                label={showUnlockCta ? 'Save & sign in' : 'Save & sign in to continue'}
-                onPress={() =>
-                  router.push({
-                    pathname: '/onboarding/account',
-                    params: { seed: mergedSeed },
-                  })
-                }
-              />
-            )}
-            <Text className="mt-1 text-center font-body text-[11px] leading-5 text-on-surface-variant">
-              {isSignedIn
-                ? showUnlockCta
-                  ? 'Home is unlocked. Upgrade anytime for the full report and Guide.'
-                  : 'Your reading is saved on this device.'
-                : showUnlockCta
-                  ? 'Sign in first so Premium unlocks on your account after payment.'
-                  : 'Sign in to sync your unlocked reading across devices.'}
-            </Text>
-          </View>
-        </BlurContainer>
+        <StickyActionBar contentStyle={{ gap: 12 }}>
+          {showUnlockCta ? (
+            <CosmicButton
+              gradient="nebulaMd3"
+              label="Unlock Premium"
+              onPress={() =>
+                router.push({
+                  pathname: isSignedIn ? '/onboarding/paywall' : '/onboarding/account',
+                  params: isSignedIn
+                    ? { seed: mergedSeed }
+                    : { seed: mergedSeed, toPaywall: '1' },
+                })
+              }
+            />
+          ) : null}
+          {isSignedIn ? (
+            <CosmicButton
+              variant={showUnlockCta ? 'ghost' : 'primary'}
+              label="Enter Agastya"
+              onPress={() => enterMainApp()}
+            />
+          ) : (
+            <CosmicButton
+              variant={showUnlockCta ? 'ghost' : 'primary'}
+              label={showUnlockCta ? 'Save & sign in' : 'Save & sign in to continue'}
+              onPress={() =>
+                router.push({
+                  pathname: '/onboarding/account',
+                  params: { seed: mergedSeed },
+                })
+              }
+            />
+          )}
+          <Text className="text-center font-body text-[11px] leading-5 text-on-surface-variant">
+            {isSignedIn
+              ? showUnlockCta
+                ? 'Home is unlocked. Upgrade anytime for the full report and Guide.'
+                : 'Your reading is saved on this device.'
+              : showUnlockCta
+                ? 'Sign in first so Premium unlocks on your account after payment.'
+                : 'Sign in to sync your unlocked reading across devices.'}
+          </Text>
+        </StickyActionBar>
       </View>
     </CosmicScreen>
   );

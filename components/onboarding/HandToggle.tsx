@@ -1,5 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { colors } from '@/constants/theme';
+import { triggerLightTap } from '@/hooks/useHapticTap';
 import type { PalmScanHand } from '@/store/sessionStore';
 
 type HandToggleProps = {
@@ -10,8 +12,9 @@ type HandToggleProps = {
 };
 
 const CHIP = {
-  magenta: '#e879f9',
-  magentaBg: 'rgba(232,121,249,0.15)',
+  selectedBorder: colors.primary,
+  selectedBg: 'rgba(168,85,247,0.15)',
+  selectedShadow: colors.purple,
   borderIdle: 'rgba(255,255,255,0.15)',
   bgIdle: 'rgba(0,0,0,0.45)',
   mist: '#e6e1e5',
@@ -33,10 +36,15 @@ function ToggleOption({
 }) {
   return (
     <Pressable
-      onPress={onPress}
+      onPress={() => {
+        void triggerLightTap();
+        onPress();
+      }}
       style={styles.pressable}
       accessibilityRole="button"
-      accessibilityState={{ selected }}>
+      accessibilityState={{ selected }}
+      accessibilityLabel={label}
+      accessibilityHint="Select which palm to scan">
       <View
         style={[
           styles.chip,
@@ -109,9 +117,9 @@ const styles = StyleSheet.create({
     backgroundColor: CHIP.bgIdle,
   },
   chipSelected: {
-    borderColor: CHIP.magenta,
-    backgroundColor: CHIP.magentaBg,
-    shadowColor: CHIP.magenta,
+    borderColor: CHIP.selectedBorder,
+    backgroundColor: CHIP.selectedBg,
+    shadowColor: CHIP.selectedShadow,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.35,
     shadowRadius: 12,

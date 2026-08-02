@@ -7,3 +7,19 @@ export async function triggerLightTap() {
     /* optional on simulator / unsupported */
   }
 }
+
+export async function triggerMedium() {
+  try {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  } catch {
+    /* optional on simulator / unsupported */
+  }
+}
+
+export async function triggerSuccess() {
+  try {
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  } catch {
+    /* optional on simulator / unsupported */
+  }
+}

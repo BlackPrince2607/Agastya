@@ -1,4 +1,6 @@
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
+
+import { PressableScale } from '@/components/ui';
 
 type SuggestionChipsProps = {
   suggestions: string[];
@@ -15,16 +17,15 @@ export function SuggestionChips({ suggestions, onSelect }: SuggestionChipsProps)
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={{ gap: 8, paddingVertical: 2 }}>
         {suggestions.map((s) => (
-          <Pressable
+          <PressableScale
             key={s}
             onPress={() => onSelect(s)}
-            className="shrink-0 active:opacity-80"
-            accessibilityRole="button"
-            accessibilityLabel={s}>
+            accessibilityLabel={s}
+            style={{ flexShrink: 0 }}>
             <View className="rounded-pill border border-white/15 bg-white/[0.05] px-4 py-2.5">
               <Text className="font-body text-[13px] text-on-surface/90">{s}</Text>
             </View>
-          </Pressable>
+          </PressableScale>
         ))}
       </ScrollView>
     </View>

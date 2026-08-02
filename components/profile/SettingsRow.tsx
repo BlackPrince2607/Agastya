@@ -38,6 +38,9 @@ function SettingsRowComponent({
   showChevron = true,
 }: SettingsRowProps) {
   const chevron = showChevron && Boolean(onPress) && !trailing && !disabled;
+  const resolvedHint =
+    accessibilityHint ??
+    (destructive ? 'Permanent action. This cannot be undone.' : undefined);
 
   const content = (
     <View
@@ -107,7 +110,7 @@ function SettingsRowComponent({
       onPress={onPress}
       scaleTo={0.985}
       accessibilityLabel={accessibilityLabel ?? title}
-      accessibilityHint={accessibilityHint}
+      accessibilityHint={resolvedHint}
       style={{ width: '100%' }}>
       {content}
     </PressableScale>
