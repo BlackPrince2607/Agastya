@@ -99,21 +99,24 @@ async def fetch_payment_link(settings: Settings, payment_link_id: str) -> dict[s
         return data
 
 
-def amount_for_premium(settings: Settings) -> int:
-    """Lifetime one-time unlock amount in paise."""
-    amount = settings.razorpay_premium_amount_paise
+def amount_for_period(settings: Settings, period: str) -> int:
+    """Return amount in paise for monthly or annual plan."""
+    if period == "annual":
+        amount = settings.razorpay_amount_annual_paise
+    else:
+        amount = settings.razorpay_amount_monthly_paise
     if not amount:
-        raise RuntimeError("Razorpay premium amount not configured")
+        # Fall back to premium one-shot amount if period amounts unset.
+        amount = settings.razorpay_premium_amount_paise
+    if not amount:
+        raise RuntimeError("Razorpay amounts not configured")
     return int(amount)
 
 
-def amount_for_period(settings: Settings, period: str) -> int:
-    """Backward-compatible alias — all periods map to lifetime price."""
-    _ = period
-    return amount_for_premium(settings)
+def amount_for_premium(settings: Settings) -> int:
+    """Prefer annual, then monthly, then explicit premium amount."""
+    return amount_for_period(settings, "annual")
 
 
-def premium_expiry_days(period: str) -> int | None:
-    """Lifetime unlock has no expiry. Legacy callers may still pass a period."""
-    _ = period
-    return None
+def premium_expiry_days(period: str) -> int:
+    return 365 if period == "annual" else 30

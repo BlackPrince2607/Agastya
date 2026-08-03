@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
@@ -300,10 +300,12 @@ async def _handle_razorpay_paid(
 
         session_id = None
         supabase_user_id = None
+        billing_period = "monthly"
 
         if intent:
             session_id = intent.get("session_id")
             supabase_user_id = intent.get("supabase_user_id")
+            billing_period = intent.get("billing_period") or "monthly"
             amount_paise = int(intent.get("amount") or amount_paise)
             await billing_intents.mark_intent_paid(
                 settings,
@@ -313,6 +315,7 @@ async def _handle_razorpay_paid(
         elif notes:
             session_id = notes.get("session_id")
             supabase_user_id = notes.get("supabase_user_id")
+            billing_period = notes.get("billing_period") or notes.get("plan") or "monthly"
 
         if not session_id and not supabase_user_id:
             logger.warning(
@@ -324,6 +327,10 @@ async def _handle_razorpay_paid(
             await billing_idempotency.fail_webhook_events("razorpay", claimed, settings)
             raise HTTPException(status_code=500, detail="Missing session identifiers")
 
+        period = "annual" if str(billing_period) == "lifetime" else str(billing_period)
+        days = razorpay_client.premium_expiry_days(period)
+        expires = datetime.now(timezone.utc) + timedelta(days=days)
+
         ok = await _apply_premium_to_ids(
             settings,
             str(session_id) if session_id else None,
@@ -331,7 +338,7 @@ async def _handle_razorpay_paid(
             True,
             f"Razorpay {event_type}",
             premium_source="razorpay",
-            clear_expires=True,
+            premium_expires_at=expires,
         )
         if not ok and settings.supabase_enabled and not settings.debug:
             await billing_idempotency.fail_webhook_events("razorpay", claimed, settings)

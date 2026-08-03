@@ -14,8 +14,8 @@ def client(monkeypatch):
     monkeypatch.setenv("BILLING_RAZORPAY_ANDROID_ENABLED", "true")
     monkeypatch.setenv("RAZORPAY_KEY_ID", "rzp_test_x")
     monkeypatch.setenv("RAZORPAY_KEY_SECRET", "secret")
-    monkeypatch.setenv("RAZORPAY_AMOUNT_MONTHLY_PAISE", "79900")
-    monkeypatch.setenv("RAZORPAY_AMOUNT_ANNUAL_PAISE", "499900")
+    monkeypatch.setenv("RAZORPAY_AMOUNT_MONTHLY_PAISE", "14900")
+    monkeypatch.setenv("RAZORPAY_AMOUNT_ANNUAL_PAISE", "34900")
     monkeypatch.setenv("BILLING_FORCE_COUNTRY", "IN")
     get_settings.cache_clear()
     return TestClient(create_app())
@@ -31,10 +31,11 @@ def test_billing_config_india_android(client):
     assert "razorpay" in ids
     rz = next(p for p in data["providers"] if p["id"] == "razorpay")
     assert rz["requiresPlayUserChoice"] is True
-    assert "lifetime" in data["plans"]
-    assert data["plans"]["lifetime"]["amount"] == 499900
-    assert "monthly" not in data["plans"]
-    assert "annual" not in data["plans"]
+    assert "monthly" in data["plans"]
+    assert "annual" in data["plans"]
+    assert data["plans"]["monthly"]["amount"] == 14900
+    assert data["plans"]["annual"]["amount"] == 34900
+    assert "lifetime" not in data["plans"]
 
 
 def test_billing_config_android_no_razorpay_when_flag_off(monkeypatch):
@@ -43,8 +44,8 @@ def test_billing_config_android_no_razorpay_when_flag_off(monkeypatch):
     monkeypatch.setenv("BILLING_RAZORPAY_ANDROID_ENABLED", "false")
     monkeypatch.setenv("RAZORPAY_KEY_ID", "rzp_test_x")
     monkeypatch.setenv("RAZORPAY_KEY_SECRET", "secret")
-    monkeypatch.setenv("RAZORPAY_AMOUNT_MONTHLY_PAISE", "79900")
-    monkeypatch.setenv("RAZORPAY_AMOUNT_ANNUAL_PAISE", "499900")
+    monkeypatch.setenv("RAZORPAY_AMOUNT_MONTHLY_PAISE", "14900")
+    monkeypatch.setenv("RAZORPAY_AMOUNT_ANNUAL_PAISE", "34900")
     monkeypatch.setenv("BILLING_FORCE_COUNTRY", "IN")
     get_settings.cache_clear()
     client = TestClient(create_app())
@@ -67,8 +68,8 @@ def test_billing_config_outside_india_no_razorpay(monkeypatch):
     monkeypatch.setenv("BILLING_RAZORPAY_ANDROID_ENABLED", "true")
     monkeypatch.setenv("RAZORPAY_KEY_ID", "rzp_test_x")
     monkeypatch.setenv("RAZORPAY_KEY_SECRET", "secret")
-    monkeypatch.setenv("RAZORPAY_AMOUNT_MONTHLY_PAISE", "79900")
-    monkeypatch.setenv("RAZORPAY_AMOUNT_ANNUAL_PAISE", "499900")
+    monkeypatch.setenv("RAZORPAY_AMOUNT_MONTHLY_PAISE", "14900")
+    monkeypatch.setenv("RAZORPAY_AMOUNT_ANNUAL_PAISE", "34900")
     monkeypatch.setenv("BILLING_FORCE_COUNTRY", "US")
     get_settings.cache_clear()
     client = TestClient(create_app())
@@ -83,8 +84,8 @@ def test_spoofable_country_header_ignored(monkeypatch):
     monkeypatch.setenv("BILLING_RAZORPAY_ENABLED", "true")
     monkeypatch.setenv("RAZORPAY_KEY_ID", "rzp_test_x")
     monkeypatch.setenv("RAZORPAY_KEY_SECRET", "secret")
-    monkeypatch.setenv("RAZORPAY_AMOUNT_MONTHLY_PAISE", "79900")
-    monkeypatch.setenv("RAZORPAY_AMOUNT_ANNUAL_PAISE", "499900")
+    monkeypatch.setenv("RAZORPAY_AMOUNT_MONTHLY_PAISE", "14900")
+    monkeypatch.setenv("RAZORPAY_AMOUNT_ANNUAL_PAISE", "34900")
     monkeypatch.delenv("BILLING_FORCE_COUNTRY", raising=False)
     get_settings.cache_clear()
     client = TestClient(create_app())

@@ -1,24 +1,32 @@
-# Razorpay + Play User Choice (one-time Premium)
+# Razorpay-direct Premium (monthly / annual)
 
-Android India: Google Play User Choice → **Razorpay Payment Link** (focus) or **Google Play** one-time INAPP.
+Android: **Razorpay Payment Link only** while `EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS=true` (no Google Play User Choice sheet).
+
+When you enroll User Choice Billing later, set both app and API bypass flags to `false` to restore Play + Razorpay choice.
+
+## Prices (INR)
+
+| Plan | Amount | Paise env |
+|------|--------|-----------|
+| Monthly | ₹149 | `RAZORPAY_AMOUNT_MONTHLY_PAISE=14900` |
+| Annual | ₹349 | `RAZORPAY_AMOUNT_ANNUAL_PAISE=34900` |
 
 ## Flow
 
-1. User taps **Unlock Premium** on paywall (single lifetime price).
-2. Google Play User Choice dialog (mandatory on production builds).
-3. **Alternative billing:** Razorpay hosted Payment Link webpage → webhook / confirm → `is_premium=true`, `premium_expires_at=null` → ExternalTransactions report.
-4. **Google Play:** one-time product `premium_unlock` acknowledged natively → `POST /v1/billing/google-play/verify-purchase` → RTDN for one-time / voided purchases.
+1. User picks monthly or yearly on paywall, taps **Unlock Premium**.
+2. App opens Razorpay hosted Payment Link (no User Choice dialog).
+3. Webhook / confirm → `is_premium=true` with period expiry.
 
 ## Env checklist
 
-**Backend:** `RAZORPAY_*`, `RAZORPAY_AMOUNT_PREMIUM_PAISE`, `BILLING_RAZORPAY_ENABLED`, `BILLING_RAZORPAY_ANDROID_ENABLED`, `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`, `GOOGLE_PLAY_RTDN_VERIFICATION_TOKEN`, `CHECKOUT_ALLOWED_RETURN_ORIGINS`
+**Backend:** `RAZORPAY_*`, `RAZORPAY_AMOUNT_MONTHLY_PAISE`, `RAZORPAY_AMOUNT_ANNUAL_PAISE`, `BILLING_RAZORPAY_ENABLED`, `BILLING_RAZORPAY_ANDROID_ENABLED`, **`BILLING_RAZORPAY_TEST_BYPASS=true`**
 
-**Frontend:** `EXPO_PUBLIC_PLAY_PRODUCT_ID=premium_unlock`
+**Frontend (EAS):** `EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS=true` on production / preview / prototype
 
-## Play Console
+## Later: restore User Choice
 
-1. Enroll in Billing Choice (India).
-2. Create managed product **`premium_unlock`** (one-time).
-3. Configure RTDN Pub/Sub → `POST /v1/webhooks/google-play?token=...`
+1. Enroll Billing Choice (India) in Play Console.
+2. Create subscription products `premium_monthly` / `premium_annual`.
+3. Set bypass flags to `false` and rebuild.
 
 See [DEPLOY.md](../DEPLOY.md) §6 for full setup.

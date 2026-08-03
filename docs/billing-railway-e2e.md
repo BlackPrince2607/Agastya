@@ -38,15 +38,13 @@ PLAY_PACKAGE_NAME=com.agastya.app
 
 Checkout requires a signed-in Supabase user (`supabaseUserId` on the session). After payment, the app confirms via `POST /v1/billing/razorpay/confirm-payment` (does not wait only on webhooks) and enters the main app when already signed in.
 
-For Expo Go / no Play User Choice during this first live ₹1 test, also temporarily set:
+For Razorpay-direct (no Play User Choice sheet), set on Railway:
 
 ```
-DEBUG=true
+BILLING_RAZORPAY_TEST_BYPASS=true
 ```
 
-(`BILLING_RAZORPAY_TEST_BYPASS` only works when `DEBUG=true`.)
-
-After validation, set `DEBUG=false` and `BILLING_RAZORPAY_TEST_BYPASS=false` again.
+(`DEBUG` can stay `false`.) When User Choice Billing is enrolled, set this back to `false` and rebuild the app with `EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS=false`.
 
 Redeploy after changing variables (Railway usually redeploys automatically).
 

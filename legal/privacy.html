@@ -12,6 +12,7 @@
     h1 { font-size: 2rem; font-weight: 700; color: var(--accent); margin-bottom: 8px; }
     .meta { color: var(--muted); font-size: 0.875rem; margin-bottom: 40px; }
     h2 { font-size: 1.125rem; font-weight: 600; margin-top: 36px; margin-bottom: 12px; color: var(--accent); }
+    h3 { font-size: 1rem; font-weight: 600; margin-top: 20px; margin-bottom: 8px; color: #cbc4d1; }
     p { margin-bottom: 14px; color: #cbc4d1; }
     ul { margin: 0 0 14px 20px; color: #cbc4d1; }
     li { margin-bottom: 6px; }
@@ -23,64 +24,93 @@
 <div class="container">
   <a class="back" href="https://sharvo.online">← sharvo.online</a>
   <h1>Privacy Policy</h1>
-  <p class="meta">Effective date: August 1, 2026 &nbsp;·&nbsp; Last updated: August 1, 2026</p>
+  <p class="meta">Effective date: 3 August 2026</p>
 
-  <p>Agastya ("we", "our", or "us") operates the Agastya mobile application and associated services. This Privacy Policy explains what information we collect, how we use it, and your rights.</p>
-  <p><strong>Agastya is designed for entertainment and personal reflection only.</strong> We do not provide medical, legal, financial, or psychological advice.</p>
+  <p>Agastya app respects your privacy and is committed to protecting it. This Privacy Policy explains what information we collect, how we use it, and how we keep it safe when you use the Agastya app mobile application.</p>
+  <p>Agastya app is developed and operated by Aman Mishra and is offered as a subscription-based AI companion and learning app.</p>
+  <p>By using Agastya app, you agree to this Privacy Policy.</p>
 
   <h2>1. Information We Collect</h2>
+
+  <h3>a. Information You Provide</h3>
   <ul>
-    <li><strong>Profile data you provide:</strong> display name, gender (optional), and focus areas you choose during onboarding.</li>
-    <li><strong>Palm image:</strong> a photo taken or uploaded during the palm-scan step. This image is sent to our servers solely to generate your reading and may be stored in a private cloud bucket tied to your session. It is never sold or used to train AI models.</li>
-    <li><strong>Session and device identifiers:</strong> a randomly generated session ID and device install ID used to restore your reading across app launches.</li>
-    <li><strong>Email address (optional):</strong> only if you choose to sign in for cross-device sync. We do not send marketing email without your explicit opt-in.</li>
-    <li><strong>Purchase metadata:</strong> whether Premium is unlocked, payment provider (Razorpay or Google Play), and related checkout identifiers. We do not store full payment card numbers.</li>
-    <li><strong>Analytics events:</strong> pseudonymous event data (e.g. "paywall viewed", "reading generated") sent to PostHog or Mixpanel when configured. No palm images or message contents are included.</li>
-    <li><strong>Crash reports:</strong> error and crash data sent to Sentry, including device type and app version. Personal content is masked where possible.</li>
+    <li><strong>Account Information:</strong> Name, gender, phone number, or Google/Apple login details used for sign-in and personalization.</li>
+    <li><strong>Chat Data:</strong> Messages and inputs shared while interacting with Agastya app. These are used to generate responses and improve AI quality. Chat data may be processed by third-party AI services.</li>
   </ul>
+
+  <h3>b. Automatically Collected Information</h3>
+  <ul>
+    <li><strong>Device Information:</strong> Device model, operating system version, app version, and language settings.</li>
+    <li><strong>Usage Information:</strong> App interactions, features used, session duration, and navigation behavior.</li>
+    <li><strong>Diagnostics &amp; Analytics:</strong> Crash logs and performance data to improve stability and user experience.</li>
+  </ul>
+  <p>We may use the following third-party services:</p>
+  <ul>
+    <li>Google Play Services</li>
+    <li>Firebase Analytics</li>
+    <li>Firebase Crashlytics</li>
+  </ul>
+
+  <h3>c. Payment Information</h3>
+  <p>If you purchase an Agastya app Plus subscription, payments are processed securely through Google Play Billing or Apple App Store.</p>
+  <p>We do not collect, store, or access your full payment or card details.</p>
 
   <h2>2. How We Use Your Information</h2>
+  <p>We use collected information to:</p>
   <ul>
-    <li>To generate and display your personalised palm reading, daily tasks, predictions, and AI Guide responses.</li>
-    <li>To save your reading and restore it across devices when you sign in.</li>
-    <li>To process one-time Premium unlocks via Razorpay Payment Links (alternative billing in India under Google Play User Choice) and/or Google Play Billing. We do not store payment card data.</li>
-    <li>To diagnose crashes and improve app reliability via Sentry.</li>
-    <li>To understand aggregate usage patterns via anonymous analytics.</li>
+    <li>Provide personalized AI conversations and recommendations</li>
+    <li>Improve app performance, features, and reliability</li>
+    <li>Manage subscriptions and premium access</li>
+    <li>Send important service-related updates or support messages</li>
+    <li>Comply with legal and regulatory requirements</li>
   </ul>
 
-  <h2>3. Data Sharing</h2>
-  <p>We do not sell your personal data. We share data only with:</p>
+  <h2>3. Data Sharing and Disclosure</h2>
+  <p>We do not sell or rent your personal data.</p>
+  <p>We may share limited data only with:</p>
   <ul>
-    <li><strong>Supabase</strong> — database and storage provider for session data and palm images.</li>
-    <li><strong>OpenRouter</strong> — AI inference routing for palm analysis and guide responses. Data sent through OpenRouter is governed by OpenRouter and the underlying model provider policies.</li>
-    <li><strong>Razorpay</strong> — payment processing for alternative billing (hosted Payment Link). Governed by their <a href="https://razorpay.com/privacy/" target="_blank" rel="noopener">privacy policy</a>.</li>
-    <li><strong>Google Play</strong> — billing when you choose Google Play in the User Choice dialog, and optional External Transactions reporting for alternative billing.</li>
-    <li><strong>Sentry</strong> — crash reporting.</li>
-    <li><strong>PostHog / Mixpanel</strong> — analytics (when enabled). Pseudonymous identifiers only.</li>
+    <li><strong>Service Providers:</strong> Trusted partners for hosting, analytics, crash reporting, customer support, and subscription processing.</li>
+    <li><strong>Legal Authorities:</strong> When required by law or to protect user safety, rights, or legal obligations.</li>
+  </ul>
+  <p>All partners are required to follow strict confidentiality and data protection standards.</p>
+
+  <h2>4. Data Security</h2>
+  <p>We use reasonable administrative, technical, and organizational safeguards to protect your data.</p>
+  <p>However, no method of transmission or storage is completely secure. Please avoid sharing sensitive personal or financial information during chats.</p>
+
+  <h2>5. Data Retention</h2>
+  <ul>
+    <li>Personal data is retained only as long as necessary to operate Agastya app and comply with legal requirements.</li>
+    <li>Anonymous and aggregated usage data may be retained for up to 24 months for analytics and improvement.</li>
+    <li>You may request deletion of your personal data at any time.</li>
   </ul>
 
-  <h2>4. Data Retention</h2>
-  <p>Session data is retained for up to 12 months of inactivity. Palm images are retained for up to 90 days. You may request deletion at any time.</p>
-
-  <h2>5. Your Rights &amp; Account Deletion</h2>
-  <p>Depending on your jurisdiction, you may have rights to access, correct, delete, or export your personal data.</p>
+  <h2>6. User Rights and Controls</h2>
+  <p>You can:</p>
   <ul>
-    <li><strong>In the app:</strong> open Profile → Delete account (requires sign-in).</li>
-    <li><strong>On the web:</strong> use <a href="https://sharvo.online/delete-account">https://sharvo.online/delete-account</a>.</li>
-    <li><strong>By email:</strong> <a href="mailto:privacy@sharvo.online">privacy@sharvo.online</a>.</li>
+    <li>Update or delete your profile information within the app</li>
+    <li>Request deletion of your chat or account data (where applicable)</li>
+    <li>Opt out of non-essential communications</li>
   </ul>
+  <p>To exercise these rights, contact us at: <a href="mailto:ajaman293@gmail.com">ajaman293@gmail.com</a></p>
+  <p>You may also use our <a href="https://sharvo.online/delete-account">account deletion page</a>.</p>
 
-  <h2>6. Children</h2>
-  <p>Agastya is not directed at children under 13 (or 16 in the EU). We do not knowingly collect data from children. If you believe a child has provided us with personal data, please contact us and we will delete it.</p>
+  <h2>7. Children’s Privacy</h2>
+  <p>Agastya app is not intended for children under 13 years of age.</p>
+  <p>We do not knowingly collect personal data from children. If such data is identified, it will be deleted promptly upon notification.</p>
 
-  <h2>7. Security</h2>
-  <p>We use HTTPS for all data in transit. Palm images are stored in a private bucket with service-role access only. We regularly review our security practices.</p>
+  <h2>8. Third-Party Links</h2>
+  <p>The app may contain links to third-party services. We are not responsible for their privacy practices. Please review their policies separately.</p>
 
-  <h2>8. Changes to This Policy</h2>
-  <p>We may update this policy from time to time. We will notify you of material changes through the app or by email.</p>
+  <h2>9. Changes to This Policy</h2>
+  <p>We may update this Privacy Policy from time to time. Updates will be posted within the app with a revised effective date. Continued use of the app means you accept the updated policy.</p>
 
-  <h2>9. Contact</h2>
-  <p>For privacy questions or data requests: <a href="mailto:privacy@sharvo.online">privacy@sharvo.online</a></p>
+  <h2>10. Contact Information</h2>
+  <p>If you have questions or concerns about this Privacy Policy, contact us at:</p>
+  <ul>
+    <li>Email: <a href="mailto:ajaman293@gmail.com">ajaman293@gmail.com</a></li>
+    <li>App Name: Agastya app</li>
+  </ul>
   <p>Support: <a href="https://sharvo.online/support">https://sharvo.online/support</a></p>
 </div>
 </body>

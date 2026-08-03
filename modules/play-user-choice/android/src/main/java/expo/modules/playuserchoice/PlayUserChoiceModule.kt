@@ -114,7 +114,7 @@ class PlayUserChoiceModule : Module() {
           val productList = listOf(
             QueryProductDetailsParams.Product.newBuilder()
               .setProductId(productId)
-              .setProductType(BillingClient.ProductType.INAPP)
+              .setProductType(BillingClient.ProductType.SUBS)
               .build()
           )
           val params = QueryProductDetailsParams.newBuilder().setProductList(productList).build()
@@ -128,16 +128,21 @@ class PlayUserChoiceModule : Module() {
             }
 
             val productDetails: ProductDetails = productDetailsList[0]
-            val productDetailsParamsBuilder = BillingFlowParams.ProductDetailsParams.newBuilder()
-              .setProductDetails(productDetails)
-
-            // Only set offer token when the JS layer passes one (multi-offer INAPP).
-            if (!offerToken.isNullOrEmpty()) {
-              productDetailsParamsBuilder.setOfferToken(offerToken)
+            val offerDetails = productDetails.subscriptionOfferDetails
+            val token = offerToken
+              ?: offerDetails?.firstOrNull()?.offerToken
+            if (token == null) {
+              pendingPromise.getAndSet(null)?.resolve(mapOf("outcome" to "unavailable"))
+              return@queryProductDetailsAsync
             }
 
+            val productDetailsParams = BillingFlowParams.ProductDetailsParams.newBuilder()
+              .setProductDetails(productDetails)
+              .setOfferToken(token)
+              .build()
+
             val flowParams = BillingFlowParams.newBuilder()
-              .setProductDetailsParamsList(listOf(productDetailsParamsBuilder.build()))
+              .setProductDetailsParamsList(listOf(productDetailsParams))
               .build()
 
             val launchResult = client.launchBillingFlow(activity, flowParams)

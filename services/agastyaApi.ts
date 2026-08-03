@@ -297,7 +297,7 @@ export async function mergeSessions(body: {
 export async function createRazorpayPaymentLink(body: {
   sessionId: string;
   deviceInstallId: string;
-  billingPeriod?: 'lifetime' | 'monthly' | 'annual';
+  billingPeriod: 'monthly' | 'annual' | 'lifetime';
   successUrl: string;
   cancelUrl: string;
   externalTransactionToken?: string;
@@ -309,7 +309,7 @@ export async function createRazorpayPaymentLink(body: {
     {
       sessionId: body.sessionId,
       deviceInstallId: body.deviceInstallId,
-      billingPeriod: body.billingPeriod ?? 'lifetime',
+      billingPeriod: body.billingPeriod,
       successUrl: body.successUrl,
       cancelUrl: body.cancelUrl,
       externalTransactionToken: body.externalTransactionToken,

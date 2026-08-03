@@ -48,9 +48,10 @@ Everyone (Google Play) — contains in-app purchases (one-time)
 
 | Product | Price | Type |
 |---|---|---|
-| Agastya Premium (`premium_unlock`) | ₹4,999 | One-time lifetime unlock |
+| Agastya Premium — Monthly (`premium_monthly`) | ₹149 | Monthly access |
+| Agastya Premium — Annual (`premium_annual`) | ₹349 | Yearly access |
 
-No auto-renewing subscriptions. Android India may offer Google Play Billing or Razorpay (User Choice).
+Android India may offer Google Play Billing or Razorpay (User Choice).
 
 ---
 

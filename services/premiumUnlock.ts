@@ -102,13 +102,14 @@ function promptAdministrativeArea(): Promise<string | null> {
   });
 }
 
-/** Allow Razorpay without Play User Choice (Expo Go + internal APK / preview builds). */
+/** Razorpay-only: skip Play User Choice and open Payment Link directly. */
 function isRazorpayDirectCheckoutEnabled(): boolean {
   return (process.env.EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS || '').trim() === 'true';
 }
 
 async function startDirectRazorpayCheckout(seed: string | undefined): Promise<UnlockResult> {
-  const rz = await startRazorpayCheckout({});
+  const period = useSessionStore.getState().billingPeriod;
+  const rz = await startRazorpayCheckout({ period });
   if (!rz.ok) return mapCheckoutFailure(rz.reason);
   if (rz.redirecting) {
     return { ok: true, source: 'razorpay' };
@@ -136,7 +137,7 @@ export async function unlockPremium(options: { seed?: string }): Promise<UnlockR
     return { ok: false, reason: 'need_sign_in' };
   }
 
-  // Expo Go / sideloaded prototype APK: open Razorpay directly (no Play enrollment).
+  // Expo Go / sideloaded / Razorpay-direct builds: open Payment Link (no User Choice).
   if (isRazorpayDirectCheckoutEnabled()) {
     return startDirectRazorpayCheckout(seed);
   }
@@ -145,7 +146,11 @@ export async function unlockPremium(options: { seed?: string }): Promise<UnlockR
     return { ok: false, reason: 'unavailable' };
   }
 
-  const productId = process.env.EXPO_PUBLIC_PLAY_PRODUCT_ID || 'premium_unlock';
+  const period = useSessionStore.getState().billingPeriod;
+  const productId =
+    period === 'annual'
+      ? process.env.EXPO_PUBLIC_PLAY_PRODUCT_ANNUAL || 'premium_annual'
+      : process.env.EXPO_PUBLIC_PLAY_PRODUCT_MONTHLY || 'premium_monthly';
 
   const choice = await launchPlayUserChoiceBilling({ productId });
 
@@ -162,6 +167,7 @@ export async function unlockPremium(options: { seed?: string }): Promise<UnlockR
       return { ok: false, reason: 'cancelled' };
     }
     const rz = await startRazorpayCheckout({
+      period,
       externalTransactionToken: choice.externalTransactionToken,
       administrativeArea: area,
     });

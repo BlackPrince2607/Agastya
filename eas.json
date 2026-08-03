@@ -19,7 +19,8 @@
       },
       "env": {
         "EXPO_PUBLIC_AGASTYA_API_URL": "https://agastya-production-b395.up.railway.app",
-        "EXPO_PUBLIC_PLAY_PRODUCT_ID": "premium_unlock",
+        "EXPO_PUBLIC_PLAY_PRODUCT_MONTHLY": "premium_monthly",
+        "EXPO_PUBLIC_PLAY_PRODUCT_ANNUAL": "premium_annual",
         "EXPO_PUBLIC_BILLING_DEFAULT_ADMIN_AREA": "KA",
         "EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS": "true",
         "EXPO_UPDATES_ENABLED": "false",
@@ -34,7 +35,8 @@
       },
       "env": {
         "EXPO_PUBLIC_AGASTYA_API_URL": "https://agastya-production-b395.up.railway.app",
-        "EXPO_PUBLIC_PLAY_PRODUCT_ID": "premium_unlock",
+        "EXPO_PUBLIC_PLAY_PRODUCT_MONTHLY": "premium_monthly",
+        "EXPO_PUBLIC_PLAY_PRODUCT_ANNUAL": "premium_annual",
         "EXPO_PUBLIC_BILLING_DEFAULT_ADMIN_AREA": "KA",
         "EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS": "true",
         "EXPO_UPDATES_ENABLED": "false",
@@ -49,9 +51,11 @@
       },
       "env": {
         "EXPO_PUBLIC_AGASTYA_API_URL": "https://agastya-production-b395.up.railway.app",
-        "EXPO_PUBLIC_PLAY_PRODUCT_ID": "premium_unlock",
+        "EXPO_PUBLIC_PLAY_PRODUCT_MONTHLY": "premium_monthly",
+        "EXPO_PUBLIC_PLAY_PRODUCT_ANNUAL": "premium_annual",
         "EXPO_PUBLIC_BILLING_DEFAULT_ADMIN_AREA": "KA",
-        "EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS": "false"
+        "EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS": "true",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       }
     }
   },

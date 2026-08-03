@@ -120,8 +120,8 @@ class Settings(BaseSettings):
     razorpay_amount_annual_paise: int | None = None
     billing_razorpay_enabled: bool = False
     billing_razorpay_android_enabled: bool = False
-    # DEBUG-only: skip Play User Choice token/area requirements so Razorpay can be E2E tested
-    # without a Play-enrolled Android build. Never enable when DEBUG=false.
+    # Skip Play User Choice token/area requirements — Razorpay opens directly (no Google choice sheet).
+    # Temporary/prod-test mode until User Choice Billing is enrolled. Set false when Play path is live.
     billing_razorpay_test_bypass: bool = False
     billing_razorpay_countries: str = "IN"
     billing_force_country: str | None = None
@@ -172,7 +172,7 @@ class Settings(BaseSettings):
 
     @property
     def razorpay_premium_amount_paise(self) -> int | None:
-        """Single lifetime price in paise (default ₹4,999 = 499900)."""
+        """Prefer explicit premium, else annual, else monthly (paise)."""
         if self.razorpay_amount_premium_paise:
             return int(self.razorpay_amount_premium_paise)
         if self.razorpay_amount_annual_paise:
@@ -186,13 +186,14 @@ class Settings(BaseSettings):
         return bool(
             self.razorpay_key_id
             and self.razorpay_key_secret
-            and self.razorpay_premium_amount_paise
+            and self.razorpay_amount_monthly_paise
+            and self.razorpay_amount_annual_paise
         )
 
     @property
     def razorpay_test_bypass_active(self) -> bool:
-        """True only when DEBUG and explicit test bypass flag are both set."""
-        return bool(self.debug and self.billing_razorpay_test_bypass)
+        """True when BILLING_RAZORPAY_TEST_BYPASS is set (Razorpay-direct, no User Choice token)."""
+        return bool(self.billing_razorpay_test_bypass)
 
     @property
     def llm_enabled(self) -> bool:

@@ -87,6 +87,53 @@ def test_create_payment_link_requires_sign_in(client):
     assert "Sign in" in res.json()["detail"]
 
 
+def test_android_without_token_allowed_when_bypass_on_with_debug_false(monkeypatch):
+    """Prod-safe: bypass alone is enough; DEBUG need not be true."""
+    monkeypatch.setenv("DEBUG", "false")
+    monkeypatch.setenv("BILLING_RAZORPAY_ENABLED", "true")
+    monkeypatch.setenv("BILLING_RAZORPAY_ANDROID_ENABLED", "true")
+    monkeypatch.setenv("BILLING_RAZORPAY_TEST_BYPASS", "true")
+    monkeypatch.setenv("RAZORPAY_KEY_ID", "rzp_test_x")
+    monkeypatch.setenv("RAZORPAY_KEY_SECRET", "secret")
+    monkeypatch.setenv("RAZORPAY_AMOUNT_MONTHLY_PAISE", "100")
+    monkeypatch.setenv("RAZORPAY_AMOUNT_ANNUAL_PAISE", "200")
+    monkeypatch.setenv("CHECKOUT_ALLOWED_RETURN_ORIGINS", "agastya://")
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "service-role-test")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    monkeypatch.setenv("CORS_ORIGINS", "https://agastya.app")
+    get_settings.cache_clear()
+    client = TestClient(create_app())
+
+    async def fake_create(*_a, **kwargs):
+        return {"id": "plink_test", "short_url": "https://rzp.io/test"}
+
+    async def fake_intent(*_a, **kwargs):
+        return {"id": "00000000-0000-4000-8000-000000000099"}
+
+    async def fake_attach(*_a, **_k):
+        return True
+
+    monkeypatch.setattr("app.services.razorpay_client.create_payment_link", fake_create)
+    monkeypatch.setattr("app.services.billing_intents.create_checkout_intent", fake_intent)
+    monkeypatch.setattr("app.services.billing_intents.attach_payment_link", fake_attach)
+
+    _seed_signed_in_bucket()
+    res = client.post(
+        "/v1/billing/razorpay/create-payment-link",
+        json={
+            "sessionId": SESSION_ID,
+            "deviceInstallId": DEVICE_ID,
+            "billingPeriod": "monthly",
+            "successUrl": "agastya://onboarding/paywall?checkout=success",
+            "cancelUrl": "agastya://onboarding/paywall?checkout=cancelled",
+            "platform": "android",
+        },
+    )
+    assert res.status_code == 200
+    assert "checkoutUrl" in res.json()
+
+
 def test_android_without_token_allowed_when_bypass_on(client, monkeypatch):
     captured: dict = {}
 

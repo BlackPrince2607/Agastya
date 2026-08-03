@@ -85,6 +85,8 @@ export default function PaywallScreen() {
     razorpay_signature,
   } = searchParams;
   const routeParams = normalizeRouteParams(searchParams);
+  const period = useSessionStore((s) => s.billingPeriod);
+  const setPeriod = useSessionStore((s) => s.setBillingPeriod);
   const premium = useSessionStore((s) => s.hasUnlockedPremium);
   const storeUserId = useSessionStore((s) => s.supabaseUserId);
   const { isSignedIn, email: authEmail, loading: authLoading } = useAuthSession();
@@ -144,8 +146,8 @@ export default function PaywallScreen() {
     };
   }, []);
 
-  const formatLifetimePrice = (fallback: string) => {
-    const plan = billingConfig?.plans?.lifetime ?? billingConfig?.plans?.annual;
+  const formatPlanPrice = (key: 'monthly' | 'annual', fallback: string) => {
+    const plan = billingConfig?.plans?.[key];
     if (!plan) return fallback;
     const major = plan.amount / 100;
     try {
@@ -162,7 +164,7 @@ export default function PaywallScreen() {
   const unlockLabel = () => {
     if (busy) return 'Processing...';
     if (!signedIn) return 'Sign in to unlock';
-    return `Unlock Premium · ${formatLifetimePrice('₹4,999')}`;
+    return 'Unlock Premium';
   };
 
   useEffect(() => {
@@ -231,7 +233,7 @@ export default function PaywallScreen() {
       return;
     }
     setBusy(true);
-    track(AnalyticsEvent.PURCHASE_STARTED, { billing_period: 'lifetime' });
+    track(AnalyticsEvent.PURCHASE_STARTED, { billing_period: period });
 
     try {
       const result = await unlockPremium({ seed: mergedSeed });
@@ -312,7 +314,7 @@ export default function PaywallScreen() {
             {billingAvailable ? (
               <Text className="mt-3 font-body text-[13px] leading-5 text-cyan">
                 {testBypass
-                  ? 'Test / internal build — Razorpay checkout opens without Play User Choice.'
+                  ? 'Pay securely with Razorpay (UPI, cards, and more).'
                   : 'Google Play will show a secure payment choice — UPI/cards via Razorpay or Google Play billing.'}
               </Text>
             ) : !billingAvailable && Platform.OS === 'android' ? (
@@ -354,23 +356,25 @@ export default function PaywallScreen() {
           </LinearGradient>
 
           <View className="gap-3">
-            <View className="rounded-3xl border border-primary/55 bg-primary/10 px-5 py-4">
-              <View className="mb-3 self-start rounded-full border border-primary/40 bg-primary/20 px-3 py-1">
-                <Text className="font-label text-[9px] font-bold uppercase tracking-[0.22em] text-cyan">
-                  One-time unlock
-                </Text>
-              </View>
-              <Text className="font-label text-[17px] font-semibold text-on-surface">Agastya Premium</Text>
-              <Text className="mt-1 font-body text-[14px] text-on-surface-variant">
-                {formatLifetimePrice('₹4,999')} · lifetime access · no auto-renewal
-              </Text>
-            </View>
+            <PlanRow
+              label="Yearly Access"
+              badge="Best value"
+              price={`${formatPlanPrice('annual', '₹349')}/year`}
+              active={period === 'annual'}
+              onPress={() => setPeriod('annual')}
+            />
+            <PlanRow
+              label="Monthly Access"
+              price={`${formatPlanPrice('monthly', '₹149')}/month`}
+              active={period === 'monthly'}
+              onPress={() => setPeriod('monthly')}
+            />
           </View>
 
           <View className="items-center gap-2 py-2">
             <Text className="font-body text-[13px] text-on-surface-variant text-center">
-              Pay once via Razorpay (UPI/cards) or Google Play. Check premium status if the app was closed during
-              checkout.
+              Period access after payment via Razorpay (UPI/cards) or Google Play. Check premium status if the app was
+              closed during checkout.
             </Text>
           </View>
 
@@ -418,10 +422,55 @@ export default function PaywallScreen() {
           ) : null}
           <View className="flex-row items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2.5">
             <Ionicons name="shield-checkmark" size={16} color={colors.health} />
-            <Text className="font-body text-[12px] text-on-surface/85">Secure one-time payment via Google Play or Razorpay.</Text>
+            <Text className="font-body text-[12px] text-on-surface/85">Secure payment via Google Play or Razorpay.</Text>
           </View>
         </StickyActionBar>
       </View>
     </CosmicScreen>
+  );
+}
+
+function PlanRow({
+  label,
+  badge,
+  price,
+  active,
+  onPress,
+}: {
+  label: string;
+  badge?: string;
+  price: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="radio"
+      accessibilityState={{ checked: active }}
+      accessibilityLabel={`${label}${badge ? `, ${badge}` : ''}, ${price}`}>
+      <View
+        className={
+          active
+            ? 'rounded-3xl border border-primary/55 bg-primary/10 px-5 py-4'
+            : 'rounded-3xl border border-white/12 bg-black/35 px-5 py-4'
+        }
+        style={active ? { shadowColor: stitchSignal, shadowOpacity: 0.25, shadowRadius: 12 } : undefined}>
+        {badge ? (
+          <View className="mb-3 self-start rounded-full border border-primary/40 bg-primary/20 px-3 py-1">
+            <Text className="font-label text-[9px] font-bold uppercase tracking-[0.22em] text-cyan">{badge}</Text>
+          </View>
+        ) : null}
+        <View className="flex-row items-center gap-3">
+          <View
+            className={`h-5 w-5 rounded-full border-2 ${active ? 'border-cyan bg-cyan/30' : 'border-white/25'}`}
+          />
+          <View className="min-w-0 flex-1">
+            <Text className="font-label text-[17px] font-semibold text-on-surface">{label}</Text>
+            <Text className="mt-1 font-body text-[14px] text-on-surface-variant">{price}</Text>
+          </View>
+        </View>
+      </View>
+    </Pressable>
   );
 }

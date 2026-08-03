@@ -1,0 +1,49 @@
+﻿{
+  "id": "c3fb4c85-b19c-4c8f-9294-3fefc90f57d8",
+  "status": "ERRORED",
+  "platform": "ANDROID",
+  "error": {
+    "errorCode": "EAS_BUILD_UNKNOWN_GRADLE_ERROR",
+    "message": "Gradle build failed with unknown error. See logs for the \"Run gradlew\" phase for more information."
+  },
+  "artifacts": {},
+  "fingerprint": {
+    "id": "019fc0d0-a351-7abe-8f0d-051e8e7588e0",
+    "hash": "8a4d8363033697882803bf4640ec055a2972f3e3"
+  },
+  "initiatingActor": {
+    "id": "8b0486bc-fba0-4d09-b6d8-e691da072b47",
+    "displayName": "anish26"
+  },
+  "logFiles": [
+    "https://storage.googleapis.com/eas-workflows-production/logs/e734e717-48c7-49ec-8e5a-8810cfed0fa4/c3fb4c85-b19c-4c8f-9294-3fefc90f57d8/2026-08-02T04%3A55%3A22Z-9bd4670c-d8ed-451f-a440-3dd6326255de.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260802%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260802T055222Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=8e5836cbfcf755dc681cf6933ece4a45557c4e231870b78c165535d4e61679f214d5bc76cd289480d959669c8007a7192e62134d2f317a3c712dba3a8d8030d319a6a280db9bae991f75db2df4259045585ab6bd988b5b964968368ca99fc332c77670f944310abf0f18384b9cf761dd1a731cc583a5767acd74074c69a3d6882eaad078d732b14273dce8f173fc8c6bf03d5745214f24889c379e8cf2d32650448a1cf5366cdf0516066e882417591fff30ef7656946a799b48563832e78b85d440e1bf59633bff0ae92e54b51fa6fdec233404dc35e5d1f98905dc2f52ab6ae0d0f2762cf02d3dce63f47ab0a9d3723c8f413bba399835d31f739b1110d98c"
+  ],
+  "project": {
+    "id": "e734e717-48c7-49ec-8e5a-8810cfed0fa4",
+    "name": "agastya",
+    "slug": "agastya",
+    "ownerAccount": {
+      "id": "1281aa2c-540c-4b51-9955-628faf44997e",
+      "name": "anish26s-team"
+    }
+  },
+  "distribution": "STORE",
+  "buildProfile": "production",
+  "sdkVersion": "54.0.0",
+  "appVersion": "1.0.0",
+  "appBuildVersion": "4",
+  "runtimeVersion": "1.0.0",
+  "gitCommitHash": "c98174fe9ec4de96743d9a9dd7598d3f9aa7d83b",
+  "gitCommitMessage": "Fixed some ui bugs and made system better",
+  "priority": "NORMAL",
+  "createdAt": "2026-08-02T04:55:18.628Z",
+  "updatedAt": "2026-08-02T04:59:27.143Z",
+  "completedAt": "2026-08-02T04:59:26.942Z",
+  "expirationDate": "2026-09-01T04:55:18.659Z",
+  "isForIosSimulator": false,
+  "metrics": {
+    "buildWaitTime": 3460,
+    "buildQueueTime": 4442,
+    "buildDuration": 240412
+  }
+}

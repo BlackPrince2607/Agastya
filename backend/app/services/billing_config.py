@@ -68,10 +68,13 @@ def build_billing_config(
     currency = "INR" if country_code == "IN" else "USD"
     plans: dict[str, Any] = {}
     if settings.razorpay_configured and currency == "INR":
-        amount = settings.razorpay_premium_amount_paise
         plans = {
-            "lifetime": {
-                "amount": amount,
+            "monthly": {
+                "amount": settings.razorpay_amount_monthly_paise,
+                "currency": "INR",
+            },
+            "annual": {
+                "amount": settings.razorpay_amount_annual_paise,
                 "currency": "INR",
             },
         }
