@@ -109,14 +109,6 @@ export function ReportInsightCard({ insight, expanded, onOpen, onClose }: Report
               numberOfLines={3}>
               {insight.body}
             </Text>
-            <View className="mt-3 flex-row items-center gap-2">
-              <Text className="font-label text-[18px] leading-5 tracking-[0.35em] text-primary/80">
-                ···
-              </Text>
-              <Text className="font-label text-[12px] uppercase tracking-[0.14em] text-primary">
-                Read full insight
-              </Text>
-            </View>
           </Pressable>
         ) : (
           <MotiView
@@ -130,15 +122,6 @@ export function ReportInsightCard({ insight, expanded, onOpen, onClose }: Report
             <Text className="mt-1 font-body text-[15px] leading-7 text-on-surface/90">
               {insight.body}
             </Text>
-            <Pressable
-              onPress={closeCard}
-              accessibilityRole="button"
-              accessibilityLabel="Close insight"
-              className="mt-4 self-start rounded-full border border-white/12 bg-white/[0.05] px-4 py-2 active:opacity-80">
-              <Text className="font-label text-[12px] uppercase tracking-[0.12em] text-on-surface-variant">
-                Close
-              </Text>
-            </Pressable>
           </MotiView>
         )}
       </GlassCard>

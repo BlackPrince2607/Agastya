@@ -2,11 +2,15 @@ import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { View, Text } from 'react-native';
 
 import { colors } from '@/constants/theme';
+import { METRIC_GRADIENTS, metricKeyFromLabel } from '@/utils/lifeMetrics';
+import type { MetricKey } from '@/types/report';
 
 type MetricDonutProps = {
   label: string;
   value: number;
   size?: number;
+  /** Explicit pillar — otherwise inferred from label. */
+  metricKey?: MetricKey;
   strokeGradient?: readonly [string, string];
 };
 
@@ -14,9 +18,14 @@ export function MetricDonut({
   label,
   value,
   size = 86,
-  strokeGradient = [colors.cyan, colors.purple] as const,
+  metricKey,
+  strokeGradient,
 }: MetricDonutProps) {
-  // Values are normalized upstream (≈58–96); still clamp for safety.
+  const key = metricKey ?? metricKeyFromLabel(label);
+  const gradient =
+    strokeGradient ?? (key ? METRIC_GRADIENTS[key] : ([colors.cyan, colors.purple] as const));
+
+  // Values are normalized upstream; still clamp for SVG safety.
   const clamped = Math.max(0, Math.min(100, Math.round(value)));
   const stroke = 8;
   const r = size / 2 - stroke / 2;
@@ -27,7 +36,14 @@ export function MetricDonut({
     <View className="items-center gap-2">
       <View style={{ width: size, height: size }} className="items-center justify-center">
         <Svg width={size} height={size} style={{ transform: [{ rotate: '-90deg' }] }}>
-          <Circle cx={size / 2} cy={size / 2} r={r} stroke="rgba(255,255,255,0.08)" strokeWidth={stroke} fill="rgba(255,255,255,0.03)" />
+          <Circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            stroke="rgba(255,255,255,0.08)"
+            strokeWidth={stroke}
+            fill="rgba(255,255,255,0.03)"
+          />
           <Circle
             cx={size / 2}
             cy={size / 2}
@@ -40,8 +56,8 @@ export function MetricDonut({
           />
           <Defs>
             <LinearGradient id={`metric-${slug}-${clamped}`} x1="0" y1="0" x2="1" y2="1">
-              <Stop offset="0%" stopColor={strokeGradient[0]} />
-              <Stop offset="100%" stopColor={strokeGradient[1]} />
+              <Stop offset="0%" stopColor={gradient[0]} />
+              <Stop offset="100%" stopColor={gradient[1]} />
             </LinearGradient>
           </Defs>
         </Svg>

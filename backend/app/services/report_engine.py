@@ -130,32 +130,77 @@ def _span(n: int, lo: int, hi: int) -> int:
     return lo + (n % (hi - lo + 1))
 
 
-def _clamp_metric(n: float | int) -> int:
-    """Keep life scores in an affirming mid–high band (handles LLM 0–1 quirks)."""
+def _clamp_metric(n: float | int, key: str | None = None) -> int:
+    """Affirming band with per-pillar floors so scores stay visually distinct."""
+    bands = {
+        "love": (54, 94),
+        "career": (58, 97),
+        "money": (48, 88),
+        "growth": (56, 95),
+    }
+    lo, hi = bands.get(key or "", (48, 97))
     try:
         value = float(n)
     except (TypeError, ValueError):
         value = 72.0
     if 0 < value <= 1:
         value *= 100
-    return max(58, min(96, int(round(value))))
+    return max(lo, min(hi, int(round(value))))
+
+
+def _differentiate_metrics(data: dict[str, int]) -> dict[str, int]:
+    """Stretch flat score sets and avoid identical percentages across pillars."""
+    keys = ["love", "career", "money", "growth"]
+    values = [data[k] for k in keys]
+    lo, hi = min(values), max(values)
+    spread = hi - lo
+    centers = {"love": 74, "career": 86, "money": 62, "growth": 80}
+    out = dict(data)
+    if spread < 16:
+        mean = sum(values) / len(values) if values else 72.0
+        scale = 16 / max(spread, 1)
+        for key in keys:
+            relative = (data[key] - mean) * scale
+            toward = (centers[key] - mean) * 0.35
+            out[key] = _clamp_metric(mean + relative + toward, key)
+
+    used: set[int] = set()
+    for key in keys:
+        v = out[key]
+        guard = 0
+        while v in used and guard < 12:
+            step = (guard // 2) + 1
+            v = v + (step if guard % 2 == 0 else -step)
+            v = _clamp_metric(v, key)
+            guard += 1
+        used.add(v)
+        out[key] = v
+    return out
 
 
 def _metrics(seed: str, topics: list[str]) -> LifeMetrics:
     digs = _digits(seed)
+    # Distinct centers: career tends high, money more moderate — reads as a real profile.
     base = LifeMetrics(
-        love=_span(digs[0], 64, 90),
-        career=_span(digs[1], 66, 93),
-        money=_span(digs[2], 60, 88),
-        growth=_span(digs[3], 65, 92),
+        love=_span(digs[0], 54, 94),
+        career=_span(digs[1], 58, 97),
+        money=_span(digs[2], 48, 88),
+        growth=_span(digs[3], 56, 95),
     )
-    topic_map = {"love": "love", "career": "career", "money": "money", "growth": "growth", "matching": "love"}
+    topic_map = {
+        "love": "love",
+        "career": "career",
+        "money": "money",
+        "growth": "growth",
+        "matching": "love",
+    }
     data = base.model_dump()
     for topic in topics:
         key = topic_map.get(topic)
         if key:
-            data[key] = min(96, round(data[key] * 1.06))
-    return LifeMetrics(**{k: _clamp_metric(v) for k, v in data.items()})
+            data[key] = min(97, data[key] + 9)
+    data = _differentiate_metrics({k: _clamp_metric(v, k) for k, v in data.items()})
+    return LifeMetrics(**data)
 
 
 def _aura_palette(seed: str) -> AuraProfile:
@@ -302,18 +347,17 @@ async def build_report_payload(
         raw = completion.choices[0].message.content or ""
         data = loads_llm_json(raw, feature="report")
         report = FullReport.model_validate(data)
-        # Normalize LLM metrics into the display band (fractions / tiny scores → 58–96).
+        # Normalize LLM metrics into distinct per-pillar bands (fractions / flat sets).
         m = report.metrics
-        report = report.model_copy(
-            update={
-                "metrics": LifeMetrics(
-                    love=_clamp_metric(m.love),
-                    career=_clamp_metric(m.career),
-                    money=_clamp_metric(m.money),
-                    growth=_clamp_metric(m.growth),
-                )
+        differentiated = _differentiate_metrics(
+            {
+                "love": _clamp_metric(m.love, "love"),
+                "career": _clamp_metric(m.career, "career"),
+                "money": _clamp_metric(m.money, "money"),
+                "growth": _clamp_metric(m.growth, "growth"),
             }
         )
+        report = report.model_copy(update={"metrics": LifeMetrics(**differentiated)})
         if mode == "preview":
             report = report.model_copy(update={"sections": report.sections[:2]})
         # ensure palm echoes request

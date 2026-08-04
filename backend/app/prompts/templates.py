@@ -31,9 +31,11 @@ Craft JSON matching this schema exactly:
 }}
 
 Rules:
-- metrics values MUST be integers from 58 to 96 (inclusive) on a 0–100 life-score scale.
-  Never use 0–1 fractions, never score below 58, and keep scores differentiated (not all identical).
-  Focus topics the user chose may sit slightly higher within that band.
+- metrics values MUST be integers on a 0–100 life-score scale with clear contrast between pillars:
+  love 54–94, career 58–97, money 48–88, growth 56–95.
+  Never use 0–1 fractions. Never make all four scores within ~10 points of each other.
+  Give each pillar a distinct feel (e.g. career often leads, money more moderate).
+  Focus topics the user chose should sit clearly higher (+8 to +12) within their band.
 - Prefer measured line_features (depth, length, breaks, curvature) over vague labels when present.
 - Each sections[].body should be 2–4 sentences so the client can expand the card for fuller detail.
 - Cite at least one concrete palm signal (line_features, mounts, or line motif) in each full-mode section body.

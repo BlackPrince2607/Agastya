@@ -215,10 +215,10 @@ export default function ReportPreviewScreen() {
                 Your scores across love, career, money, and growth.
               </Text>
               <View className="mt-8 flex-row flex-wrap justify-around gap-x-3 gap-y-8">
-                <MetricDonut label="Love" value={reading.metrics.love} size={72} />
-                <MetricDonut label="Career" value={reading.metrics.career} size={72} />
-                <MetricDonut label="Money" value={reading.metrics.money} size={72} />
-                <MetricDonut label="Growth" value={reading.metrics.growth} size={72} />
+                <MetricDonut label="Love" metricKey="love" value={reading.metrics.love} size={72} />
+                <MetricDonut label="Career" metricKey="career" value={reading.metrics.career} size={72} />
+                <MetricDonut label="Money" metricKey="money" value={reading.metrics.money} size={72} />
+                <MetricDonut label="Growth" metricKey="growth" value={reading.metrics.growth} size={72} />
               </View>
             </GlassCard>
             <View

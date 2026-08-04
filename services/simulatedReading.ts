@@ -2,7 +2,7 @@ import type { FocusTopic } from '@/store/sessionStore';
 import type { PalmAnalysisDto } from '@/types/palmAnalysis';
 import type { SimulatedReading } from '@/types/report';
 import { inRange, seedDigits } from '@/utils/deterministicNumbers';
-import { normalizeLifeMetrics } from '@/utils/lifeMetrics';
+import { buildSeedLifeMetrics } from '@/utils/lifeMetrics';
 import {
   palmArchetypeLine,
   palmHeadline,
@@ -27,26 +27,8 @@ export function buildSimulatedReading(
 ): SimulatedReading {
   const palm = palmAnalysis ?? DEFAULT_PALM;
   const digs = seedDigits(seedHint || 'pulse', 8);
-  // Mid–high bands so life scores feel affirming while still differentiated.
-  const baseRaw = {
-    love: inRange(digs[0] ?? 0, 64, 90),
-    career: inRange(digs[1] ?? 0, 66, 93),
-    money: inRange(digs[2] ?? 0, 60, 88),
-    growth: inRange(digs[3] ?? 0, 65, 92),
-  };
   const focus = focusTopics ?? [];
-  for (const topic of focus) {
-    const key =
-      topic === 'love' || topic === 'matching'
-        ? 'love'
-        : topic === 'career'
-          ? 'career'
-          : topic === 'money'
-            ? 'money'
-            : 'growth';
-    baseRaw[key] = Math.min(96, Math.round(baseRaw[key] * 1.06));
-  }
-  const base = normalizeLifeMetrics(baseRaw);
+  const base = buildSeedLifeMetrics(digs, focus);
 
   const auraPalette = [
     ['#7c3aed', '#a855f7', '#06b6d4', '#2dd4bf'] as const,

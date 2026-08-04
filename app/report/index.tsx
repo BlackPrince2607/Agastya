@@ -202,10 +202,10 @@ export default function ReportScreen() {
                   <Text className="mt-1 font-body text-[13px] text-on-surface-variant">Preview metrics</Text>
                 ) : null}
                 <View className="mt-6 flex-row flex-wrap justify-around gap-x-4 gap-y-8">
-                  <MetricDonut label="Love" value={dossier.metrics.love} />
-                  <MetricDonut label="Career" value={dossier.metrics.career} />
-                  <MetricDonut label="Money" value={dossier.metrics.money} />
-                  <MetricDonut label="Growth" value={dossier.metrics.growth} />
+                  <MetricDonut label="Love" metricKey="love" value={dossier.metrics.love} />
+                  <MetricDonut label="Career" metricKey="career" value={dossier.metrics.career} />
+                  <MetricDonut label="Money" metricKey="money" value={dossier.metrics.money} />
+                  <MetricDonut label="Growth" metricKey="growth" value={dossier.metrics.growth} />
                 </View>
               </GlassCard>
               <AuraNebulaCard aura={dossier.aura} />
