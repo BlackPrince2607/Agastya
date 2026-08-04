@@ -67,8 +67,9 @@ async function finalizeAfterEntitlement(
   }
 
   const reportOk = await materializeFullReport(seed);
-  if (!reportOk && !useSessionStore.getState().fullReading) {
-    if (!serverPremium) setPremium(false);
+  // Paid users should enter the app even if full report is still generating.
+  if (!reportOk && !useSessionStore.getState().fullReading && !serverPremium) {
+    setPremium(false);
     return { ok: false, reason: 'report_failed' };
   }
 
@@ -211,7 +212,7 @@ export async function checkPremiumStatus(options: { seed?: string }): Promise<Un
   return { ok: false, reason: 'not_entitled' };
 }
 
-/** After Razorpay checkout success deep link — confirm with Razorpay API, then poll. */
+/** Prefer entitlement over report materialization — never strand a paid user. */
 export async function finalizeRazorpayCheckout(
   seed?: string,
   confirmOptions?: ConfirmRazorpayOptions,
@@ -222,10 +223,7 @@ export async function finalizeRazorpayCheckout(
   const confirmed = await confirmRazorpayCheckout(confirmOptions ?? {});
   if (confirmed.ok) {
     setPremium(true);
-    const reportOk = await materializeFullReport(seed);
-    if (!reportOk && !useSessionStore.getState().fullReading) {
-      return { ok: false, reason: 'report_failed' };
-    }
+    await materializeFullReport(seed);
     track(AnalyticsEvent.PURCHASE_COMPLETED, { source: 'razorpay' });
     return { ok: true, source: 'razorpay' };
   }
@@ -246,11 +244,8 @@ export async function finalizeRazorpayCheckout(
   if (!entitled) {
     return { ok: false, reason: 'not_entitled' };
   }
-  const reportOk = await materializeFullReport(seed);
-  if (!reportOk && !useSessionStore.getState().fullReading) {
-    return { ok: false, reason: 'report_failed' };
-  }
   setPremium(true);
+  await materializeFullReport(seed);
   track(AnalyticsEvent.PURCHASE_COMPLETED, { source: 'razorpay' });
   return { ok: true, source: 'razorpay' };
 }

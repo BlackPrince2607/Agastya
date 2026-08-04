@@ -1,17 +1,10 @@
 import type { InsightSection, LifeMetrics, SimulatedReading } from '@/types/report';
-
-function num(v: unknown, fallback: number) {
-  return typeof v === 'number' && Number.isFinite(v) ? v : fallback;
-}
+import { normalizeLifeMetrics } from '@/utils/lifeMetrics';
 
 export function normalizeFullReport(payload: Record<string, unknown>): SimulatedReading {
   const metricsRaw = payload.metrics as Record<string, unknown> | undefined;
-  const metrics: LifeMetrics = {
-    love: num(metricsRaw?.love, 72),
-    career: num(metricsRaw?.career, 72),
-    money: num(metricsRaw?.money, 72),
-    growth: num(metricsRaw?.growth, 72),
-  };
+  const metrics: LifeMetrics = normalizeLifeMetrics(metricsRaw);
+
   const auraRaw = payload.aura as Record<string, unknown> | undefined;
   const gradient = Array.isArray(auraRaw?.gradient)
     ? (auraRaw?.gradient as string[])

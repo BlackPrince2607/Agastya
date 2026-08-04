@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -25,6 +25,7 @@ import { useAuthSession } from '@/hooks/useAuthSession';
 import type { FocusTopic } from '@/store/sessionStore';
 import { useSessionStore } from '@/store/sessionStore';
 import { enterMainApp } from '@/utils/navigationFlow';
+import { normalizeLifeMetrics } from '@/utils/lifeMetrics';
 import { headlineNeedsPalmFix } from '@/utils/palmInsights';
 import { isEmailPremiumAllowlisted } from '@/utils/premiumAllowlist';
 
@@ -69,14 +70,19 @@ export default function ReportPreviewScreen() {
 
   const reading = useMemo(() => {
     const base = previewReading ?? buildSimulatedReading(mergedSeed, focus, palmAnalysis);
-    if (palmAnalysis && previewReading && headlineNeedsPalmFix(previewReading.headline)) {
-      return buildSimulatedReading(mergedSeed, focus, palmAnalysis);
-    }
-    return base;
+    const fixed =
+      palmAnalysis && previewReading && headlineNeedsPalmFix(previewReading.headline)
+        ? buildSimulatedReading(mergedSeed, focus, palmAnalysis)
+        : base;
+    return {
+      ...fixed,
+      metrics: normalizeLifeMetrics(fixed.metrics),
+    };
   }, [previewReading, mergedSeed, focus, palmAnalysis]);
   const previewSections = reading.sections.slice(0, 2);
   const motifChips = palmAnalysis ? palmReadingChips(palmAnalysis) : null;
   const insets = useSafeAreaInsets();
+  const [openInsightId, setOpenInsightId] = useState<string | null>(null);
 
   return (
     <CosmicScreen variant="stitch">
@@ -184,7 +190,12 @@ export default function ReportPreviewScreen() {
                 from={{ opacity: 0, translateY: 10 }}
                 animate={{ opacity: 1, translateY: 0 }}
                 transition={{ delay: idx * 80 }}>
-                <ReportInsightCard insight={insight} />
+                <ReportInsightCard
+                  insight={insight}
+                  expanded={openInsightId === insight.id}
+                  onOpen={() => setOpenInsightId(insight.id)}
+                  onClose={() => setOpenInsightId((id) => (id === insight.id ? null : id))}
+                />
               </MotiView>
             ))}
           </View>

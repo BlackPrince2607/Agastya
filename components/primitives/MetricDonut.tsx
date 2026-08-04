@@ -16,7 +16,8 @@ export function MetricDonut({
   size = 86,
   strokeGradient = [colors.cyan, colors.purple] as const,
 }: MetricDonutProps) {
-  const clamped = Math.max(8, Math.min(100, value));
+  // Values are normalized upstream (≈58–96); still clamp for safety.
+  const clamped = Math.max(0, Math.min(100, Math.round(value)));
   const stroke = 8;
   const r = size / 2 - stroke / 2;
   const c = 2 * Math.PI * r;

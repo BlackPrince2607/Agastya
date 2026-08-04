@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams, usePathname, useSegments } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { Platform, Pressable, ScrollView, Text, View, Alert } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState, Platform, Pressable, ScrollView, Text, View, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { MotiView } from 'moti';
@@ -16,7 +16,11 @@ import { ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS } from '@/constants/onboarding
 import { stitchMd3 } from '@/constants/stitchWelcome';
 import { colors, stitchSignal } from '@/constants/theme';
 import { AnalyticsEvent, track, trackOnce } from '@/services/analytics';
-import { getBillingConfig } from '@/services/billing/billingService';
+import {
+  clearLastCheckoutIntentId,
+  getBillingConfig,
+  isCheckoutReturnPending,
+} from '@/services/billing/billingService';
 import type { BillingConfig } from '@/services/billing/billingService';
 import { isPlayUserChoiceAvailable } from '@/services/billing/playUserChoice';
 import {
@@ -92,7 +96,13 @@ export default function PaywallScreen() {
   const { isSignedIn, email: authEmail, loading: authLoading } = useAuthSession();
   const signedIn = Boolean(isSignedIn || storeUserId);
   const [busy, setBusy] = useState(false);
+  const [busyLabel, setBusyLabel] = useState<string | null>(null);
   const [billingConfig, setBillingConfig] = useState<BillingConfig | null>(null);
+  const resumeInFlightRef = useRef(false);
+  /** Auto-confirm attempts after returning from browser checkout. */
+  const resumeAttemptsRef = useRef(0);
+  const lastResumeAtRef = useRef(0);
+  const MAX_RESUME_ATTEMPTS = 3;
 
   const testBypass =
     (process.env.EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS || '').trim() === 'true';
@@ -108,7 +118,7 @@ export default function PaywallScreen() {
     });
   };
 
-  const afterUnlockSuccess = () => {
+  const afterUnlockSuccess = useCallback(() => {
     // Already signed in before payment — enter the app directly.
     if (signedIn || useSessionStore.getState().supabaseUserId) {
       enterMainApp();
@@ -118,7 +128,7 @@ export default function PaywallScreen() {
       pathname: '/onboarding/account',
       params: { seed: mergedSeed, fromPaywall: '1' },
     });
-  };
+  }, [signedIn, mergedSeed]);
 
   useEffect(() => {
     trackOnce('paywall_viewed', AnalyticsEvent.PAYWALL_VIEWED);
@@ -162,18 +172,39 @@ export default function PaywallScreen() {
   };
 
   const unlockLabel = () => {
-    if (busy) return 'Processing...';
+    if (busy) return busyLabel ?? 'Processing...';
     if (!signedIn) return 'Sign in to unlock';
     return 'Unlock Premium';
   };
 
+  const finishUnlockAttempt = useCallback(
+    (result: Awaited<ReturnType<typeof finalizeRazorpayCheckout>>, { alertOnFail }: { alertOnFail: boolean }) => {
+      // Payment may have granted premium even when report materialization lagged.
+      if (result.ok || useSessionStore.getState().hasUnlockedPremium) {
+        afterUnlockSuccess();
+        return;
+      }
+      if (!alertOnFail) return;
+      Alert.alert(
+        'Purchase pending',
+        result.reason === 'report_failed'
+          ? 'Payment may have succeeded, but we could not load your full report yet. Try checking premium status or sign in again.'
+          : 'We could not confirm your payment yet. Wait a moment and tap Check premium status, or contact support if this continues.',
+      );
+    },
+    [afterUnlockSuccess],
+  );
+
   useEffect(() => {
     if (checkout === 'cancelled') {
+      clearLastCheckoutIntentId();
+      resumeAttemptsRef.current = 0;
       Alert.alert('Checkout cancelled', 'No charge was completed. You can try again when ready.');
       return;
     }
     if (checkout !== 'success') return;
     let cancelled = false;
+    setBusyLabel('Confirming payment...');
     setBusy(true);
     void (async () => {
       const result = await finalizeRazorpayCheckout(mergedSeed, {
@@ -184,17 +215,9 @@ export default function PaywallScreen() {
         razorpaySignature: razorpay_signature,
       });
       if (cancelled) return;
-      if (result.ok) {
-        afterUnlockSuccess();
-      } else {
-        Alert.alert(
-          'Purchase pending',
-          result.reason === 'report_failed'
-            ? 'Payment may have succeeded, but we could not load your full report yet. Try checking premium status or sign in again.'
-            : 'We could not confirm your payment yet. Wait a moment and tap Check premium status, or contact support if this continues.',
-        );
-      }
+      finishUnlockAttempt(result, { alertOnFail: true });
       setBusy(false);
+      setBusyLabel(null);
     })();
     return () => {
       cancelled = true;
@@ -207,7 +230,57 @@ export default function PaywallScreen() {
     razorpay_payment_link_reference_id,
     razorpay_payment_link_status,
     razorpay_signature,
+    finishUnlockAttempt,
   ]);
+
+  // Browser checkout often returns via Android back without checkout=success deep link.
+  // Confirm entitlement on resume so users enter home immediately after paying.
+  useEffect(() => {
+    if (checkout === 'success' || checkout === 'cancelled') return;
+
+    const tryResumeAfterCheckout = async () => {
+      if (resumeInFlightRef.current) return;
+      if (!(await isCheckoutReturnPending())) return;
+      if (resumeAttemptsRef.current >= MAX_RESUME_ATTEMPTS) return;
+
+      const now = Date.now();
+      if (now - lastResumeAtRef.current < 2000) return;
+      lastResumeAtRef.current = now;
+
+      resumeAttemptsRef.current += 1;
+      resumeInFlightRef.current = true;
+      setBusyLabel('Confirming payment...');
+      setBusy(true);
+      try {
+        if (useSessionStore.getState().hasUnlockedPremium) {
+          clearLastCheckoutIntentId();
+          afterUnlockSuccess();
+          return;
+        }
+        const result = await finalizeRazorpayCheckout(mergedSeed);
+        const unlocked = result.ok || useSessionStore.getState().hasUnlockedPremium;
+        finishUnlockAttempt(result, {
+          alertOnFail: !unlocked && resumeAttemptsRef.current >= MAX_RESUME_ATTEMPTS,
+        });
+      } finally {
+        setBusy(false);
+        setBusyLabel(null);
+        resumeInFlightRef.current = false;
+      }
+    };
+
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') {
+        void tryResumeAfterCheckout();
+      }
+    });
+
+    if (AppState.currentState === 'active') {
+      void tryResumeAfterCheckout();
+    }
+
+    return () => sub.remove();
+  }, [checkout, mergedSeed, afterUnlockSuccess, finishUnlockAttempt]);
 
   const unlockFailureMessage = (reason: string) => {
     switch (reason) {
@@ -250,7 +323,10 @@ export default function PaywallScreen() {
       }
 
       if (result.source === 'razorpay') {
-        // Browser checkout opened — keep busy false; return deep link resumes finalize.
+        // Browser checkout opened — resume listener confirms when the app returns.
+        resumeAttemptsRef.current = 0;
+        lastResumeAtRef.current = 0;
+        setBusyLabel('Complete payment in browser…');
         return;
       }
 
@@ -265,7 +341,7 @@ export default function PaywallScreen() {
     setBusy(true);
     try {
       const result = await checkPremiumStatus({ seed: mergedSeed });
-      if (result.ok) {
+      if (result.ok || useSessionStore.getState().hasUnlockedPremium) {
         afterUnlockSuccess();
       } else if (result.reason !== 'cancelled') {
         Alert.alert('No Premium found', unlockFailureMessage(result.reason));

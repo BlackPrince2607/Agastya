@@ -8,6 +8,7 @@ import {
   verifyGooglePlayPurchase,
 } from '@/services/agastyaApi';
 import { isApiConfigured } from '@/services/env';
+import { persistentStorage } from '@/services/persistentStorage';
 import type { BillingPeriod } from '@/store/sessionStore';
 import { useSessionStore } from '@/store/sessionStore';
 
@@ -26,10 +27,15 @@ export type CheckoutResult =
   | { ok: true; redirecting: true }
   | { ok: false; reason: 'cancelled' | 'unavailable' | 'failed' | 'need_sign_in' };
 
+const CHECKOUT_PENDING_KEY = 'agastya.billing.checkoutPending';
+
 let cachedConfig: { at: number; config: BillingConfig | null } | null = null;
 
 /** Last checkout intent created on this device — used when deep-link params are missing. */
 let lastCheckoutIntentId: string | null = null;
+
+/** Browser checkout was opened; app should confirm on resume even if deep link never arrives. */
+let checkoutReturnPending = false;
 
 export function getLastCheckoutIntentId(): string | null {
   return lastCheckoutIntentId;
@@ -37,6 +43,38 @@ export function getLastCheckoutIntentId(): string | null {
 
 export function clearLastCheckoutIntentId(): void {
   lastCheckoutIntentId = null;
+  checkoutReturnPending = false;
+  void persistentStorage.removeItem(CHECKOUT_PENDING_KEY);
+}
+
+async function markCheckoutOpened(intentId: string | null): Promise<void> {
+  lastCheckoutIntentId = intentId;
+  checkoutReturnPending = true;
+  try {
+    await persistentStorage.setItem(CHECKOUT_PENDING_KEY, intentId || '1');
+  } catch {
+    /* ignore storage failures */
+  }
+}
+
+async function hydrateCheckoutPending(): Promise<void> {
+  if (checkoutReturnPending || lastCheckoutIntentId) return;
+  try {
+    const stored = await persistentStorage.getItem(CHECKOUT_PENDING_KEY);
+    if (!stored) return;
+    checkoutReturnPending = true;
+    if (stored !== '1') {
+      lastCheckoutIntentId = stored;
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Whether a Razorpay browser checkout is waiting for confirm (deep link may never arrive). */
+export async function isCheckoutReturnPending(): Promise<boolean> {
+  await hydrateCheckoutPending();
+  return checkoutReturnPending || Boolean(lastCheckoutIntentId);
 }
 
 export async function getBillingConfig(force = false): Promise<BillingConfig | null> {
@@ -94,9 +132,7 @@ export async function startRazorpayCheckout(options: {
       platform: 'android',
     });
 
-    if (checkoutIntentId) {
-      lastCheckoutIntentId = checkoutIntentId;
-    }
+    await markCheckoutOpened(checkoutIntentId || null);
 
     await Linking.openURL(checkoutUrl);
     return { ok: true, redirecting: true };

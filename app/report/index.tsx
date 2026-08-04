@@ -19,6 +19,7 @@ import type { PalmAnalysisDto } from '@/types/palmAnalysis';
 import { PREDICTION_PERIODS, type PredictionPeriod } from '@/types/predictions';
 import { buildLocalPredictions } from '@/utils/localPredictions';
 import { withApiRetry } from '@/utils/apiRetry';
+import { normalizeLifeMetrics } from '@/utils/lifeMetrics';
 import { palmLineInsights, personalityProfile, headlineNeedsPalmFix, mountSummaries } from '@/utils/palmInsights';
 import { paywallRouteParams } from '@/utils/paywallNavigation';
 
@@ -53,6 +54,7 @@ export default function ReportScreen() {
   const [active, setActive] = useState<ReportTab>(initialTab);
   const [period, setPeriod] = useState<PredictionPeriod>('month');
   const [predictionsLoading, setPredictionsLoading] = useState(false);
+  const [openInsightId, setOpenInsightId] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
 
   const selectTab = (next: ReportTab) => {
@@ -81,10 +83,14 @@ export default function ReportScreen() {
     const base =
       (premium ? fullReading ?? previewReading : previewReading) ??
       buildSimulatedReading(seed ?? 'pulse', focuses, palm);
-    if (palmAnalysis && base && headlineNeedsPalmFix(base.headline)) {
-      return buildSimulatedReading(seed ?? 'pulse', focuses, palm);
-    }
-    return base;
+    const fixed =
+      palmAnalysis && base && headlineNeedsPalmFix(base.headline)
+        ? buildSimulatedReading(seed ?? 'pulse', focuses, palm)
+        : base;
+    return {
+      ...fixed,
+      metrics: normalizeLifeMetrics(fixed.metrics),
+    };
   }, [premium, fullReading, previewReading, seed, focuses, palm, palmAnalysis]);
   const lines = useMemo(() => palmLineInsights(palm, seed ?? 'lines'), [palm, seed]);
   const persona = useMemo(() => personalityProfile(palm, seed ?? 'persona'), [palm, seed]);
@@ -208,7 +214,13 @@ export default function ReportScreen() {
                 <Text className="font-body text-[16px] leading-7 text-on-surface-variant">{dossier.boldPrediction}</Text>
               </GlassCard>
               {sections.map((sec) => (
-                <InsightCard key={sec.id} insight={sec} />
+                <InsightCard
+                  key={sec.id}
+                  insight={sec}
+                  expanded={openInsightId === sec.id}
+                  onOpen={() => setOpenInsightId(sec.id)}
+                  onClose={() => setOpenInsightId((id) => (id === sec.id ? null : id))}
+                />
               ))}
               {!premium ? <UpgradeBanner /> : null}
             </View>

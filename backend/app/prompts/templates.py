@@ -31,7 +31,11 @@ Craft JSON matching this schema exactly:
 }}
 
 Rules:
+- metrics values MUST be integers from 58 to 96 (inclusive) on a 0–100 life-score scale.
+  Never use 0–1 fractions, never score below 58, and keep scores differentiated (not all identical).
+  Focus topics the user chose may sit slightly higher within that band.
 - Prefer measured line_features (depth, length, breaks, curvature) over vague labels when present.
+- Each sections[].body should be 2–4 sentences so the client can expand the card for fuller detail.
 - Cite at least one concrete palm signal (line_features, mounts, or line motif) in each full-mode section body.
 - Never put internal IDs, timestamps, or scan seeds in headline or body text.
 - mode=preview: keep sections punchy and teasing (personality + love will be shown).

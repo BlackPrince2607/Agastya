@@ -130,21 +130,32 @@ def _span(n: int, lo: int, hi: int) -> int:
     return lo + (n % (hi - lo + 1))
 
 
+def _clamp_metric(n: float | int) -> int:
+    """Keep life scores in an affirming mid–high band (handles LLM 0–1 quirks)."""
+    try:
+        value = float(n)
+    except (TypeError, ValueError):
+        value = 72.0
+    if 0 < value <= 1:
+        value *= 100
+    return max(58, min(96, int(round(value))))
+
+
 def _metrics(seed: str, topics: list[str]) -> LifeMetrics:
     digs = _digits(seed)
     base = LifeMetrics(
-        love=_span(digs[0], 52, 86),
-        career=_span(digs[1], 58, 92),
-        money=_span(digs[2], 40, 78),
-        growth=_span(digs[3], 55, 90),
+        love=_span(digs[0], 64, 90),
+        career=_span(digs[1], 66, 93),
+        money=_span(digs[2], 60, 88),
+        growth=_span(digs[3], 65, 92),
     )
-    topic_map = {"love": "love", "career": "career", "money": "money", "growth": "growth"}
+    topic_map = {"love": "love", "career": "career", "money": "money", "growth": "growth", "matching": "love"}
     data = base.model_dump()
     for topic in topics:
         key = topic_map.get(topic)
         if key:
-            data[key] = min(95, round(data[key] * 1.08))
-    return LifeMetrics(**data)
+            data[key] = min(96, round(data[key] * 1.06))
+    return LifeMetrics(**{k: _clamp_metric(v) for k, v in data.items()})
 
 
 def _aura_palette(seed: str) -> AuraProfile:
@@ -291,6 +302,18 @@ async def build_report_payload(
         raw = completion.choices[0].message.content or ""
         data = loads_llm_json(raw, feature="report")
         report = FullReport.model_validate(data)
+        # Normalize LLM metrics into the display band (fractions / tiny scores → 58–96).
+        m = report.metrics
+        report = report.model_copy(
+            update={
+                "metrics": LifeMetrics(
+                    love=_clamp_metric(m.love),
+                    career=_clamp_metric(m.career),
+                    money=_clamp_metric(m.money),
+                    growth=_clamp_metric(m.growth),
+                )
+            }
+        )
         if mode == "preview":
             report = report.model_copy(update={"sections": report.sections[:2]})
         # ensure palm echoes request

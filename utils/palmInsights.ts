@@ -205,9 +205,9 @@ export function personalityProfile(palm: PalmAnalysisDto, seed: string): Persona
   ].filter((v, i, arr) => arr.indexOf(v) === i);
 
   const strengths = [
-    { label: 'Leadership', value: 3 + Math.round((digs[2] ?? 0.5) * 2) },
-    { label: 'Problem Solving', value: 3 + Math.round((digs[3] ?? 0.6) * 2) },
-    { label: 'Communication', value: 3 + Math.round((digs[4] ?? 0.4) * 2) },
+    { label: 'Leadership', value: 4 + Math.round((digs[2] ?? 0.5) * 1) },
+    { label: 'Problem Solving', value: 4 + Math.round((digs[3] ?? 0.6) * 1) },
+    { label: 'Communication', value: 4 + Math.round((digs[4] ?? 0.4) * 1) },
   ];
 
   const persona = capitalize(palm.personality || 'visionary');
