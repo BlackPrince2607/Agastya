@@ -6,6 +6,7 @@ import {
   isAndroidBillingAvailable,
   startRazorpayCheckout,
   confirmRazorpayCheckout,
+  clearLastCheckoutIntentId,
   verifyPlayPurchase,
   type ConfirmRazorpayOptions,
 } from '@/services/billing/billingService';
@@ -219,17 +220,24 @@ export async function finalizeRazorpayCheckout(
 ): Promise<UnlockResult> {
   const setPremium = useSessionStore.getState().setPremium;
 
+  const grantPremium = async (): Promise<UnlockResult> => {
+    setPremium(true);
+    clearLastCheckoutIntentId();
+    // Do not block entry on report generation — home can load while this finishes.
+    void materializeFullReport(seed);
+    track(AnalyticsEvent.PURCHASE_COMPLETED, { source: 'razorpay' });
+    return { ok: true, source: 'razorpay' };
+  };
+
   // Prefer active confirm (does not depend on webhook delivery timing).
   const confirmed = await confirmRazorpayCheckout(confirmOptions ?? {});
   if (confirmed.ok) {
-    setPremium(true);
-    await materializeFullReport(seed);
-    track(AnalyticsEvent.PURCHASE_COMPLETED, { source: 'razorpay' });
-    return { ok: true, source: 'razorpay' };
+    return grantPremium();
   }
 
   // Fallback: webhook may still be catching up — retry confirm + bootstrap.
-  const waits = [0, 1000, 2000, 3000, 4000, 5000];
+  // Keep each call shorter; paywall polls multiple times after browser return.
+  const waits = [0, 1200, 2400, 3600];
   let entitled = false;
   for (const wait of waits) {
     if (wait) await new Promise((r) => setTimeout(r, wait));
@@ -242,12 +250,14 @@ export async function finalizeRazorpayCheckout(
     if (entitled) break;
   }
   if (!entitled) {
+    // Already premium locally (e.g. race with another confirm) — still succeed.
+    if (useSessionStore.getState().hasUnlockedPremium) {
+      clearLastCheckoutIntentId();
+      return { ok: true, source: 'razorpay' };
+    }
     return { ok: false, reason: 'not_entitled' };
   }
-  setPremium(true);
-  await materializeFullReport(seed);
-  track(AnalyticsEvent.PURCHASE_COMPLETED, { source: 'razorpay' });
-  return { ok: true, source: 'razorpay' };
+  return grantPremium();
 }
 
 /** @deprecated Use unlockPremium */

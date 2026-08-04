@@ -63,6 +63,11 @@ const FEATURES = [
   },
 ];
 
+/** Retries while Razorpay webhook / confirm API catch up after browser return. */
+const MAX_RESUME_ATTEMPTS = 8;
+const RESUME_COOLDOWN_MS = 3500;
+const RESUME_POLL_MS = 4000;
+
 export default function PaywallScreen() {
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
@@ -81,7 +86,6 @@ export default function PaywallScreen() {
   const {
     seed,
     checkout,
-    returnTo,
     razorpay_payment_id,
     razorpay_payment_link_id,
     razorpay_payment_link_reference_id,
@@ -98,11 +102,27 @@ export default function PaywallScreen() {
   const [busy, setBusy] = useState(false);
   const [busyLabel, setBusyLabel] = useState<string | null>(null);
   const [billingConfig, setBillingConfig] = useState<BillingConfig | null>(null);
+  const [awaitingCheckoutReturn, setAwaitingCheckoutReturn] = useState(false);
   const resumeInFlightRef = useRef(false);
+  const enteredAfterUnlockRef = useRef(false);
   /** Auto-confirm attempts after returning from browser checkout. */
   const resumeAttemptsRef = useRef(0);
   const lastResumeAtRef = useRef(0);
-  const MAX_RESUME_ATTEMPTS = 3;
+  const afterUnlockRef = useRef<() => void>(() => {});
+  const confirmOptsRef = useRef({
+    paymentLinkId: razorpay_payment_link_id,
+    paymentId: razorpay_payment_id,
+    paymentLinkReferenceId: razorpay_payment_link_reference_id,
+    paymentLinkStatus: razorpay_payment_link_status,
+    razorpaySignature: razorpay_signature,
+  });
+  confirmOptsRef.current = {
+    paymentLinkId: razorpay_payment_link_id,
+    paymentId: razorpay_payment_id,
+    paymentLinkReferenceId: razorpay_payment_link_reference_id,
+    paymentLinkStatus: razorpay_payment_link_status,
+    razorpaySignature: razorpay_signature,
+  };
 
   const testBypass =
     (process.env.EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS || '').trim() === 'true';
@@ -119,6 +139,12 @@ export default function PaywallScreen() {
   };
 
   const afterUnlockSuccess = useCallback(() => {
+    if (enteredAfterUnlockRef.current) return;
+    enteredAfterUnlockRef.current = true;
+    clearLastCheckoutIntentId();
+    setAwaitingCheckoutReturn(false);
+    setBusy(false);
+    setBusyLabel(null);
     // Already signed in before payment — enter the app directly.
     if (signedIn || useSessionStore.getState().supabaseUserId) {
       enterMainApp();
@@ -130,6 +156,8 @@ export default function PaywallScreen() {
     });
   }, [signedIn, mergedSeed]);
 
+  afterUnlockRef.current = afterUnlockSuccess;
+
   useEffect(() => {
     trackOnce('paywall_viewed', AnalyticsEvent.PAYWALL_VIEWED);
   }, []);
@@ -138,12 +166,13 @@ export default function PaywallScreen() {
   useEffect(() => {
     if (authLoading) return;
     if (checkout === 'success' || checkout === 'cancelled') return;
+    if (awaitingCheckoutReturn) return;
     if (signedIn) return;
     router.replace({
       pathname: '/onboarding/account',
       params: { seed: mergedSeed, toPaywall: '1' },
     });
-  }, [authLoading, signedIn, checkout, mergedSeed]);
+  }, [authLoading, signedIn, checkout, mergedSeed, awaitingCheckoutReturn]);
 
   useEffect(() => {
     let cancelled = false;
@@ -155,6 +184,30 @@ export default function PaywallScreen() {
       cancelled = true;
     };
   }, []);
+
+  // Restore pending-checkout UX after process death / remount.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      if (checkout === 'cancelled') return;
+      if (!(await isCheckoutReturnPending())) return;
+      if (cancelled) return;
+      setAwaitingCheckoutReturn(true);
+      setBusyLabel('Confirming payment...');
+      setBusy(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [checkout]);
+
+  // Never leave a paid user on the paywall — navigate as soon as premium flips.
+  useEffect(() => {
+    if (!premium && !hasPremiumAccess()) return;
+    if (checkout === 'cancelled') return;
+    if (!awaitingCheckoutReturn && checkout !== 'success') return;
+    afterUnlockRef.current();
+  }, [premium, awaitingCheckoutReturn, checkout]);
 
   const formatPlanPrice = (key: 'monthly' | 'annual', fallback: string) => {
     const plan = billingConfig?.plans?.[key];
@@ -172,7 +225,7 @@ export default function PaywallScreen() {
   };
 
   const unlockLabel = () => {
-    if (busy) return busyLabel ?? 'Processing...';
+    if (busy || awaitingCheckoutReturn) return busyLabel ?? 'Confirming payment...';
     if (!signedIn) return 'Sign in to unlock';
     return 'Unlock Premium';
   };
@@ -180,107 +233,110 @@ export default function PaywallScreen() {
   const finishUnlockAttempt = useCallback(
     (result: Awaited<ReturnType<typeof finalizeRazorpayCheckout>>, { alertOnFail }: { alertOnFail: boolean }) => {
       // Payment may have granted premium even when report materialization lagged.
-      if (result.ok || useSessionStore.getState().hasUnlockedPremium) {
-        afterUnlockSuccess();
-        return;
+      if (result.ok || useSessionStore.getState().hasUnlockedPremium || hasPremiumAccess()) {
+        afterUnlockRef.current();
+        return true;
       }
-      if (!alertOnFail) return;
+      if (!alertOnFail) return false;
       Alert.alert(
         'Purchase pending',
         result.reason === 'report_failed'
           ? 'Payment may have succeeded, but we could not load your full report yet. Try checking premium status or sign in again.'
           : 'We could not confirm your payment yet. Wait a moment and tap Check premium status, or contact support if this continues.',
       );
+      return false;
     },
-    [afterUnlockSuccess],
+    [],
   );
 
+  // Deep-link cancel, or mark success UX. Confirm runs only in the resume/poll effect below
+  // so effect remounts cannot cancel navigation after premium is granted.
   useEffect(() => {
     if (checkout === 'cancelled') {
       clearLastCheckoutIntentId();
       resumeAttemptsRef.current = 0;
+      setAwaitingCheckoutReturn(false);
+      setBusy(false);
+      setBusyLabel(null);
       Alert.alert('Checkout cancelled', 'No charge was completed. You can try again when ready.');
       return;
     }
     if (checkout !== 'success') return;
-    let cancelled = false;
+    resumeAttemptsRef.current = 0;
+    lastResumeAtRef.current = 0;
+    setAwaitingCheckoutReturn(true);
     setBusyLabel('Confirming payment...');
     setBusy(true);
-    void (async () => {
-      const result = await finalizeRazorpayCheckout(mergedSeed, {
-        paymentLinkId: razorpay_payment_link_id,
-        paymentId: razorpay_payment_id,
-        paymentLinkReferenceId: razorpay_payment_link_reference_id,
-        paymentLinkStatus: razorpay_payment_link_status,
-        razorpaySignature: razorpay_signature,
-      });
-      if (cancelled) return;
-      finishUnlockAttempt(result, { alertOnFail: true });
-      setBusy(false);
-      setBusyLabel(null);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    checkout,
-    mergedSeed,
-    razorpay_payment_id,
-    razorpay_payment_link_id,
-    razorpay_payment_link_reference_id,
-    razorpay_payment_link_status,
-    razorpay_signature,
-    finishUnlockAttempt,
-  ]);
+  }, [checkout]);
 
-  // Browser checkout often returns via Android back without checkout=success deep link.
-  // Confirm entitlement on resume so users enter home immediately after paying.
+  // Confirm on: deep link success, Android back without deep link, remount, and poll while pending.
   useEffect(() => {
-    if (checkout === 'success' || checkout === 'cancelled') return;
+    if (checkout === 'cancelled') return;
 
-    const tryResumeAfterCheckout = async () => {
+    const tryResumeAfterCheckout = async (bypassCooldown = false) => {
+      if (enteredAfterUnlockRef.current) return;
       if (resumeInFlightRef.current) return;
-      if (!(await isCheckoutReturnPending())) return;
+      if (useSessionStore.getState().hasUnlockedPremium || hasPremiumAccess()) {
+        afterUnlockRef.current();
+        return;
+      }
+
+      const pending = checkout === 'success' || (await isCheckoutReturnPending());
+      if (!pending) return;
       if (resumeAttemptsRef.current >= MAX_RESUME_ATTEMPTS) return;
 
       const now = Date.now();
-      if (now - lastResumeAtRef.current < 2000) return;
+      if (!bypassCooldown && now - lastResumeAtRef.current < RESUME_COOLDOWN_MS) return;
       lastResumeAtRef.current = now;
 
       resumeAttemptsRef.current += 1;
       resumeInFlightRef.current = true;
+      setAwaitingCheckoutReturn(true);
       setBusyLabel('Confirming payment...');
       setBusy(true);
       try {
-        if (useSessionStore.getState().hasUnlockedPremium) {
-          clearLastCheckoutIntentId();
-          afterUnlockSuccess();
-          return;
-        }
-        const result = await finalizeRazorpayCheckout(mergedSeed);
-        const unlocked = result.ok || useSessionStore.getState().hasUnlockedPremium;
-        finishUnlockAttempt(result, {
-          alertOnFail: !unlocked && resumeAttemptsRef.current >= MAX_RESUME_ATTEMPTS,
+        const deepLinkOpts = checkout === 'success' ? confirmOptsRef.current : undefined;
+        const result = await finalizeRazorpayCheckout(mergedSeed, deepLinkOpts);
+        // Always navigate if premium was granted — even if this effect later cleans up.
+        const unlocked = finishUnlockAttempt(result, {
+          alertOnFail:
+            !result.ok &&
+            !useSessionStore.getState().hasUnlockedPremium &&
+            resumeAttemptsRef.current >= MAX_RESUME_ATTEMPTS,
         });
+        if (!unlocked && resumeAttemptsRef.current < MAX_RESUME_ATTEMPTS) {
+          setBusyLabel('Confirming payment...');
+          setBusy(true);
+        } else if (!unlocked) {
+          setBusy(false);
+          setBusyLabel(null);
+        }
       } finally {
-        setBusy(false);
-        setBusyLabel(null);
         resumeInFlightRef.current = false;
       }
     };
 
     const sub = AppState.addEventListener('change', (next) => {
       if (next === 'active') {
-        void tryResumeAfterCheckout();
+        void tryResumeAfterCheckout(true);
       }
     });
 
-    if (AppState.currentState === 'active') {
-      void tryResumeAfterCheckout();
-    }
+    // Immediate attempt on mount / deep-link success / pending remount.
+    void tryResumeAfterCheckout(true);
 
-    return () => sub.remove();
-  }, [checkout, mergedSeed, afterUnlockSuccess, finishUnlockAttempt]);
+    // Poll while pending — Custom Tabs sometimes resume without a reliable AppState edge.
+    const poll = setInterval(() => {
+      if (enteredAfterUnlockRef.current) return;
+      if (AppState.currentState !== 'active') return;
+      void tryResumeAfterCheckout(false);
+    }, RESUME_POLL_MS);
+
+    return () => {
+      sub.remove();
+      clearInterval(poll);
+    };
+  }, [checkout, mergedSeed, finishUnlockAttempt]);
 
   const unlockFailureMessage = (reason: string) => {
     switch (reason) {
@@ -300,12 +356,13 @@ export default function PaywallScreen() {
   };
 
   const handleSubscribe = async () => {
-    if (busy) return;
+    if (busy || awaitingCheckoutReturn) return;
     if (!signedIn) {
       goToSignInForPaywall();
       return;
     }
     setBusy(true);
+    setBusyLabel('Opening checkout…');
     track(AnalyticsEvent.PURCHASE_STARTED, { billing_period: period });
 
     try {
@@ -319,41 +376,65 @@ export default function PaywallScreen() {
         if (result.reason !== 'cancelled') {
           Alert.alert('Could not unlock Premium', unlockFailureMessage(result.reason));
         }
+        setBusy(false);
+        setBusyLabel(null);
         return;
       }
 
       if (result.source === 'razorpay') {
-        // Browser checkout opened — resume listener confirms when the app returns.
+        // Browser checkout opened — resume/poll confirms when the app returns.
+        enteredAfterUnlockRef.current = false;
         resumeAttemptsRef.current = 0;
         lastResumeAtRef.current = 0;
+        setAwaitingCheckoutReturn(true);
         setBusyLabel('Complete payment in browser…');
+        setBusy(true);
         return;
       }
 
       afterUnlockSuccess();
     } finally {
-      setBusy(false);
+      // Keep busy while browser checkout is pending confirmation.
+      if (!useSessionStore.getState().hasUnlockedPremium) {
+        const pending = await isCheckoutReturnPending();
+        if (pending) {
+          setAwaitingCheckoutReturn(true);
+          setBusy(true);
+          setBusyLabel((prev) => prev ?? 'Complete payment in browser…');
+          return;
+        }
+      }
+      if (!enteredAfterUnlockRef.current) {
+        setBusy(false);
+        setBusyLabel(null);
+      }
     }
   };
 
   const handleCheckStatus = async () => {
-    if (busy) return;
+    if (busy && !awaitingCheckoutReturn) return;
     setBusy(true);
+    setBusyLabel('Confirming payment...');
     try {
       const result = await checkPremiumStatus({ seed: mergedSeed });
-      if (result.ok || useSessionStore.getState().hasUnlockedPremium) {
+      if (result.ok || useSessionStore.getState().hasUnlockedPremium || hasPremiumAccess()) {
         afterUnlockSuccess();
       } else if (result.reason !== 'cancelled') {
         Alert.alert('No Premium found', unlockFailureMessage(result.reason));
       }
     } finally {
-      setBusy(false);
+      if (!enteredAfterUnlockRef.current) {
+        setBusy(false);
+        setBusyLabel(null);
+      }
     }
   };
 
   const backFromPaywall = () => {
     goBack({ pathname, segments: [...segments], params: routeParams });
   };
+
+  const ctaBusy = busy || awaitingCheckoutReturn;
 
   return (
     <CosmicScreen variant="stitch">
@@ -380,6 +461,13 @@ export default function PaywallScreen() {
             {premium ? (
               <View className="mt-4 rounded-2xl border border-cyan/35 bg-cyan/10 px-4 py-3">
                 <Text className="font-body text-[14px] text-cyan">You already have full access on this device.</Text>
+              </View>
+            ) : null}
+            {awaitingCheckoutReturn && !premium ? (
+              <View className="mt-4 rounded-2xl border border-cyan/35 bg-cyan/10 px-4 py-3">
+                <Text className="font-body text-[14px] text-cyan">
+                  Confirming payment… you&apos;ll enter Agastya automatically once it clears.
+                </Text>
               </View>
             ) : null}
             {signedIn && authEmail ? (
@@ -456,10 +544,10 @@ export default function PaywallScreen() {
 
           <Pressable
             onPress={() => void handleCheckStatus()}
-            disabled={busy}
+            disabled={ctaBusy && !awaitingCheckoutReturn}
             accessibilityRole="button"
             accessibilityLabel="Check premium status"
-            accessibilityState={{ disabled: busy }}
+            accessibilityState={{ disabled: ctaBusy && !awaitingCheckoutReturn }}
             className="items-center py-2 active:opacity-80">
             <Text className="font-body text-[14px] font-medium text-cyan underline">Check premium status</Text>
           </Pressable>
@@ -472,12 +560,12 @@ export default function PaywallScreen() {
               label="Enter Agastya"
               onPress={() => (hasPremiumAccess() ? enterMainApp() : afterUnlockSuccess())}
             />
-          ) : busy ? (
+          ) : ctaBusy ? (
             <CosmicButton
               gradient="nebulaMd3"
               label={unlockLabel()}
               onPress={() => void handleSubscribe()}
-              disabled={busy}
+              disabled
             />
           ) : (
             <MotiView
@@ -488,7 +576,7 @@ export default function PaywallScreen() {
                 gradient="nebulaMd3"
                 label={unlockLabel()}
                 onPress={() => void handleSubscribe()}
-                disabled={busy}
+                disabled={ctaBusy}
               />
             </MotiView>
           )}

@@ -77,6 +77,11 @@ export async function isCheckoutReturnPending(): Promise<boolean> {
   return checkoutReturnPending || Boolean(lastCheckoutIntentId);
 }
 
+/** Sync peek — true only after hydrate or markCheckoutOpened in this JS runtime. */
+export function isCheckoutReturnPendingSync(): boolean {
+  return checkoutReturnPending || Boolean(lastCheckoutIntentId);
+}
+
 export async function getBillingConfig(force = false): Promise<BillingConfig | null> {
   if (!isApiConfigured()) return null;
   const ttl = Number(process.env.EXPO_PUBLIC_BILLING_CONFIG_CACHE_MS ?? 60_000);
