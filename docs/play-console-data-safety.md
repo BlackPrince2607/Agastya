@@ -15,7 +15,7 @@ Use this when filling **Play Console → App content → Data safety**. Aligns w
 | Personal info | Email address | Yes (if signed in) | Yes (auth/provider) | Optional | App functionality, Account management |
 | Personal info | Name | Yes (display name) | Yes (backend/DB) | Optional | App functionality |
 | Photos | Photos | Yes (palm images) | Yes (backend storage + AI provider) | Required for palm reading | App functionality |
-| App activity | App interactions | Yes (analytics events) | Yes (PostHog/Mixpanel if enabled) | Optional | Analytics |
+| App activity | App interactions | Yes (analytics events) | Yes (Firebase Analytics and/or Mixpanel if enabled) | Optional | Analytics |
 | App info & performance | Crash logs | Yes | Yes (Sentry) | Optional | Analytics / stability |
 | App info & performance | Diagnostics | Yes | Yes (Sentry) | Optional | Analytics / stability |
 | Device or other IDs | Device or other IDs | Yes (device install ID, session ID) | Yes (backend) | Required for sync | App functionality |
@@ -28,7 +28,7 @@ Use this when filling **Play Console → App content → Data safety**. Aligns w
 - **Razorpay** — checkout when user chooses alternative billing
 - **Google Play** — billing / User Choice / External Transactions
 - **Sentry** — crashes
-- **PostHog or Mixpanel** — analytics (only if keys configured in the build)
+- **Firebase Analytics and/or Mixpanel** — analytics (only if configured)
 
 ## Not collected
 

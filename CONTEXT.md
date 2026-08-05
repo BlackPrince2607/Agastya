@@ -16,7 +16,7 @@ The app is entertainment/self-reflection only. User-facing copy repeatedly clari
 - Backend: FastAPI, Pydantic, Uvicorn, optional OpenRouter inference, optional Supabase persistence/storage/auth, optional Redis rate limiting.
 - Auth: Supabase client on the app, Supabase JWT verification on the backend.
 - Billing: Razorpay (alternative) + Google Play User Choice (Android India); server-side premium flags.
-- Observability: Sentry on frontend and backend, optional PostHog/Mixpanel analytics.
+- Observability: Sentry on frontend and backend, optional Firebase Analytics / Mixpanel analytics.
 
 ## Important Commands
 
@@ -210,8 +210,10 @@ Server-side premium is authoritative (`is_premium` + optional `premium_expires_a
 
 ### Notifications, Analytics, Errors
 
-- `services/notifications.ts`: foreground behavior, permission request, daily reminders, ready notifications, notification deep links.
-- `services/analytics.ts`: optional PostHog/Mixpanel event forwarding.
+- `services/notifications.ts`: Expo push token registration, local daily/evening reminders, ready notification fallback, deep links (`data.screen`).
+- Remote events (Expo Push via FastAPI): `reading_ready`, `full_report_ready`, `premium_unlocked`, `payment_pending`, `compatibility_ready`, plus cron campaigns (`onboarding_incomplete`, `preview_unsigned`, `streak_at_risk`, `weekly_guidance`, `reengage_3d/7d/14d`).
+- Token table: `agastya_push_tokens`; dedup: `agastya_notification_log`. Routes under `/v1/notifications/*`.
+- `services/analytics.ts`: Firebase Analytics (native) event forwarding (Mixpanel optional fallback).
 - `services/sentry.ts`: frontend Sentry init and helpers.
 - `services/apiErrors.ts`, `services/authErrors.ts`, `services/authErrorUtils.ts`: user-facing error mapping.
 
@@ -378,7 +380,7 @@ Frontend `.env` commonly includes:
 - `EXPO_PUBLIC_REVENUECAT_ENTITLEMENT`
 - `EXPO_PUBLIC_STRIPE_CHECKOUT_ENABLED=true`
 - `EXPO_PUBLIC_SENTRY_DSN`
-- `EXPO_PUBLIC_POSTHOG_KEY`, `EXPO_PUBLIC_POSTHOG_HOST`, or `EXPO_PUBLIC_MIXPANEL_TOKEN`.
+- `EXPO_PUBLIC_MIXPANEL_TOKEN` (optional).
 
 Backend `backend/.env` commonly includes:
 

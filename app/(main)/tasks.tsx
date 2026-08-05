@@ -17,7 +17,8 @@ import {
   TASKS_PROGRESS_HINT,
 } from '@/constants/userCopy';
 import { fetchDailyTasks, submitDailyReflection } from '@/services/agastyaApi';
-import { scheduleDailyTaskReminder, cancelDailyTaskReminder } from '@/services/notifications';
+import { scheduleDailyTaskReminder, cancelDailyTaskReminder, scheduleEveningReflectionReminder, cancelEveningReflectionReminder } from '@/services/notifications';
+import { AnalyticsEvent, trackOncePerDay } from '@/services/analytics';
 import { useSessionStore } from '@/store/sessionStore';
 import { useTaskStore } from '@/store/taskStore';
 import { isTabRoute } from '@/utils/isTabRoute';
@@ -85,6 +86,8 @@ export default function TasksScreen() {
 
   useEffect(() => {
     if (!isTabRoute(pathname, 'tasks')) return;
+    if (!palmAnalysis) return;
+    trackOncePerDay(AnalyticsEvent.DAILY_RITUAL_VIEWED, { source: 'tasks' });
     let active = true;
 
     const load = async () => {
@@ -134,14 +137,23 @@ export default function TasksScreen() {
     };
   }, [pathname, tasks.length, taskDate, isoToday, palmAnalysis, sessionId, setTasks]);
 
-  // Schedule (or cancel) the daily reminder based on completion state.
+  // Schedule (or cancel) daily + evening reminders based on completion state.
   useEffect(() => {
     if (allDone) {
       void cancelDailyTaskReminder();
-    } else if (list.length > 0) {
+      void cancelEveningReflectionReminder();
+      return;
+    }
+    if (list.length > 0) {
       void scheduleDailyTaskReminder();
     }
-  }, [allDone, list.length]);
+    const eveningDone = completedIds.includes('evening-reflection');
+    if (!eveningDone && list.some((t) => t.id === 'evening-reflection')) {
+      void scheduleEveningReflectionReminder();
+    } else {
+      void cancelEveningReflectionReminder();
+    }
+  }, [allDone, list, completedIds]);
 
   if (!premium) {
     return (

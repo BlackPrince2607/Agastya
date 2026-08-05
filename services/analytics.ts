@@ -1,37 +1,59 @@
+import { Platform } from 'react-native';
+
 import { useSessionStore } from '@/store/sessionStore';
 
 type Props = Record<string, unknown>;
 
 const MIXPANEL = process.env.EXPO_PUBLIC_MIXPANEL_TOKEN?.trim();
-const POSTHOG_KEY = process.env.EXPO_PUBLIC_POSTHOG_KEY?.trim();
-const POSTHOG_HOST = (process.env.EXPO_PUBLIC_POSTHOG_HOST?.trim() || 'https://us.i.posthog.com').replace(
-  /\/$/,
-  '',
-);
 
 /** Canonical product analytics events (snake_case). Display aliases in analytics map. */
 export const AnalyticsEvent = {
+  // App / lifecycle
+  APP_OPENED: 'app_opened',
+
   // Onboarding
+  ONBOARDING_STARTED: 'onboarding_started',
+  ONBOARDING_COMPLETED: 'onboarding_completed',
   PALM_SCAN_STARTED: 'palm_scan_started',
   PALM_SCAN_COMPLETED: 'palm_scan_completed',
+  ANALYSIS_COMPLETED: 'analysis_completed',
+
+  // Reports
+  REPORT_PREVIEW_VIEWED: 'report_preview_viewed',
   REPORT_GENERATED: 'report_generated',
+  REPORT_SHARED: 'report_shared',
+
   // Home
   TODAYS_GUIDANCE_VIEWED: 'todays_guidance_viewed',
   GUIDANCE_REFRESHED: 'guidance_refreshed',
-  // Tasks
-  RITUAL_COMPLETED: 'ritual_completed',
+
+  // Daily engagement
+  DAILY_RITUAL_VIEWED: 'daily_ritual_viewed',
+  DAILY_RITUAL_COMPLETED: 'daily_ritual_completed',
   ALL_RITUALS_COMPLETED: 'all_rituals_completed',
+
   // Reflection
   REFLECTION_SUBMITTED: 'reflection_submitted',
+
   // Chat
   CHAT_STARTED: 'chat_started',
+  CHAT_MESSAGE_SENT: 'chat_message_sent',
+  CHAT_SESSION_ENDED: 'chat_session_ended',
   MEMORY_EXTRACTED: 'memory_extracted',
+
   // Weekly
   WEEKLY_SUMMARY_VIEWED: 'weekly_summary_viewed',
+
   // Premium
   PAYWALL_VIEWED: 'paywall_viewed',
-  PURCHASE_STARTED: 'purchase_started',
-  PURCHASE_COMPLETED: 'purchase_completed',
+  CHECKOUT_STARTED: 'checkout_started',
+  SUBSCRIPTION_PURCHASED: 'subscription_purchased',
+  SUBSCRIPTION_RESTORED: 'subscription_restored',
+
+  // Backwards-compat aliases (keep existing call sites working)
+  RITUAL_COMPLETED: 'daily_ritual_completed',
+  PURCHASE_STARTED: 'checkout_started',
+  PURCHASE_COMPLETED: 'subscription_purchased',
 } as const;
 
 export type AnalyticsEventName = (typeof AnalyticsEvent)[keyof typeof AnalyticsEvent];
@@ -56,6 +78,24 @@ function withCoreProps(props: Props | undefined): Props {
     ...props,
     has_session: Boolean(sessionId),
   };
+}
+
+function sanitizeFirebaseProps(props: Props): Record<string, string | number | boolean> {
+  const out: Record<string, string | number | boolean> = {};
+  for (const [key, value] of Object.entries(props)) {
+    if (value === undefined || value === null) continue;
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      out[key] = value;
+      continue;
+    }
+    // Firebase RN expects scalar params; stringify any complex values for safety.
+    out[key] = String(value);
+  }
+  return out;
+}
+
+function distinctId(): string {
+  return useSessionStore.getState().sessionId ?? useSessionStore.getState().deviceInstallId ?? 'anon';
 }
 
 async function sendMixpanel(event: string, props: Props) {
@@ -83,29 +123,48 @@ async function sendMixpanel(event: string, props: Props) {
   await fetch(url, { method: 'GET' }).catch(() => {});
 }
 
-async function sendPosthog(event: string, props: Props) {
-  if (!POSTHOG_KEY) return;
-  await fetch(`${POSTHOG_HOST}/capture/`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      api_key: POSTHOG_KEY,
-      event,
-      properties: props,
-      distinct_id: useSessionStore.getState().sessionId ?? useSessionStore.getState().deviceInstallId ?? 'anon',
-    }),
-  }).catch(() => {});
+// Lazy-load React Native Firebase (avoids web/native mismatches).
+let firebaseAnalytics: null | (() => { logEvent: Function; setUserId?: Function }) = null;
+let firebaseUserId: string | null = null;
+
+function getFirebaseAnalytics() {
+  if (Platform.OS === 'web') return null;
+  if (firebaseAnalytics) return firebaseAnalytics;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    firebaseAnalytics = require('@react-native-firebase/analytics').default ?? require('@react-native-firebase/analytics');
+    return firebaseAnalytics;
+  } catch {
+    return null;
+  }
 }
 
-/** Mixpanel (GET /track) or PostHog capture — minimal identifiers only (no message/image payloads). */
+async function sendFirebase(event: string, props: Props) {
+  const analytics = getFirebaseAnalytics();
+  if (!analytics) return;
+
+  const did = distinctId();
+  try {
+    const maybeSetUserId = typeof analytics().setUserId === 'function' ? analytics().setUserId : undefined;
+    if (firebaseUserId !== did && maybeSetUserId) {
+      maybeSetUserId(did);
+      firebaseUserId = did;
+    }
+    await analytics().logEvent(event, sanitizeFirebaseProps(props));
+  } catch {
+    /* best-effort */
+  }
+}
+
+/** Firebase (primary) with optional Mixpanel fallback. */
 export function track(event: string, props?: Props) {
   const merged = withCoreProps(props);
   if (__DEV__) {
     console.log(`[analytics] ${event}`, merged);
   }
-  if (POSTHOG_KEY) {
-    void sendPosthog(event, merged);
-  } else if (MIXPANEL) {
+
+  void sendFirebase(event, merged);
+  if (MIXPANEL) {
     void sendMixpanel(event, merged);
   }
 }

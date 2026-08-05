@@ -106,6 +106,12 @@ export default function ChatScreen() {
     return () => {
       deliveryGenRef.current += 1;
       useChatStore.getState().setTyping(false);
+
+      const state = useChatStore.getState();
+      const userMessages = state.messages.filter((m) => m.role === 'you');
+      if (userMessages.length > 0) {
+        track(AnalyticsEvent.CHAT_SESSION_ENDED, { message_count: userMessages.length });
+      }
     };
   }, []);
 
@@ -179,6 +185,7 @@ export default function ChatScreen() {
       track(AnalyticsEvent.CHAT_STARTED);
     }
 
+    track(AnalyticsEvent.CHAT_MESSAGE_SENT, { message_length: trimmed.length });
     addMessage('you', trimmed);
     setInput('');
     inputRef.current?.blur();

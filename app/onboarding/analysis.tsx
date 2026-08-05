@@ -25,7 +25,7 @@ import { ApiHttpError, parsePalmUnreadable } from '@/services/apiErrors';
 import { analyzePalm, generateReport } from '@/services/agastyaApi';
 import { bootstrapIdentity, syncProfileRemote } from '@/services/identity';
 import { normalizeFullReport } from '@/services/normalizeReport';
-import { scheduleReadyNotification } from '@/services/notifications';
+import { scheduleReadyNotification, getExpoPushToken } from '@/services/notifications';
 import { AnalyticsEvent, track } from '@/services/analytics';
 import { buildSimulatedReading } from '@/services/simulatedReading';
 import { isApiConfigured } from '@/services/env';
@@ -193,8 +193,10 @@ export default function AnalysisScreen() {
 
         advance(3);
         const snap2 = useSessionStore.getState();
+        let expoPushToken: string | null = null;
         try {
           if (isApiConfigured()) {
+            expoPushToken = await getExpoPushToken();
             const runGenerate = () =>
               withApiRetry(() =>
                 generateReport({
@@ -205,6 +207,7 @@ export default function AnalysisScreen() {
                   mode: 'preview',
                   displayName: snap2.userDisplayName,
                   gender: snap2.userGender,
+                  expoPushToken,
                 }),
               );
             let previewPayload;
@@ -233,8 +236,12 @@ export default function AnalysisScreen() {
         advance(4);
         animatedPct.value = withTiming(100, { duration: 600 });
         track(AnalyticsEvent.REPORT_GENERATED, { mode: 'preview' });
+        track(AnalyticsEvent.ANALYSIS_COMPLETED);
         useSessionStore.getState().setSkipCloudRestore(false);
-        void scheduleReadyNotification();
+        // Remote push handles ready notify when Expo token is available.
+        if (!expoPushToken) {
+          void scheduleReadyNotification();
+        }
         useSessionStore.getState().setPalmCaptureLandmarks(null, null);
         await delay(ANALYSIS_SETTLE_MS);
         if (cancelled || runId !== runIdRef.current) return;

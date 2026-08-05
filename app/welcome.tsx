@@ -25,6 +25,7 @@ import { isSupabaseEnabled } from '@/services/supabase';
 import { SIGN_IN_UNAVAILABLE } from '@/constants/userCopy';
 import { resolveOnboardingHref, routeAfterSignInIntent } from '@/utils/navigationFlow';
 import { deferRouterReplace } from '@/utils/routerDefer';
+import { AnalyticsEvent, trackOnce } from '@/services/analytics';
 
 const WELCOME_PALM_BACKGROUND = require('../assets/images/agastya-palm-welcome-portrait.png') as ImageSourcePropType;
 
@@ -112,6 +113,7 @@ export default function WelcomeScreen() {
             accessibilityLabel="Get started"
             onPress={() => {
               void triggerLightTap();
+              trackOnce('onboarding_started', AnalyticsEvent.ONBOARDING_STARTED);
               deferRouterReplace(resolveOnboardingHref());
             }}
             animate={({ pressed }) => ({ scale: pressed ? 0.97 : 1 })}

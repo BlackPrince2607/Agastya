@@ -5,8 +5,8 @@ import { View } from 'react-native';
 import { LoadingBlock } from '@/components/feedback';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { usePersistHydration } from '@/hooks/usePersistHydration';
-import { track } from '@/services/analytics';
-import { requestNotificationPermission } from '@/services/notifications';
+import { AnalyticsEvent, track } from '@/services/analytics';
+import { requestNotificationPermission, registerPushTokenWithServer } from '@/services/notifications';
 import { useSessionStore } from '@/store/sessionStore';
 import {
   canEnterMainAppSync,
@@ -21,7 +21,9 @@ function resolveGateHref(target: Href): Href {
     const gate = canEnterMainAppSync();
     if (gate === 'ok') {
       useSessionStore.getState().setEnteredMain(true);
-      void requestNotificationPermission();
+      void requestNotificationPermission().then((ok) => {
+        if (ok) void registerPushTokenWithServer();
+      });
       return '/(main)/home';
     }
     if (gate === 'need_sign_in') {
@@ -29,7 +31,9 @@ function resolveGateHref(target: Href): Href {
     }
     if (hasRitualReading()) {
       useSessionStore.getState().setEnteredMain(true);
-      void requestNotificationPermission();
+      void requestNotificationPermission().then((ok) => {
+        if (ok) void registerPushTokenWithServer();
+      });
       return '/(main)/home';
     }
     if (useSessionStore.getState().supabaseUserId) {
@@ -59,13 +63,19 @@ export default function Gate() {
     if (!hydrated) return;
 
     let cancelled = false;
+    const alreadyEnteredMain = useSessionStore.getState().hasEnteredMain;
 
     void (async () => {
+      track(AnalyticsEvent.APP_OPENED);
       track('identity_bootstrap');
       try {
         const target = await prepareReturningUser();
         if (cancelled) return;
-        setHref(resolveGateHref(target));
+        const nextHref = resolveGateHref(target);
+        if (!alreadyEnteredMain && nextHref === '/(main)/home') {
+          track(AnalyticsEvent.ONBOARDING_COMPLETED);
+        }
+        setHref(nextHref);
       } catch {
         if (!cancelled) setHref('/welcome');
       }

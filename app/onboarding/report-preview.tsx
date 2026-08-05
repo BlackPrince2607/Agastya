@@ -24,6 +24,7 @@ import { buildSimulatedReading } from '@/services/simulatedReading';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import type { FocusTopic } from '@/store/sessionStore';
 import { useSessionStore } from '@/store/sessionStore';
+import { AnalyticsEvent, trackOnce } from '@/services/analytics';
 import { enterMainApp } from '@/utils/navigationFlow';
 import { normalizeLifeMetrics } from '@/utils/lifeMetrics';
 import { headlineNeedsPalmFix } from '@/utils/palmInsights';
@@ -67,6 +68,10 @@ export default function ReportPreviewScreen() {
       snap.setPremium(false);
     }
   }, [isSignedIn]);
+
+  useEffect(() => {
+    trackOnce(`report_preview_viewed:${mergedSeed}`, AnalyticsEvent.REPORT_PREVIEW_VIEWED, { mode: 'preview' });
+  }, [mergedSeed]);
 
   const reading = useMemo(() => {
     const base = previewReading ?? buildSimulatedReading(mergedSeed, focus, palmAnalysis);

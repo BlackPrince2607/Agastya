@@ -38,6 +38,8 @@ async function materializeFullReport(seed?: string): Promise<boolean> {
   if (!snap.sessionId || !snap.palmAnalysis) return false;
 
   try {
+    const { getExpoPushToken } = await import('@/services/notifications');
+    const expoPushToken = await getExpoPushToken();
     const payload = await generateReport({
       sessionId: snap.sessionId,
       seed: targetedSeed ?? snap.readingSeed,
@@ -46,6 +48,7 @@ async function materializeFullReport(seed?: string): Promise<boolean> {
       mode: 'full',
       displayName: snap.userDisplayName,
       gender: snap.userGender,
+      expoPushToken,
     });
     useSessionStore.getState().setFullReading(normalizeFullReport(payload));
     track(AnalyticsEvent.REPORT_GENERATED, { mode: 'full' });
@@ -57,10 +60,11 @@ async function materializeFullReport(seed?: string): Promise<boolean> {
 
 async function finalizeAfterEntitlement(
   seed: string | undefined,
-  source: UnlockResult extends { ok: true } ? UnlockResult['source'] : never,
+  source: Extract<UnlockResult, { ok: true }>['source'],
   trackPurchase: boolean,
 ): Promise<UnlockResult> {
   const setPremium = useSessionStore.getState().setPremium;
+  const billingPeriod = useSessionStore.getState().billingPeriod;
   let serverPremium = await syncPremiumFromServer();
   if (!serverPremium) {
     await new Promise((r) => setTimeout(r, 1500));
@@ -76,7 +80,7 @@ async function finalizeAfterEntitlement(
 
   setPremium(serverPremium || true);
   if (trackPurchase) {
-    track(AnalyticsEvent.PURCHASE_COMPLETED, { source });
+    track(AnalyticsEvent.PURCHASE_COMPLETED, { source, billing_period: billingPeriod });
   }
   return { ok: true, source };
 }
@@ -204,10 +208,18 @@ export async function checkPremiumStatus(options: { seed?: string }): Promise<Un
   // Prefer active Razorpay confirm (covers webhook lag after a completed payment).
   const confirmed = await confirmRazorpayCheckout({});
   if (confirmed.ok) {
+    track(AnalyticsEvent.PURCHASE_COMPLETED, {
+      source: 'razorpay',
+      billing_period: useSessionStore.getState().billingPeriod,
+    });
     return finalizeAfterEntitlement(seed, 'razorpay', false);
   }
   const serverPremium = await syncPremiumFromServer();
   if (serverPremium) {
+    track(AnalyticsEvent.SUBSCRIPTION_RESTORED, {
+      source: 'restore',
+      billing_period: useSessionStore.getState().billingPeriod,
+    });
     return finalizeAfterEntitlement(seed, 'restore', false);
   }
   return { ok: false, reason: 'not_entitled' };
@@ -225,7 +237,10 @@ export async function finalizeRazorpayCheckout(
     clearLastCheckoutIntentId();
     // Do not block entry on report generation — home can load while this finishes.
     void materializeFullReport(seed);
-    track(AnalyticsEvent.PURCHASE_COMPLETED, { source: 'razorpay' });
+    track(AnalyticsEvent.PURCHASE_COMPLETED, {
+      source: 'razorpay',
+      billing_period: useSessionStore.getState().billingPeriod,
+    });
     return { ok: true, source: 'razorpay' };
   };
 

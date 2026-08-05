@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "32718718876",
+    "project_id": "bhakti-connect-jyx7o",
+    "storage_bucket": "bhakti-connect-jyx7o.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:32718718876:android:543278f95e16c1c5baea59",
+        "android_client_info": {
+          "package_name": "com.agastya.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBuQOQVvNCF2nsBhzjBuDkmvQ3yfMm9ZNQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

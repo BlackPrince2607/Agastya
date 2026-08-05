@@ -13,7 +13,7 @@ Users complete a guided onboarding ritual (profile, goals, palm scan, analysis, 
 | **Mobile / web** | Expo SDK 54, React Native, Expo Router, NativeWind, Zustand |
 | **Backend** | FastAPI, OpenRouter (vision + chat), Supabase (auth, DB, storage) |
 | **Billing** | Razorpay (alternative) + Google Play User Choice (Android India) |
-| **Observability** | Sentry, PostHog / Mixpanel (optional) |
+| **Observability** | Sentry, Firebase Analytics (primary) + Mixpanel (optional) |
 
 ---
 

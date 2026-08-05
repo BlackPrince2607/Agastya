@@ -40,7 +40,7 @@ Fill in:
 - `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` — from Supabase Dashboard → Project Settings → API
 - `EXPO_PUBLIC_PLAY_PRODUCT_ID` — Google Play one-time managed product (`premium_unlock`)
 - `EXPO_PUBLIC_SENTRY_DSN` — from Sentry → React Native project → Client Keys
-- `EXPO_PUBLIC_POSTHOG_KEY` or `EXPO_PUBLIC_MIXPANEL_TOKEN` — from your analytics provider
+- `EXPO_PUBLIC_MIXPANEL_TOKEN` — optional analytics provider
 
 ### Backend (`backend/.env.example` → `backend/.env`)
 ```bash
@@ -257,9 +257,18 @@ Pushes to `main` that touch `backend/**` auto-redeploy.
 
 **Via CLI:** `railway login && railway init && npm run deploy:railway`
 
-Required Railway variables: `OPENROUTER_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DEBUG=false`, `PALM_ANALYSIS_MODE=vision`, `RAZORPAY_*` (when billing enabled), non-wildcard `CORS_ORIGINS`. Recommended: `REDIS_URL`, `SENTRY_DSN`.
+Required Railway variables: `OPENROUTER_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DEBUG=false`, `PALM_ANALYSIS_MODE=vision`, `RAZORPAY_*` (when billing enabled), non-wildcard `CORS_ORIGINS`. Recommended: `REDIS_URL`, `SENTRY_DSN`, `CRON_SECRET`, `NOTIFICATIONS_ENABLED=true`.
 
 **Palm scan (reliability path):** the app captures once, shows staged analysis progress, then builds the Life Blueprint. Line overlays are not required. Redeploy Railway after backend palm-pipeline changes; confirm `OPENROUTER_API_KEY` and `PALM_ANALYSIS_MODE=vision`. Without the key, analyze returns **503**.
+
+**Push notifications (Expo Push):** apply migration `supabase/migrations/20260805120000_agastya_push_tokens.sql`. Remote pushes require a **native EAS build** (not Expo Go). Register tokens via `POST /v1/notifications/register-token`. For re-engagement cron, schedule an hourly HTTP call:
+
+```bash
+curl -X POST "https://YOUR-API/v1/notifications/cron/dispatch" \
+  -H "Authorization: Bearer $CRON_SECRET"
+```
+
+Set `CRON_SECRET` and keep `NOTIFICATIONS_ENABLED=true` (or `false` as a kill switch). Event catalog: reading ready, full report ready, premium unlocked, payment pending, compatibility ready, onboarding incomplete, unsigned preview, streak at risk, weekly guidance, re-engage 3/7/14d. Daily tasks + evening reflection remain **local** scheduled notifications.
 
 **Production must run with `DEBUG=false`.** When `DEBUG=true`, webhook signature checks and startup secret validation are skipped — never ship beta that way.
 
@@ -342,7 +351,6 @@ Add these secrets in GitHub → Settings → Secrets → Actions:
 | `EXPO_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key |
 | `EXPO_PUBLIC_PLAY_PRODUCT_ID` | Google Play one-time SKU (`premium_unlock`) |
 | `EXPO_PUBLIC_SENTRY_DSN` | Sentry client DSN |
-| `EXPO_PUBLIC_POSTHOG_KEY` | PostHog key (optional) |
 | `RAILWAY_TOKEN` | Railway → Account Settings → Tokens (only if using GitHub Actions deploy; not needed for Railway native GitHub integration) |
 | `FLY_API_TOKEN` | Optional — only if using Fly.io instead of Railway |
 
@@ -377,6 +385,6 @@ npx expo install expo-notifications expo-updates @sentry/react-native
 ## Post-launch
 
 - Monitor crashes in Sentry
-- Monitor events in PostHog / Mixpanel
+- Monitor events in Mixpanel (and Firebase Analytics via native setup)
 - Monitor Razorpay webhooks and Google Play RTDN in backend logs / Sentry
 - Set up Fly.io or Railway auto-scaling as user base grows
