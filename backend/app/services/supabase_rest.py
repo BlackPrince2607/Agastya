@@ -77,6 +77,20 @@ class SupabaseRest:
         rows = res.json()
         return rows if isinstance(rows, list) else []
 
+    async def select_with_params(
+        self,
+        table: str,
+        *,
+        params: dict[str, str],
+    ) -> list[dict[str, Any]]:
+        """PostgREST GET with raw query params (supports neq/is/lt/gte operators)."""
+        res = await _http_client().get(f"{self._base}/{table}", headers=self._headers, params=params)
+        if res.status_code != 200:
+            logger.warning("supabase select_with_params %s failed: %s %s", table, res.status_code, res.text[:240])
+            raise SupabaseUnavailableError(f"select_with_params {table} HTTP {res.status_code}")
+        rows = res.json()
+        return rows if isinstance(rows, list) else []
+
     async def delete_rows(self, table: str, *, filters: dict[str, str]) -> bool:
         params = {key: f"eq.{value}" for key, value in filters.items()}
         res = await _http_client().delete(f"{self._base}/{table}", headers=self._headers, params=params)

@@ -429,6 +429,7 @@ export async function generateReport(body: {
   mode: 'preview' | 'full';
   displayName?: string;
   gender?: string;
+  expoPushToken?: string | null;
 }) {
   const deviceInstallId = body.deviceInstallId ?? useSessionStore.getState().deviceInstallId;
   if (!deviceInstallId) {
@@ -437,8 +438,15 @@ export async function generateReport(body: {
   return postJson<Record<string, unknown>>(
     '/v1/reports/generate',
     {
-      ...body,
+      sessionId: body.sessionId,
       deviceInstallId,
+      seed: body.seed,
+      palmAnalysis: body.palmAnalysis,
+      focusTopics: body.focusTopics,
+      mode: body.mode,
+      displayName: body.displayName,
+      gender: body.gender,
+      expoPushToken: body.expoPushToken || undefined,
     },
     false,
     // Single server chat-model attempt (~60s) + buffer.

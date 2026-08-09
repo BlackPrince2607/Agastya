@@ -2,6 +2,13 @@
 
 Deploy this `legal/` folder as a **separate** static project (Vercel, Cloudflare Pages, or Netlify) pointed at **sharvo.online**.
 
+## In-app vs Play Console
+
+- **In the app:** Profile → Privacy / Terms / Support open `/legal/[doc]` screens (copy in `constants/legalContent.ts`).
+- **Play Console:** use public URLs below after hosting on Railway (custom domain) or Vercel.
+
+When you update your Google Doc, paste the same text into `constants/legalContent.ts` **and** `legal/*.html` so app and web stay aligned.
+
 ## Required URLs
 
 | Path | File |
@@ -11,9 +18,11 @@ Deploy this `legal/` folder as a **separate** static project (Vercel, Cloudflare
 | https://sharvo.online/support | support.html |
 | https://sharvo.online/delete-account | delete-account.html |
 
-`vercel.json` in this folder provides clean URL rewrites for Vercel.
+`vercel.json` provides clean URL rewrites on Vercel. `.htaccess` does the same on Apache/cPanel (GoDaddy Linux hosting).
 
-## Vercel (recommended)
+**Play Console account deletion URL:** `https://sharvo.online/delete-account`
+
+## Option A — Vercel (recommended)
 
 ```bash
 cd legal
@@ -21,6 +30,21 @@ npx vercel --prod
 ```
 
 Then assign the production domain `sharvo.online` (and `www` if needed) in the Vercel project settings.
+
+## Option B — GoDaddy Linux / cPanel
+
+Upload the contents of this `legal/` folder to `public_html/` (include `.htaccess` and all `*.html` files). Do **not** use GoDaddy Website Builder — it cannot serve custom paths like `/delete-account`.
+
+## Option C — Railway backend (already in repo)
+
+The FastAPI backend serves the same pages at the site root (no `/v1` prefix):
+
+- `/delete-account`
+- `/privacy`
+- `/terms`
+- `/support`
+
+After deploy, either add **sharvo.online** as a custom domain on Railway (Settings → Networking), or temporarily use your Railway URL in Play Console until DNS is moved off GoDaddy Website Builder.
 
 ## Cloudflare Pages
 

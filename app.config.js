@@ -52,7 +52,47 @@ const hasSentryNativePlugin = basePlugins.some(
     entry === '@sentry/react-native' ||
     (Array.isArray(entry) && entry[0] === '@sentry/react-native'),
 );
-const plugins = hasSentryNativePlugin ? basePlugins : [...basePlugins, '@sentry/react-native'];
+const plugins = hasSentryNativePlugin ? [...basePlugins] : [...basePlugins, '@sentry/react-native'];
+
+const facebookAppId = process.env.EXPO_PUBLIC_FACEBOOK_APP_ID?.trim() ?? '';
+const facebookClientToken = process.env.EXPO_PUBLIC_FACEBOOK_CLIENT_TOKEN?.trim() ?? '';
+const metaAdsConfigured = Boolean(facebookAppId && facebookClientToken);
+const ATT_USAGE =
+  'Agastya uses this identifier to measure ad performance and show you more relevant ads.';
+
+if (metaAdsConfigured) {
+  const hasFbSdk = plugins.some(
+    (entry) =>
+      entry === 'react-native-fbsdk-next' ||
+      (Array.isArray(entry) && entry[0] === 'react-native-fbsdk-next'),
+  );
+  if (!hasFbSdk) {
+    plugins.push([
+      'react-native-fbsdk-next',
+      {
+        appID: facebookAppId,
+        clientToken: facebookClientToken,
+        displayName: 'Agastya',
+        scheme: `fb${facebookAppId}`,
+        advertiserIDCollectionEnabled: true,
+        autoLogAppEventsEnabled: true,
+        isAutoInitEnabled: true,
+        iosUserTrackingPermission: ATT_USAGE,
+      },
+    ]);
+  }
+  const hasAtt = plugins.some(
+    (entry) =>
+      entry === 'expo-tracking-transparency' ||
+      (Array.isArray(entry) && entry[0] === 'expo-tracking-transparency'),
+  );
+  if (!hasAtt) {
+    plugins.push([
+      'expo-tracking-transparency',
+      { userTrackingPermission: ATT_USAGE },
+    ]);
+  }
+}
 
 const DEFAULT_PRODUCTION_API = 'https://agastya-production-b395.up.railway.app';
 const isEasBuild = process.env.EAS_BUILD === 'true' || process.env.CI === 'true';
@@ -73,6 +113,8 @@ module.exports = {
         process.env.EXPO_PUBLIC_AGASTYA_API_URL?.trim() ||
         (isEasBuild ? DEFAULT_PRODUCTION_API : undefined),
       agastyaApiLanUrl: getDevLanApiUrl(),
+      facebookAppId: metaAdsConfigured ? facebookAppId : undefined,
+      metaAdsEnabled: metaAdsConfigured,
     },
     // Disable OTA for prototype/preview APKs so an old update cannot override the API URL.
     updates: updatesEnabled ? appJson.expo.updates : { enabled: false },

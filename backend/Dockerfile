@@ -10,8 +10,9 @@ WORKDIR /app
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy backend source only
+# Copy backend source and public legal pages (Play Console deletion URL, etc.)
 COPY backend/ .
+COPY legal/ /app/legal/
 
 # Railway injects PORT; default 8000 for local docker run
 ENV PORT=8000

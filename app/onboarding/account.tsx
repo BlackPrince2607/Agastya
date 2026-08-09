@@ -1,4 +1,3 @@
-import * as Linking from 'expo-linking';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
@@ -25,7 +24,7 @@ import { DecorativePalmArt } from '@/components/onboarding/DecorativePalmArt';
 import { OnboardingHeader } from '@/components/onboarding/OnboardingHeader';
 import { TrustBadgeRow } from '@/components/onboarding/TrustBadgeRow';
 import { GlassCard, CosmicTextField, PrimaryButton } from '@/components/ui';
-import { LEGAL_URLS } from '@/constants/legal';
+import { LEGAL_IN_APP } from '@/constants/legal';
 import { ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS } from '@/constants/onboarding';
 import { SIGN_IN_UNAVAILABLE } from '@/constants/userCopy';
 import { runNativeOAuth } from '@/services/authCoordinator';
@@ -94,10 +93,8 @@ export default function SaveJourneyScreen() {
     });
   }, [beforePaywall, isSignedIn, mergedSeed]);
 
-  const openLegal = (url: string) => {
-    void Linking.openURL(url).catch(() => {
-      Alert.alert('Could not open link', 'Please try again in a moment.');
-    });
+  const openLegal = (path: '/legal/privacy' | '/legal/terms') => {
+    router.push(path);
   };
 
   const continueWithEmail = () => {
@@ -305,7 +302,7 @@ export default function SaveJourneyScreen() {
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Terms of Use"
-                  onPress={() => openLegal(LEGAL_URLS.terms)}>
+                  onPress={() => openLegal(LEGAL_IN_APP.terms)}>
                   <Text className="font-label text-[11px] uppercase leading-4 tracking-[0.08em] text-on-surface-variant">
                     Terms of Use
                   </Text>
@@ -313,7 +310,7 @@ export default function SaveJourneyScreen() {
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Privacy Policy"
-                  onPress={() => openLegal(LEGAL_URLS.privacy)}>
+                  onPress={() => openLegal(LEGAL_IN_APP.privacy)}>
                   <Text className="font-label text-[11px] uppercase leading-4 tracking-[0.08em] text-on-surface-variant">
                     Privacy Policy
                   </Text>

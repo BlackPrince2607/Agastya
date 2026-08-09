@@ -15,10 +15,10 @@ Use this when filling **Play Console → App content → Data safety**. Aligns w
 | Personal info | Email address | Yes (if signed in) | Yes (auth/provider) | Optional | App functionality, Account management |
 | Personal info | Name | Yes (display name) | Yes (backend/DB) | Optional | App functionality |
 | Photos | Photos | Yes (palm images) | Yes (backend storage + AI provider) | Required for palm reading | App functionality |
-| App activity | App interactions | Yes (analytics events) | Yes (Firebase Analytics and/or Mixpanel if enabled) | Optional | Analytics |
+| App activity | App interactions | Yes (analytics events) | Yes (Firebase Analytics and/or Mixpanel if enabled; Meta App Events when configured) | Optional | Analytics; Advertising or marketing |
 | App info & performance | Crash logs | Yes | Yes (Sentry) | Optional | Analytics / stability |
 | App info & performance | Diagnostics | Yes | Yes (Sentry) | Optional | Analytics / stability |
-| Device or other IDs | Device or other IDs | Yes (device install ID, session ID) | Yes (backend) | Required for sync | App functionality |
+| Device or other IDs | Device or other IDs | Yes (device install ID, session ID; advertising ID when Meta ads measurement is enabled and permitted) | Yes (backend; Meta when configured) | Required for sync / Optional for ads | App functionality; Advertising or marketing |
 | Financial info | Purchase history | Yes (premium flag / provider metadata) | Yes (Razorpay / Google Play) | Optional | App functionality |
 
 ## Sharing destinations (declare as applicable)
@@ -29,6 +29,7 @@ Use this when filling **Play Console → App content → Data safety**. Aligns w
 - **Google Play** — billing / User Choice / External Transactions
 - **Sentry** — crashes
 - **Firebase Analytics and/or Mixpanel** — analytics (only if configured)
+- **Meta (Facebook) App Events** — advertising measurement / campaign optimization (only if `EXPO_PUBLIC_FACEBOOK_APP_ID` + client token are set on the EAS build)
 
 ## Not collected
 

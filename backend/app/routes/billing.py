@@ -296,6 +296,19 @@ async def _grant_razorpay_premium_from_intent(
         amount_paise=int(intent.get("amount") or 0) or None,
     )
 
+    try:
+        from app.services import expo_push
+
+        await expo_push.notify_session(
+            session_id,
+            "premium_unlocked",
+            settings=settings,
+            event_key=f"premium_rz:{intent.get('id') or session_id}",
+            supabase_user_id=str(supabase_user_id) if supabase_user_id else None,
+        )
+    except Exception:
+        logger.exception("premium_unlocked push failed session=%s", session_id)
+
     return RazorpayConfirmPaymentResponse(is_premium=True, status="paid", source="razorpay")
 
 
@@ -507,5 +520,18 @@ async def verify_google_play_purchase(
     bkt.is_premium = True
     bkt.premium_source = "google_play"
     bkt.premium_expires_at = expires
+
+    try:
+        from app.services import expo_push
+
+        await expo_push.notify_session(
+            body.session_id,
+            "premium_unlocked",
+            settings=settings,
+            event_key=f"premium_play:{body.purchase_token[-24:]}",
+            supabase_user_id=str(supabase_user_id) if supabase_user_id else None,
+        )
+    except Exception:
+        logger.exception("premium_unlocked push failed session=%s", body.session_id)
 
     return GooglePlayVerifyResponse(is_premium=True, source="google_play")

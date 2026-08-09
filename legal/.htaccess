@@ -1,0 +1,6 @@
+# Pretty URLs for Apache/cPanel hosts (GoDaddy Linux hosting, not Website Builder).
+RewriteEngine On
+RewriteRule ^privacy/?$ privacy.html [L]
+RewriteRule ^terms/?$ terms.html [L]
+RewriteRule ^support/?$ support.html [L]
+RewriteRule ^delete-account/?$ delete-account.html [L]

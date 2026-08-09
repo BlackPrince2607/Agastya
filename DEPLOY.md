@@ -41,6 +41,7 @@ Fill in:
 - `EXPO_PUBLIC_PLAY_PRODUCT_ID` — Google Play one-time managed product (`premium_unlock`)
 - `EXPO_PUBLIC_SENTRY_DSN` — from Sentry → React Native project → Client Keys
 - `EXPO_PUBLIC_MIXPANEL_TOKEN` — optional analytics provider
+- `EXPO_PUBLIC_FACEBOOK_APP_ID` + `EXPO_PUBLIC_FACEBOOK_CLIENT_TOKEN` — Meta App Events (ads measurement). Set the same on EAS Environment Variables. Requires a **new EAS native build** (not Expo Go). After install, confirm ActivateApp + funnel events in Meta Events Manager → Test Events.
 
 ### Backend (`backend/.env.example` → `backend/.env`)
 ```bash
@@ -351,6 +352,8 @@ Add these secrets in GitHub → Settings → Secrets → Actions:
 | `EXPO_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key |
 | `EXPO_PUBLIC_PLAY_PRODUCT_ID` | Google Play one-time SKU (`premium_unlock`) |
 | `EXPO_PUBLIC_SENTRY_DSN` | Sentry client DSN |
+| `EXPO_PUBLIC_FACEBOOK_APP_ID` | Meta Developers → App ID (optional; ads measurement) |
+| `EXPO_PUBLIC_FACEBOOK_CLIENT_TOKEN` | Meta Developers → Client Token |
 | `RAILWAY_TOKEN` | Railway → Account Settings → Tokens (only if using GitHub Actions deploy; not needed for Railway native GitHub integration) |
 | `FLY_API_TOKEN` | Optional — only if using Fly.io instead of Railway |
 
@@ -366,6 +369,8 @@ npx eas-cli build --platform all --profile development
 npx eas-cli build --platform all --profile production
 npx eas-cli submit --platform all --profile production
 ```
+
+**Meta App Events:** after an EAS build with Facebook App ID + Client Token set, open the app on a test device and check [Events Manager → Test Events](https://www.facebook.com/events_manager2) for ActivateApp and funnel events (registration, paywall, checkout, purchase). Expo Go will not emit Meta events.
 
 ---
 

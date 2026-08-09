@@ -52,6 +52,7 @@ class GenerateReportBody(BaseModel):
     mode: Literal["preview", "full"] = "full"
     display_name: str | None = Field(default=None, alias="displayName")
     gender: str | None = None
+    expo_push_token: str | None = Field(default=None, alias="expoPushToken")
 
     model_config = {"populate_by_name": True}
 

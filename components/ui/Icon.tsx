@@ -63,7 +63,9 @@ export type IconName =
   | 'flare'
   | 'photo_camera'
   | 'image'
-  | 'calendar_today';
+  | 'calendar_today'
+  | 'support_agent'
+  | 'link';
 
 type IconProps = {
   name: IconName;

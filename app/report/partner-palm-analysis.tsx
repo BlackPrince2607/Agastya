@@ -23,6 +23,7 @@ import { ApiHttpError, parsePalmUnreadable } from '@/services/apiErrors';
 import { analyzePalm } from '@/services/agastyaApi';
 import { bootstrapIdentity } from '@/services/identity';
 import { isApiConfigured } from '@/services/env';
+import { notifyPushEvent } from '@/services/notifications';
 import type { PalmAnalysisDto } from '@/types/palmAnalysis';
 import { isLivePalmAnalysis, palmNeedsRetake } from '@/types/palmAnalysis';
 import { useSessionStore } from '@/store/sessionStore';
@@ -169,6 +170,7 @@ export default function PartnerPalmAnalysisScreen() {
           partnerPalmCaptureLandmarks: null,
           partnerPalmLandmarksSource: null,
         });
+        void notifyPushEvent('compatibility_ready', `compat:${resolvedSeed}`);
 
         advance(2);
         await delay(350);

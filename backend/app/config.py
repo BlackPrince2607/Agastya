@@ -136,6 +136,11 @@ class Settings(BaseSettings):
     # Comma-separated emails that always receive is_premium (founder / testers).
     premium_email_allowlist: str = ""
 
+    # --- Push notifications (Expo Push API) ---
+    notifications_enabled: bool = True
+    # Bearer secret for POST /v1/notifications/cron/dispatch (Railway cron / external scheduler).
+    cron_secret: str | None = None
+
     # --- Sentry (optional — error tracking) ---
     sentry_dsn: str | None = None
     sentry_environment: str = "production"

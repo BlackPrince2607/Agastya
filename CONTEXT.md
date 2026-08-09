@@ -16,7 +16,7 @@ The app is entertainment/self-reflection only. User-facing copy repeatedly clari
 - Backend: FastAPI, Pydantic, Uvicorn, optional OpenRouter inference, optional Supabase persistence/storage/auth, optional Redis rate limiting.
 - Auth: Supabase client on the app, Supabase JWT verification on the backend.
 - Billing: Razorpay (alternative) + Google Play User Choice (Android India); server-side premium flags.
-- Observability: Sentry on frontend and backend, optional Firebase Analytics / Mixpanel analytics.
+- Observability: Sentry on frontend and backend, optional Firebase Analytics / Mixpanel analytics, optional Meta App Events (ads measurement on native EAS builds).
 
 ## Important Commands
 
@@ -213,7 +213,8 @@ Server-side premium is authoritative (`is_premium` + optional `premium_expires_a
 - `services/notifications.ts`: Expo push token registration, local daily/evening reminders, ready notification fallback, deep links (`data.screen`).
 - Remote events (Expo Push via FastAPI): `reading_ready`, `full_report_ready`, `premium_unlocked`, `payment_pending`, `compatibility_ready`, plus cron campaigns (`onboarding_incomplete`, `preview_unsigned`, `streak_at_risk`, `weekly_guidance`, `reengage_3d/7d/14d`).
 - Token table: `agastya_push_tokens`; dedup: `agastya_notification_log`. Routes under `/v1/notifications/*`.
-- `services/analytics.ts`: Firebase Analytics (native) event forwarding (Mixpanel optional fallback).
+- `services/analytics.ts`: Firebase Analytics (native) event forwarding (Mixpanel optional; Meta App Events for curated funnel events when configured).
+- `services/metaAds.ts`: Meta SDK init + iOS ATT; requires `EXPO_PUBLIC_FACEBOOK_APP_ID` + `EXPO_PUBLIC_FACEBOOK_CLIENT_TOKEN` and an **EAS native rebuild** (does not work in Expo Go). Verify in Meta Events Manager → Test Events after first install from an EAS APK/IPA.
 - `services/sentry.ts`: frontend Sentry init and helpers.
 - `services/apiErrors.ts`, `services/authErrors.ts`, `services/authErrorUtils.ts`: user-facing error mapping.
 

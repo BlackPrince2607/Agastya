@@ -37,6 +37,11 @@ _LIMITS: dict[str, tuple[int, int]] = {
     "/billing/razorpay/confirm-payment": (10, 60),
     "/billing/google-play/verify-purchase": (5, 60),
     "/billing/config": (30, 60),
+    "/notifications/register-token": (20, 60),
+    "/notifications/unregister-token": (20, 60),
+    "/notifications/heartbeat": (60, 60),
+    "/notifications/event": (20, 60),
+    "/notifications/cron/dispatch": (5, 60),
 }
 
 _windows: dict[str, deque[float]] = {}

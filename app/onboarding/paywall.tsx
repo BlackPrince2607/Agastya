@@ -244,6 +244,12 @@ export default function PaywallScreen() {
           ? 'Payment may have succeeded, but we could not load your full report yet. Try checking premium status or sign in again.'
           : 'We could not confirm your payment yet. Wait a moment and tap Check premium status, or contact support if this continues.',
       );
+      void import('@/services/notifications').then(({ notifyPushEvent }) => {
+        void notifyPushEvent(
+          'payment_pending',
+          `pending:${useSessionStore.getState().sessionId ?? 'unknown'}`,
+        );
+      });
       return false;
     },
     [],

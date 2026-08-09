@@ -3,6 +3,7 @@ import { Alert, Platform } from 'react-native';
 import { generateReport } from '@/services/agastyaApi';
 import { AnalyticsEvent, track } from '@/services/analytics';
 import {
+  getBillingConfig,
   isAndroidBillingAvailable,
   startRazorpayCheckout,
   confirmRazorpayCheckout,
@@ -13,7 +14,7 @@ import {
 import { isPlayUserChoiceAvailable, launchPlayUserChoiceBilling } from '@/services/billing/playUserChoice';
 import { normalizeFullReport } from '@/services/normalizeReport';
 import { restoreSessionFromServer } from '@/services/sessionRestore';
-import { useSessionStore } from '@/store/sessionStore';
+import { useSessionStore, type BillingPeriod } from '@/store/sessionStore';
 
 export type UnlockResult =
   | { ok: true; source: 'purchase' | 'restore' | 'razorpay' | 'google_play' }
@@ -21,6 +22,33 @@ export type UnlockResult =
       ok: false;
       reason: 'cancelled' | 'unavailable' | 'not_entitled' | 'report_failed' | 'failed' | 'need_sign_in';
     };
+
+/** Major-unit price for Meta/Firebase purchase events (INR display prices as fallback). */
+const FALLBACK_PLAN_MAJOR: Record<BillingPeriod, number> = {
+  monthly: 149,
+  annual: 349,
+};
+
+async function purchaseValueProps(billingPeriod: BillingPeriod): Promise<{
+  value: number;
+  currency: string;
+  billing_period: BillingPeriod;
+}> {
+  const config = await getBillingConfig();
+  const plan = config?.plans?.[billingPeriod];
+  if (plan && typeof plan.amount === 'number') {
+    return {
+      value: plan.amount / 100,
+      currency: plan.currency || config?.currency || 'INR',
+      billing_period: billingPeriod,
+    };
+  }
+  return {
+    value: FALLBACK_PLAN_MAJOR[billingPeriod] ?? 349,
+    currency: config?.currency || 'INR',
+    billing_period: billingPeriod,
+  };
+}
 
 async function syncPremiumFromServer(): Promise<boolean> {
   await restoreSessionFromServer({ force: true });
@@ -80,7 +108,8 @@ async function finalizeAfterEntitlement(
 
   setPremium(serverPremium || true);
   if (trackPurchase) {
-    track(AnalyticsEvent.PURCHASE_COMPLETED, { source, billing_period: billingPeriod });
+    const valueProps = await purchaseValueProps(billingPeriod);
+    track(AnalyticsEvent.PURCHASE_COMPLETED, { source, ...valueProps });
   }
   return { ok: true, source };
 }
@@ -208,9 +237,11 @@ export async function checkPremiumStatus(options: { seed?: string }): Promise<Un
   // Prefer active Razorpay confirm (covers webhook lag after a completed payment).
   const confirmed = await confirmRazorpayCheckout({});
   if (confirmed.ok) {
+    const period = useSessionStore.getState().billingPeriod;
+    const valueProps = await purchaseValueProps(period);
     track(AnalyticsEvent.PURCHASE_COMPLETED, {
       source: 'razorpay',
-      billing_period: useSessionStore.getState().billingPeriod,
+      ...valueProps,
     });
     return finalizeAfterEntitlement(seed, 'razorpay', false);
   }
@@ -237,9 +268,11 @@ export async function finalizeRazorpayCheckout(
     clearLastCheckoutIntentId();
     // Do not block entry on report generation — home can load while this finishes.
     void materializeFullReport(seed);
+    const period = useSessionStore.getState().billingPeriod;
+    const valueProps = await purchaseValueProps(period);
     track(AnalyticsEvent.PURCHASE_COMPLETED, {
       source: 'razorpay',
-      billing_period: useSessionStore.getState().billingPeriod,
+      ...valueProps,
     });
     return { ok: true, source: 'razorpay' };
   };

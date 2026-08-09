@@ -88,7 +88,7 @@ When Supabase is configured, **sign-in is required** to enter main tabs (`need_s
 
 **Settings** live on **Profile** (no separate Settings screen).
 
-**Push** = local notifications only (`expo-notifications`); disabled on Web / Expo Go.
+**Push** = Expo remote push + local scheduled reminders (`expo-notifications`); disabled on Web / Expo Go.
 
 ---
 
@@ -1349,52 +1349,92 @@ When Supabase is configured, **sign-in is required** to enter main tabs (`need_s
 
 ### 5.27 Push Notifications (`PUSH`)
 
-> Local notifications only. **N/A** on Web and Expo Go.
+> Remote (Expo Push) + local scheduled. **N/A** on Web and Expo Go — use a native EAS APK/IPA.
 
 #### PUSH-001 — Permission request
 | Field | Detail |
 |-------|--------|
-| **Preconditions** | Fresh permission state; native RC1 build. |
+| **Preconditions** | Fresh permission state; native build. |
 | **Steps** | 1. Enter main after onboarding. 2. Accept or deny. |
-| **Expected Result** | System prompt; deny does not block app. |
+| **Expected Result** | System prompt; deny does not block app. On grant, token registers to `agastya_push_tokens`. |
 | **Pass/Fail** | |
 | **Notes** | |
 
-#### PUSH-002 — Reading ready notification tap
+#### PUSH-002 — Reading ready (remote or local fallback)
 | Field | Detail |
 |-------|--------|
 | **Preconditions** | Notifications allowed; complete analysis. |
-| **Steps** | 1. Wait for **Your palm reading is ready**. 2. Tap notification (app backgrounded or killed). |
-| **Expected Result** | Opens report route (`/report` deep link data); respects Pro gate (full vs preview). |
+| **Steps** | 1. Background app during analysis if possible. 2. Receive **Your palm reading is ready**. 3. Tap. |
+| **Expected Result** | Opens `/report`; remote push when Expo token available, else local ~3s fallback. No duplicate when remote works. |
 | **Pass/Fail** | |
 | **Notes** | |
 
-#### PUSH-003 — Daily tasks reminder tap
+#### PUSH-003 — Daily tasks reminder (local)
 | Field | Detail |
 |-------|--------|
-| **Preconditions** | Pro; incomplete rituals; reminder scheduled (~9:00 local) OR trigger via test clock if available. |
-| **Steps** | 1. Receive **Your daily tasks** / **You have tasks waiting for today. Tap to open them.** 2. Tap. |
-| **Expected Result** | Opens Tasks tab; Pro gate respected if somehow free. |
+| **Preconditions** | Pro; incomplete rituals; reminder scheduled (~9:00 local). |
+| **Steps** | 1. Receive **Your daily tasks**. 2. Tap. |
+| **Expected Result** | Opens Tasks tab. |
 | **Pass/Fail** | |
-| **Notes** | May require waiting until 9:00 or device time change — document method. |
+| **Notes** | |
 
-#### PUSH-004 — Foreground notification display
+#### PUSH-004 — Evening reflection (local)
+| Field | Detail |
+|-------|--------|
+| **Preconditions** | Pro; evening-reflection incomplete; ~20:00 local. |
+| **Steps** | 1. Receive **Evening reflection**. 2. Tap. 3. Complete evening task → reminder cancelled. |
+| **Expected Result** | Opens Tasks; cancels after completion / all done. |
+| **Pass/Fail** | |
+| **Notes** | |
+
+#### PUSH-005 — Premium unlocked (remote)
+| Field | Detail |
+|-------|--------|
+| **Preconditions** | Complete Razorpay/Play purchase on native build with token registered. |
+| **Steps** | 1. Unlock Premium. 2. Receive **Premium unlocked**. 3. Tap. |
+| **Expected Result** | Opens report / main; entitlement already granted. |
+| **Pass/Fail** | |
+| **Notes** | |
+
+#### PUSH-006 — Payment pending (remote)
+| Field | Detail |
+|-------|--------|
+| **Preconditions** | Simulate webhook lag / confirm fail after checkout return. |
+| **Steps** | 1. Return from checkout without entitlement. 2. Observe pending alert + optional push. |
+| **Expected Result** | **Purchase pending** push deep-links to paywall; Check premium status still works. |
+| **Pass/Fail** | |
+
+#### PUSH-007 — Compatibility ready (remote)
+| Field | Detail |
+|-------|--------|
+| **Preconditions** | Pro; complete partner palm analysis. |
+| **Steps** | 1. Finish partner analysis. 2. Receive **Compatibility ready**. 3. Tap. |
+| **Expected Result** | Opens `/report/compatibility`. |
+| **Pass/Fail** | |
+
+#### PUSH-008 — Cron dispatch (staging)
+| Field | Detail |
+|-------|--------|
+| **Preconditions** | `CRON_SECRET` set; tokens in DB; seed sessions matching campaign criteria. |
+| **Steps** | 1. `POST /v1/notifications/cron/dispatch` with Bearer secret. 2. Re-run immediately. |
+| **Expected Result** | Counts returned; second run does not duplicate (dedup log). |
+| **Pass/Fail** | |
+
+#### PUSH-009 — Foreground notification display
 | Field | Detail |
 |-------|--------|
 | **Preconditions** | Notification fires while app foregrounded. |
 | **Steps** | 1. Trigger reading-ready while staying in app. |
 | **Expected Result** | Banner/list per handler config; no crash. |
 | **Pass/Fail** | |
-| **Notes** | |
 
-#### PUSH-005 — Notifications disabled path
+#### PUSH-010 — Notifications disabled / sign-out
 | Field | Detail |
 |-------|--------|
-| **Preconditions** | Deny notifications. |
-| **Steps** | 1. Complete analysis and use Tasks. |
-| **Expected Result** | App fully usable; reminders simply do not appear. |
+| **Preconditions** | Deny notifications OR sign out after token registered. |
+| **Steps** | 1. Deny path: use app fully. 2. Sign-out path: confirm token disabled server-side. |
+| **Expected Result** | App usable without permission; no pushes after unregister. |
 | **Pass/Fail** | |
-| **Notes** | |
 
 ---
 
@@ -1428,8 +1468,8 @@ When Supabase is configured, **sign-in is required** to enter main tabs (`need_s
 | App Upgrade | UPG-001–003 | | | | |
 | Rotation | ROT-001–004 | | | | |
 | Background/Foreground | BF-001–005 | | | | |
-| Push Notifications | PUSH-001–005 | | | | |
-| **Total** | **~120** | | | | |
+| Push Notifications | PUSH-001–010 | | | | |
+| **Total** | **~125** | | | | |
 
 ---
 
@@ -1438,7 +1478,7 @@ When Supabase is configured, **sign-in is required** to enter main tabs (`need_s
 1. **Guest** = anonymous local session through ritual; main tabs require Supabase sign-in when configured.
 2. **Premium does not block Home**; it blocks Chat, Tasks, Compatibility, and full report.
 3. **Razorpay** is Android (India) primary; validate production builds do **not** ship with test bypass enabled.
-4. **Push** is local-only; there is no remote FCM/APNs campaign path in-app for RC1.
+4. **Push** = Expo remote + local reminders; remote requires native build + registered token. Cron campaigns need `CRON_SECRET`.
 5. Portrait lock may make rotation cases mostly “stays portrait” — still record Pass if stable.
 6. File bugs with: Test ID, severity, device, build ID, steps, expected vs actual, screenshots/logs.
 

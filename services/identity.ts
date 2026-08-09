@@ -8,6 +8,7 @@ import { diagnoseReachability, reachabilityDevHint } from '@/services/apiReachab
 import { AGASTYA_API_ROOT, isApiConfigured } from '@/services/env';
 import { track } from '@/services/analytics';
 import { getApiHealth, setApiHealth, setApiHealthFailed } from '@/services/connectivity';
+import { heartbeatPushToken } from '@/services/notifications';
 import { restoreSessionFromServer } from '@/services/sessionRestore';
 import { useSessionStore } from '@/store/sessionStore';
 
@@ -142,6 +143,7 @@ async function runBootstrapRemote(): Promise<void> {
     if (!useSessionStore.getState().skipCloudRestore) {
       await restoreSessionFromServer();
     }
+    void heartbeatPushToken();
   } catch (err) {
     lastHealthFailAt = Date.now();
     setApiHealthFailed();

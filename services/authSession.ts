@@ -5,6 +5,7 @@ import { track } from '@/services/analytics';
 import { deleteAccountFromServer } from '@/services/agastyaApi';
 import { isApiConfigured } from '@/services/env';
 import { bootstrapIdentity } from '@/services/identity';
+import { unregisterPushTokenWithServer, registerPushTokenWithServer } from '@/services/notifications';
 import { getSupabase, isSupabaseEnabled } from '@/services/supabase';
 import { useChatStore } from '@/store/chatStore';
 import { useSessionStore } from '@/store/sessionStore';
@@ -102,6 +103,9 @@ export function syncAuthUserToStore(userId: string | null, email?: string | null
   } else if (email !== undefined) {
     setPremiumAllowlistEmail(email);
   }
+  if (userId) {
+    void registerPushTokenWithServer();
+  }
 }
 
 /** Leave main app and return to welcome — keeps local reading; use after sign-out. */
@@ -110,6 +114,7 @@ export function leaveMainAppForOnboarding() {
 }
 
 export async function signOutAndReturnToWelcome(): Promise<void> {
+  void unregisterPushTokenWithServer();
   const supabase = getSupabase();
   if (supabase) {
     try {
@@ -133,6 +138,7 @@ export async function signInFromProfile(): Promise<void> {
 
 /** Wipe local progress and Supabase session, land on welcome. */
 export async function resetLocalAndSignOut(): Promise<void> {
+  void unregisterPushTokenWithServer();
   const supabase = getSupabase();
   if (supabase) {
     try {
@@ -163,6 +169,8 @@ export async function deleteAccountAndReset(): Promise<void> {
   if (isApiConfigured()) {
     await deleteAccountFromServer();
   }
+
+  void unregisterPushTokenWithServer();
 
   try {
     await supabase.auth.signOut();

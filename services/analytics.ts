@@ -156,7 +156,111 @@ async function sendFirebase(event: string, props: Props) {
   }
 }
 
-/** Firebase (primary) with optional Mixpanel fallback. */
+type MetaLogger = {
+  logEvent: (name: string, ...args: Array<number | Record<string, string | number>>) => void;
+  logPurchase: (amount: number, currency: string, params?: Record<string, string | number>) => void;
+  AppEvents?: Record<string, string>;
+  AppEventParams?: Record<string, string>;
+};
+
+let metaLogger: MetaLogger | null | undefined;
+
+function getMetaLogger(): MetaLogger | null {
+  if (Platform.OS === 'web') return null;
+  if (metaLogger !== undefined) return metaLogger;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require('react-native-fbsdk-next');
+    const logger = (mod.AppEventsLogger ?? mod.default?.AppEventsLogger) as MetaLogger | undefined;
+    metaLogger = logger ?? null;
+    return metaLogger;
+  } catch {
+    metaLogger = null;
+    return null;
+  }
+}
+
+function metaScalarParams(props: Props): Record<string, string | number> {
+  const out: Record<string, string | number> = {};
+  for (const [key, value] of Object.entries(props)) {
+    if (value === undefined || value === null) continue;
+    if (typeof value === 'string' || typeof value === 'number') {
+      out[key] = value;
+    } else if (typeof value === 'boolean') {
+      out[key] = value ? 1 : 0;
+    }
+  }
+  return out;
+}
+
+function numberProp(props: Props, key: string): number | undefined {
+  const v = props[key];
+  return typeof v === 'number' && Number.isFinite(v) ? v : undefined;
+}
+
+function stringProp(props: Props, key: string): string | undefined {
+  const v = props[key];
+  return typeof v === 'string' && v.trim() ? v.trim() : undefined;
+}
+
+/** Curated funnel → Meta standard / custom events (ActivateApp is automatic). */
+function sendMeta(event: string, props: Props) {
+  const logger = getMetaLogger();
+  if (!logger?.logEvent) return;
+
+  const events = logger.AppEvents ?? {};
+  const params = logger.AppEventParams ?? {};
+  const contentType = params.ContentType ?? 'fb_content_type';
+  const currencyKey = params.Currency ?? 'fb_currency';
+  const extras = metaScalarParams(props);
+
+  try {
+    switch (event) {
+      case AnalyticsEvent.APP_OPENED:
+        // Auto ActivateApp via SDK — avoid duplicate.
+        return;
+      case AnalyticsEvent.ONBOARDING_COMPLETED:
+        logger.logEvent(events.CompletedRegistration ?? 'fb_mobile_complete_registration', extras);
+        return;
+      case AnalyticsEvent.ANALYSIS_COMPLETED:
+        logger.logEvent(events.ViewedContent ?? 'fb_mobile_content_view', {
+          ...extras,
+          [contentType]: 'report',
+        });
+        return;
+      case AnalyticsEvent.PAYWALL_VIEWED:
+        logger.logEvent('paywall_viewed', extras);
+        return;
+      case AnalyticsEvent.CHECKOUT_STARTED:
+        logger.logEvent(events.InitiatedCheckout ?? 'fb_mobile_initiated_checkout', extras);
+        return;
+      case AnalyticsEvent.SUBSCRIPTION_PURCHASED: {
+        const value = numberProp(props, 'value');
+        const currency = stringProp(props, 'currency') ?? 'INR';
+        if (typeof value === 'number' && typeof logger.logPurchase === 'function') {
+          logger.logPurchase(value, currency, extras);
+        } else {
+          // Fallback when amount unknown — still useful for optimization.
+          logger.logEvent('fb_mobile_purchase', value ?? 0, { ...extras, [currencyKey]: currency });
+        }
+        logger.logEvent(events.Subscribe ?? 'Subscribe', value ?? 0, {
+          ...extras,
+          [currencyKey]: currency,
+        });
+        return;
+      }
+      case AnalyticsEvent.SUBSCRIPTION_RESTORED:
+        // Not a new purchase — skip Meta conversion.
+        return;
+      default:
+        return;
+    }
+  } catch {
+    /* best-effort */
+  }
+}
+
+/** Firebase (primary) with optional Mixpanel + Meta App Events sinks. */
 export function track(event: string, props?: Props) {
   const merged = withCoreProps(props);
   if (__DEV__) {
@@ -167,6 +271,7 @@ export function track(event: string, props?: Props) {
   if (MIXPANEL) {
     void sendMixpanel(event, merged);
   }
+  sendMeta(event, merged);
 }
 
 /** Fire at most once for `key` in this JS runtime (avoids StrictMode / remount duplicates). */

@@ -77,10 +77,24 @@ async def _grant_allowlist_premium(
     """Stamp is_premium for founder/tester emails from PREMIUM_EMAIL_ALLOWLIST."""
     if not _email_is_premium_allowlisted(email, settings):
         return False
+    already = bkt.effectively_premium()
     bkt.is_premium = True
     if session_repository.is_enabled(settings):
         await session_repository.set_premium_by_user(user_id, True, settings)
         await session_repository.set_premium_by_session(session_id, True, settings)
+    if not already:
+        try:
+            from app.services import expo_push
+
+            await expo_push.notify_session(
+                session_id,
+                "premium_unlocked",
+                settings=settings,
+                event_key=f"premium_allowlist:{user_id}",
+                supabase_user_id=user_id,
+            )
+        except Exception:
+            logger.exception("premium_unlocked push failed session=%s", session_id)
     return True
 
 
@@ -570,6 +584,31 @@ async def reports_generate(
     if body.seed:
         bkt.meta["readingSeed"] = body.seed
     await _persist(body.session_id, settings)
+
+    # Best-effort remote push for reading / full report ready.
+    try:
+        from app.services import expo_push, push_token_repository
+
+        if body.expo_push_token and settings.notifications_enabled:
+            user_id = bkt.meta.get("supabaseUserId")
+            await push_token_repository.upsert_token(
+                session_id=body.session_id,
+                expo_push_token=body.expo_push_token,
+                supabase_user_id=str(user_id) if user_id else None,
+                settings=settings,
+            )
+        event = "reading_ready" if body.mode == "preview" else "full_report_ready"
+        user_id = bkt.meta.get("supabaseUserId")
+        await expo_push.notify_session(
+            body.session_id,
+            event,
+            settings=settings,
+            event_key=f"{event}:{body.seed or body.session_id}",
+            supabase_user_id=str(user_id) if user_id else None,
+        )
+    except Exception:
+        logger.exception("push after reports_generate failed session=%s", body.session_id)
+
     return report.model_dump(by_alias=True)
 
 

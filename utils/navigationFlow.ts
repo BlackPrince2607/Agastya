@@ -10,7 +10,7 @@ import { requiresSupabaseSignIn } from '@/services/authConfig';
 import { ensureSessionMerged } from '@/services/authMerge';
 import { restoreSessionFromServer } from '@/services/sessionRestore';
 import { bootstrapIdentity } from '@/services/identity';
-import { requestNotificationPermission } from '@/services/notifications';
+import { requestNotificationPermission, registerPushTokenWithServer } from '@/services/notifications';
 import { isApiConfigured } from '@/services/env';
 import { getSupabase } from '@/services/supabase';
 import { useSessionStore } from '@/store/sessionStore';
@@ -97,7 +97,9 @@ export function resolveSignedInHrefSync(): Href {
   }
 
   useSessionStore.getState().setEnteredMain(true);
-  void requestNotificationPermission();
+  void requestNotificationPermission().then((ok) => {
+    if (ok) void registerPushTokenWithServer();
+  });
   return '/(main)/home';
 }
 
@@ -256,7 +258,9 @@ export async function tryEnterMainApp(): Promise<EnterMainResult> {
     return gate;
   }
   useSessionStore.getState().setEnteredMain(true);
-  void requestNotificationPermission();
+  void requestNotificationPermission().then((ok) => {
+    if (ok) void registerPushTokenWithServer();
+  });
   resetAppNavigation('/(main)/home');
   return 'ok';
 }
@@ -332,14 +336,18 @@ export async function prepareReturningUser(forceRestore = false): Promise<Href> 
     const gate = canEnterMainAppSync();
     if (gate === 'ok') {
       useSessionStore.getState().setEnteredMain(true);
-      void requestNotificationPermission();
+      void requestNotificationPermission().then((ok) => {
+        if (ok) void registerPushTokenWithServer();
+      });
       return '/(main)/home';
     }
     if (gate === 'need_sign_in') {
       return '/onboarding/account';
     }
     useSessionStore.getState().setEnteredMain(true);
-    void requestNotificationPermission();
+    void requestNotificationPermission().then((ok) => {
+      if (ok) void registerPushTokenWithServer();
+    });
     return '/(main)/home';
   }
 

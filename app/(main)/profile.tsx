@@ -14,7 +14,7 @@ import { SettingsSection } from '@/components/profile/SettingsSection';
 import { StatsGrid } from '@/components/profile/StatCard';
 import { LoadingBlock } from '@/components/feedback';
 import { GlassCard, InsightCard } from '@/components/ui';
-import { LEGAL_URLS } from '@/constants/legal';
+import { LEGAL_IN_APP, LEGAL_URLS } from '@/constants/legal';
 import { MAIN_SECTION_GAP, STACK_GAP } from '@/constants/layout';
 import {
   displayNameOrDefault,
@@ -541,8 +541,27 @@ export default function ProfileScreen() {
             accessibilityLabel="Share Agastya"
             accessibilityHint="Opens the share sheet to invite a friend"
           />
-          <SettingsRow icon="lock" title="Privacy policy" onPress={() => openLink(LEGAL_URLS.privacy)} />
-          <SettingsRow icon="article" title="Terms of use" onPress={() => openLink(LEGAL_URLS.terms)} />
+          <SettingsRow
+            icon="lock"
+            title="Privacy policy"
+            onPress={() => router.push(LEGAL_IN_APP.privacy)}
+          />
+          <SettingsRow
+            icon="article"
+            title="Terms of use"
+            onPress={() => router.push(LEGAL_IN_APP.terms)}
+          />
+          <SettingsRow
+            icon="support_agent"
+            title="Support"
+            onPress={() => router.push(LEGAL_IN_APP.support)}
+          />
+          <SettingsRow
+            icon="link"
+            title="Delete account (web)"
+            subtitle="Request deletion without the app"
+            onPress={() => openLink(LEGAL_URLS.deleteAccount)}
+          />
           <SettingsRow icon="info" title="Version" subtitle={version} showChevron={false} last />
         </SettingsSection>
       </MainTabScroll>

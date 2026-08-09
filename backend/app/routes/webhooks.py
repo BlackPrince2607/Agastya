@@ -70,7 +70,28 @@ async def _apply_premium_to_ids(
             )
     if not attempted:
         return False
-    return wrote or not settings.supabase_enabled
+    wrote_ok = wrote or not settings.supabase_enabled
+    if wrote_ok and is_premium:
+        try:
+            from app.services import expo_push, push_token_repository
+
+            if session_id:
+                await expo_push.notify_session(
+                    session_id,
+                    "premium_unlocked",
+                    settings=settings,
+                    event_key=f"premium_wh:{source}:{session_id}",
+                    supabase_user_id=supabase_user_id,
+                )
+            elif supabase_user_id:
+                tokens = await push_token_repository.tokens_for_user(supabase_user_id, settings)
+                if tokens:
+                    await expo_push.send_push_event(
+                        tokens, "premium_unlocked", settings=settings
+                    )
+        except Exception:
+            logger.exception("premium_unlocked webhook push failed")
+    return wrote_ok
 
 
 @router.post("/webhooks/razorpay", status_code=200)

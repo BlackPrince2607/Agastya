@@ -25,12 +25,15 @@ import { cosmicGradients } from '@/constants/theme';
 import { subscribeAuthDeepLinks } from '@/services/authCallback';
 import { subscribeSupabaseSessionMerge } from '@/services/authMerge';
 import { bootstrapIdentity } from '@/services/identity';
+import { initMetaAds } from '@/services/metaAds';
 import { isServerEnvironment } from '@/services/persistentStorage';
 import { initSentry } from '@/services/sentry';
 import { useSessionStore } from '@/store/sessionStore';
 import {
   configureNotificationHandler,
   getNotificationDeepLink,
+  registerPushTokenWithServer,
+  requestNotificationPermission,
 } from '@/services/notifications';
 
 // Initialise Sentry before any other code runs
@@ -92,7 +95,13 @@ export default function RootLayout() {
     if (isServerEnvironment()) return;
     const stopDeepLinks = subscribeAuthDeepLinks();
     const stopMerge = subscribeSupabaseSessionMerge();
-    void bootstrapIdentity();
+    void bootstrapIdentity().then(() => {
+      void requestNotificationPermission().then((ok) => {
+        if (ok) void registerPushTokenWithServer();
+      });
+    });
+    // After splash — ATT dialog must not race the native splash.
+    void initMetaAds();
     return () => {
       stopDeepLinks();
       stopMerge();
@@ -144,6 +153,7 @@ export default function RootLayout() {
           <Stack.Screen name="(main)" />
           <Stack.Screen name="report" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="task/[id]" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="legal/[doc]" options={{ animation: 'slide_from_right' }} />
         </Stack>
       </ThemeProvider>
     </SafeAreaProvider>
