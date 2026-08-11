@@ -1,6 +1,6 @@
 # Agastya FastAPI backend — built from repo root (Railway / Fly monorepo layout).
-# Railway: railway.toml sets dockerfilePath=backend/Dockerfile, context=repo root.
-# Fly: fly deploy --dockerfile backend/Dockerfile (same COPY paths).
+# Railway production uses the root Dockerfile (railway.toml dockerfilePath=Dockerfile).
+# Keep COPY legal/ in sync with that root Dockerfile. Fly: fly deploy --dockerfile backend/Dockerfile.
 
 FROM python:3.12-slim
 

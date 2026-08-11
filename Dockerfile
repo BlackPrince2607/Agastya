@@ -6,7 +6,9 @@ WORKDIR /app
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Backend source + public legal HTML (Play Console / sharvo.online custom domain)
 COPY backend/ .
+COPY legal/ /app/legal/
 
 ENV PORT=8000
 EXPOSE 8000

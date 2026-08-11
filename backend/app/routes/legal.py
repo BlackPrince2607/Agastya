@@ -29,6 +29,12 @@ def _legal_page(filename: str) -> FileResponse:
     return FileResponse(path, media_type="text/html; charset=utf-8")
 
 
+@router.get("/")
+async def legal_home() -> FileResponse:
+    """Minimal landing when sharvo.online apex points at this API."""
+    return _legal_page("index.html")
+
+
 @router.get("/delete-account")
 async def delete_account_page() -> FileResponse:
     return _legal_page("delete-account.html")
