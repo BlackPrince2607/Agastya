@@ -7,8 +7,11 @@ import { useSessionStore } from '@/store/sessionStore';
 
 let cachedAuthEmail: string | null = null;
 
-/** Always-on founder accounts (also set EXPO_PUBLIC_PREMIUM_EMAIL_ALLOWLIST in .env). */
-const BUILTIN_ALLOWLIST = new Set(['sohambhalotia@gmail.com']);
+/** Always-on founder / tester accounts (also set EXPO_PUBLIC_PREMIUM_EMAIL_ALLOWLIST in EAS). */
+const BUILTIN_ALLOWLIST = new Set([
+  'sohambhalotia@gmail.com',
+  'testuser@gmail.com',
+]);
 
 function parseAllowlist(): Set<string> {
   const raw = process.env.EXPO_PUBLIC_PREMIUM_EMAIL_ALLOWLIST ?? '';

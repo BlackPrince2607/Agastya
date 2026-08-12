@@ -15,6 +15,6 @@ android {
 }
 
 dependencies {
-  // Required: Play Billing Library 7.x for India User Choice Billing (enableUserChoiceBilling).
-  implementation("com.android.billingclient:billing-ktx:7.1.1")
+  // Play Billing Library 8.x required by Google Play (Aug 31, 2026+); User Choice via enableUserChoiceBilling.
+  implementation("com.android.billingclient:billing-ktx:8.3.0")
 }

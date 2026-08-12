@@ -90,6 +90,7 @@ class PlayUserChoiceModule : Module() {
         .enablePendingPurchases(
           PendingPurchasesParams.newBuilder().enableOneTimeProducts().build()
         )
+        .enableAutoServiceReconnection()
         .enableUserChoiceBilling { userChoiceDetails ->
           val token = userChoiceDetails.externalTransactionToken
           val p = pendingPromise.getAndSet(null)
@@ -119,9 +120,11 @@ class PlayUserChoiceModule : Module() {
           )
           val params = QueryProductDetailsParams.newBuilder().setProductList(productList).build()
 
-          client.queryProductDetailsAsync(params) { detailsResult, productDetailsList ->
+          // PBL 8+: callback returns QueryProductDetailsResult (fetched + unfetched lists).
+          client.queryProductDetailsAsync(params) { detailsResult, queryProductDetailsResult ->
+            val productDetailsList = queryProductDetailsResult.productDetailsList
             if (detailsResult.responseCode != BillingClient.BillingResponseCode.OK ||
-              productDetailsList.isNullOrEmpty()
+              productDetailsList.isEmpty()
             ) {
               pendingPromise.getAndSet(null)?.resolve(mapOf("outcome" to "unavailable"))
               return@queryProductDetailsAsync
@@ -153,7 +156,7 @@ class PlayUserChoiceModule : Module() {
         }
 
         override fun onBillingServiceDisconnected() {
-          // no-op; next call reconnects
+          // no-op; enableAutoServiceReconnection handles transient disconnects
         }
       })
     }

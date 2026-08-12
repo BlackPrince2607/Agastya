@@ -37,7 +37,8 @@ npm run build:apk:local
 - Billing: Razorpay + Play User Choice module  
   - **Sideloaded prototype/preview APK:** `EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS=true` is baked in → Razorpay opens directly (sign in first)  
   - **Play-enrolled / production:** full User Choice → Razorpay or Play Billing  
-  - Railway must keep `DEBUG=true` + `BILLING_RAZORPAY_TEST_BYPASS=true` while testing this path
+  - For Razorpay-direct APK testing, Railway needs `BILLING_RAZORPAY_TEST_BYPASS=true`  
+  - For store/Closed Testing Play billing, set Railway bypass to `false` and use a production AAB from Play
 
 ## Before you build (checklist)
 
@@ -46,10 +47,10 @@ npm run build:apk:local
    - `agastya://**`
    - `agastya://auth/callback`
 3. Railway `CHECKOUT_ALLOWED_RETURN_ORIGINS` includes `agastya://`
-4. EAS preview env (already present):
-   - `EXPO_PUBLIC_SUPABASE_URL`
-   - `EXPO_PUBLIC_SUPABASE_ANON_KEY`
-   - `EXPO_PUBLIC_AGASTYA_API_URL`
+4. EAS project env (preview/production/development) — **must** be the live host only:
+   - `EXPO_PUBLIC_AGASTYA_API_URL=https://agastya-production-b395.up.railway.app`
+   - This EAS secret overrides `eas.json` at build time. Never leave an old Railway slug (e.g. `eb56`) here.
+   - Also confirm: `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`
 
 Optional extras on expo.dev → Environment variables → **preview**:
 

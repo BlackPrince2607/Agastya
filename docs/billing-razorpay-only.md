@@ -1,32 +1,43 @@
-# Razorpay-direct Premium (monthly / annual)
+# Razorpay + Google Play User Choice (monthly / annual)
 
-Android: **Razorpay Payment Link only** while `EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS=true` (no Google Play User Choice sheet).
+## Modes
 
-When you enroll User Choice Billing later, set both app and API bypass flags to `false` to restore Play + Razorpay choice.
+| Mode | App flag | Backend flag | Behavior |
+|------|----------|--------------|----------|
+| **Play User Choice (production)** | `EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS=false` | `BILLING_RAZORPAY_TEST_BYPASS=false` | Google choice sheet → Play Billing **or** Razorpay |
+| **Razorpay-direct (sideloaded APK)** | `…_TEST_BYPASS=true` | `…_TEST_BYPASS=true` | Payment Link only (no Play sheet) |
+
+`eas.json` **production** uses bypass `false`. **prototype** / **preview** keep bypass `true` so sideloaded APKs can still charge via Razorpay.
 
 ## Prices (INR)
 
-| Plan | Amount | Paise env |
-|------|--------|-----------|
-| Monthly | ₹149 | `RAZORPAY_AMOUNT_MONTHLY_PAISE=14900` |
-| Annual | ₹349 | `RAZORPAY_AMOUNT_ANNUAL_PAISE=34900` |
+| Plan | Amount | Paise env | Play product ID |
+|------|--------|-----------|-----------------|
+| Monthly | ₹149 | `RAZORPAY_AMOUNT_MONTHLY_PAISE=14900` | `premium_monthly` |
+| Annual | ₹349 | `RAZORPAY_AMOUNT_ANNUAL_PAISE=34900` | `premium_annual` |
 
-## Flow
+Play Console base-plan prices for those SKUs should match.
 
-1. User picks monthly or yearly on paywall, taps **Unlock Premium**.
-2. App opens Razorpay hosted Payment Link (no User Choice dialog).
-3. Webhook / confirm → `is_premium=true` with period expiry.
+## Production flow (User Choice)
 
-## Env checklist
+1. User picks monthly/yearly → **Unlock Premium**.
+2. Google User Choice dialog.
+3. **Google Play:** native purchase → `POST /v1/billing/google-play/verify-purchase` → premium.
+4. **Alternative (Razorpay):** Payment Link → webhook/confirm → ExternalTransactions report → premium.
 
-**Backend:** `RAZORPAY_*`, `RAZORPAY_AMOUNT_MONTHLY_PAISE`, `RAZORPAY_AMOUNT_ANNUAL_PAISE`, `BILLING_RAZORPAY_ENABLED`, `BILLING_RAZORPAY_ANDROID_ENABLED`, **`BILLING_RAZORPAY_TEST_BYPASS=true`**
+## Env checklist — production Play billing
 
-**Frontend (EAS):** `EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS=true` on production / preview / prototype
+**Frontend (EAS production):** product IDs + `EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS=false` (already in `eas.json`).
 
-## Later: restore User Choice
+**Backend (Railway):**
 
-1. Enroll Billing Choice (India) in Play Console.
-2. Create subscription products `premium_monthly` / `premium_annual`.
-3. Set bypass flags to `false` and rebuild.
+- `BILLING_RAZORPAY_ENABLED=true`, `BILLING_RAZORPAY_ANDROID_ENABLED=true`
+- `BILLING_RAZORPAY_TEST_BYPASS=false` (require User Choice token for Razorpay)
+- `RAZORPAY_*` + monthly/annual paise amounts
+- `PLAY_PACKAGE_NAME=com.agastya.app`
+- `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` (Android Publisher API)
+- `GOOGLE_PLAY_RTDN_VERIFICATION_TOKEN` + Pub/Sub → webhook
 
-See [DEPLOY.md](../DEPLOY.md) §6 for full setup.
+**Play Console:** User Choice Billing (India) enrolled; subscriptions `premium_monthly` / `premium_annual` live; license testers for Closed Testing.
+
+See [DEPLOY.md](../DEPLOY.md) §6.

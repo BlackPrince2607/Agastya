@@ -8,7 +8,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -68,6 +67,7 @@ export default function SaveJourneyScreen() {
   const [enterBusy, setEnterBusy] = useState(false);
 
   const showOAuth = isOAuthSignInEnabled && !isSignedIn;
+  const showEmailCta = isEmailAuthEnabled && !isSignedIn;
 
   useEffect(() => {
     if (beforePaywall) {
@@ -164,15 +164,9 @@ export default function SaveJourneyScreen() {
     <CosmicScreen variant="stitch">
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="flex-1">
         <View className="flex-1">
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{
-              paddingHorizontal: 24,
-              paddingTop: 8,
-              paddingBottom: STICKY_ACTION_BAR_COMFORTABLE + insets.bottom,
-              gap: 24,
-            }}>
+          <View
+            className="flex-1 px-6"
+            style={{ paddingTop: 8, paddingBottom: STICKY_ACTION_BAR_COMFORTABLE + insets.bottom }}>
             <OnboardingHeader
               step={ONBOARDING_STEPS.account}
               total={ONBOARDING_TOTAL_STEPS}
@@ -180,7 +174,7 @@ export default function SaveJourneyScreen() {
               useClose
             />
 
-            <View className="overflow-hidden rounded-glass border border-white/10 shadow-aura" style={{ aspectRatio: 4 / 3 }}>
+            <View className="mt-3 overflow-hidden rounded-glass border border-white/10 shadow-aura" style={styles.hero}>
               <DecorativePalmArt opacity={0.82} resizeMode="cover" style={{ width: '100%', height: '100%' }} />
               <LinearGradient
                 colors={['transparent', 'rgba(20,19,21,0.2)', '#141315']}
@@ -188,15 +182,15 @@ export default function SaveJourneyScreen() {
               />
             </View>
 
-            <View className="items-center gap-3.5 px-1">
-              <Text className="text-center font-headline text-[28px] leading-9 text-on-surface">{headline}</Text>
-              <Text className="max-w-sm text-center font-body text-[15px] leading-6 text-on-surface-variant">
+            <View className="mt-4 items-center gap-2 px-1">
+              <Text className="text-center font-headline text-[26px] leading-8 text-on-surface">{headline}</Text>
+              <Text className="max-w-sm text-center font-body text-[14px] leading-5 text-on-surface-variant">
                 {subhead}
               </Text>
             </View>
 
             {isSignedIn ? (
-              <GlassCard className="w-full px-4 py-3" style={{ borderColor: 'rgba(34,211,238,0.35)' }}>
+              <GlassCard className="mt-4 w-full px-4 py-3" style={{ borderColor: 'rgba(34,211,238,0.35)' }}>
                 <Text className="font-body text-[14px] leading-6 text-cyan">
                   {authEmail ? `Signed in as ${authEmail}.` : "You're signed in."}{' '}
                   {fromProfileFlow
@@ -210,16 +204,20 @@ export default function SaveJourneyScreen() {
               </GlassCard>
             ) : null}
 
-            {!fromProfileFlow ? <TrustBadgeRow badges={TRUST_BADGES} /> : null}
+            {!fromProfileFlow ? (
+              <View className="mt-4">
+                <TrustBadgeRow badges={TRUST_BADGES} />
+              </View>
+            ) : null}
 
             {!isSupabaseEnabled && !isSignedIn ? (
-              <GlassCard className="w-full px-4 py-3" style={{ borderColor: 'rgba(251,191,36,0.35)' }}>
+              <GlassCard className="mt-4 w-full px-4 py-3" style={{ borderColor: 'rgba(251,191,36,0.35)' }}>
                 <Text className="font-body text-[14px] leading-6 text-amber-200/90">{SIGN_IN_UNAVAILABLE}</Text>
               </GlassCard>
             ) : null}
 
             {showOAuth ? (
-              <View className="gap-4">
+              <View className="mt-4 gap-3">
                 {Platform.OS === 'ios' ? (
                   <Pressable
                     onPress={() => void oauth('apple')}
@@ -257,11 +255,11 @@ export default function SaveJourneyScreen() {
                     (pressed || oauthBusy !== null) && styles.pressedButton,
                   ]}>
                   {oauthBusy === 'google' ? (
-                    <ActivityIndicator color="#d3beeb" />
+                    <ActivityIndicator color="#1f1f1f" />
                   ) : (
                     <GoogleLogo size={20} />
                   )}
-                    <Text className="font-body-medium text-[16px] font-semibold text-on-surface">
+                  <Text className="font-body-medium text-[16px] font-semibold text-black">
                     {oauthBusy === 'google' ? 'Signing in...' : 'Continue with Google'}
                   </Text>
                 </Pressable>
@@ -269,7 +267,7 @@ export default function SaveJourneyScreen() {
             ) : null}
 
             {isEmailAuthEnabled && !isSignedIn && showOAuth ? (
-              <View className="flex-row items-center gap-4">
+              <View className="mt-4 flex-row items-center gap-4">
                 <View className="h-px flex-1 bg-white/10" />
                 <Text className="font-label text-[10px] uppercase leading-4 tracking-[0.28em] text-on-surface-variant">
                   Or
@@ -279,7 +277,7 @@ export default function SaveJourneyScreen() {
             ) : null}
 
             {isEmailAuthEnabled && !isSignedIn ? (
-              <View className="gap-3">
+              <View className="mt-3">
                 <CosmicTextField
                   label="Email address"
                   keyboardType="email-address"
@@ -293,11 +291,10 @@ export default function SaveJourneyScreen() {
                   onSubmitEditing={() => continueWithEmail()}
                   returnKeyType="go"
                 />
-                <PrimaryButton label="Continue with Email" onPress={continueWithEmail} />
               </View>
             ) : null}
 
-            <View className="items-center gap-2 pt-1">
+            <View className="mt-auto items-center gap-1.5 pt-3">
               <View className="flex-row justify-center gap-6">
                 <Pressable
                   accessibilityRole="button"
@@ -320,7 +317,7 @@ export default function SaveJourneyScreen() {
                 (c) {new Date().getFullYear()} Agastya
               </Text>
             </View>
-          </ScrollView>
+          </View>
 
           <StickyActionBar contentStyle={{ gap: 10 }}>
             <View className="gap-y-3">
@@ -342,6 +339,8 @@ export default function SaveJourneyScreen() {
                   disabled={enterBusy || oauthBusy !== null}
                   onPress={continueOnboarding}
                 />
+              ) : showEmailCta ? (
+                <PrimaryButton label="Continue with Email" onPress={continueWithEmail} />
               ) : null}
               {!isSignedIn ? (
                 <Text className="mt-1 text-center font-body text-[12px] leading-5 text-on-surface-variant">
@@ -383,16 +382,21 @@ export default function SaveJourneyScreen() {
 }
 
 const styles = StyleSheet.create({
+  hero: {
+    width: '100%',
+    height: 148,
+    maxHeight: '22%',
+  },
   oauthButton: {
-    minHeight: 58,
+    minHeight: 52,
     borderRadius: 999,
     paddingHorizontal: 24,
-    paddingVertical: 16,
-    shadowColor: '#a855f7',
-    shadowOpacity: 0.22,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 10,
+    paddingVertical: 14,
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
   },
   appleOauthButton: {
     borderWidth: 1,
@@ -401,8 +405,8 @@ const styles = StyleSheet.create({
   },
   googleOauthButton: {
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderColor: '#dadce0',
+    backgroundColor: '#ffffff',
   },
   pressedButton: {
     opacity: 0.82,

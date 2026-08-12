@@ -20,9 +20,10 @@ Generated after implementing one-time Premium + Play readiness fixes.
 | Deploy `legal/` to sharvo.online | See `legal/README.md` | Pending (hosting) |
 | Privacy/terms/support/delete-account return 200 | `curl -I https://sharvo.online/...` | Pending |
 | Fix live `assetlinks.json` package → `com.agastya.app` | Host example from `docs/assetlinks.json.example` | Pending |
-| Create Play product `premium_unlock` (one-time) | Play Console | Pending |
+| Create Play subscriptions `premium_monthly` / `premium_annual` | Play Console | Pending |
 | Enroll User Choice Billing (India) | Play Console | Pending |
-| Set Railway `RAZORPAY_AMOUNT_PREMIUM_PAISE=499900` | Railway env | Pending |
+| Set Railway monthly/annual paise + `BILLING_RAZORPAY_TEST_BYPASS=false` | Railway env | Pending |
+| Set Railway `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` + RTDN token | Railway env | Pending |
 | Capture phone screenshots into `store-assets/play/screenshots/` | Device / emulator | Pending |
 | Fill Data Safety from `docs/play-console-data-safety.md` | Play Console | Pending |
 | EAS production AAB with bypass **false** | `eas build -p android --profile production` | Pending |
@@ -33,7 +34,7 @@ Generated after implementing one-time Premium + Play readiness fixes.
 
 ## Code / config snapshots
 
-- Product ID env: `EXPO_PUBLIC_PLAY_PRODUCT_ID=premium_unlock`
+- Product IDs: `EXPO_PUBLIC_PLAY_PRODUCT_MONTHLY=premium_monthly`, `…_ANNUAL=premium_annual`
 - Production bypass: `EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS=false` in `eas.json` production
 - Submit track for CT: `eas.json` → `submit.closed-testing.android.track = internal`
 - Legal URLs: `constants/legal.ts` → sharvo.online

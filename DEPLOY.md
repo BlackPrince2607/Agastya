@@ -38,7 +38,7 @@ cp env.example .env
 Fill in:
 - `EXPO_PUBLIC_AGASTYA_API_URL` — your deployed backend URL (e.g. `https://api.agastya.app`)
 - `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` — from Supabase Dashboard → Project Settings → API
-- `EXPO_PUBLIC_PLAY_PRODUCT_ID` — Google Play one-time managed product (`premium_unlock`)
+- `EXPO_PUBLIC_PLAY_PRODUCT_MONTHLY` / `EXPO_PUBLIC_PLAY_PRODUCT_ANNUAL` — Play subscription SKUs (`premium_monthly` / `premium_annual`)
 - `EXPO_PUBLIC_SENTRY_DSN` — from Sentry → React Native project → Client Keys
 - `EXPO_PUBLIC_MIXPANEL_TOKEN` — optional analytics provider
 - `EXPO_PUBLIC_FACEBOOK_APP_ID` + `EXPO_PUBLIC_FACEBOOK_CLIENT_TOKEN` — Meta App Events (ads measurement). Set the same on EAS Environment Variables. Requires a **new EAS native build** (not Expo Go). After install, confirm ActivateApp + funnel events in Meta Events Manager → Test Events.
@@ -185,17 +185,19 @@ See [`docs/billing-razorpay-only.md`](docs/billing-razorpay-only.md).
 ### Play Console (required)
 
 1. Enroll in **Billing Choice / User Choice Billing — India**.
-2. Create a **one-time** managed product `premium_unlock` matching `EXPO_PUBLIC_PLAY_PRODUCT_ID`.
-3. Configure **Real-Time Developer Notifications** (Pub/Sub) → `POST https://api.agastya.app/v1/webhooks/google-play?token=YOUR_RTDN_TOKEN` (one-time product + voided purchase notifications).
+2. Create **subscription** products `premium_monthly` (₹149) and `premium_annual` (₹349) matching `EXPO_PUBLIC_PLAY_PRODUCT_*`.
+3. Configure **Real-Time Developer Notifications** (Pub/Sub) → `POST https://YOUR-API/v1/webhooks/google-play?token=YOUR_RTDN_TOKEN` (subscriptions + voided purchases).
 4. Service account with Android Publisher API access → `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`.
+5. Add license testers for Closed Testing.
 
 ### Backend env
 
 | Variable | Purpose |
 |----------|---------|
 | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` | Razorpay Payment Links + webhooks |
-| `RAZORPAY_AMOUNT_PREMIUM_PAISE` | Lifetime INR price (default 499900 = ₹4,999) |
+| `RAZORPAY_AMOUNT_MONTHLY_PAISE`, `RAZORPAY_AMOUNT_ANNUAL_PAISE` | Alt-billing INR (14900 / 34900) |
 | `BILLING_RAZORPAY_ENABLED`, `BILLING_RAZORPAY_ANDROID_ENABLED` | Feature flags |
+| `BILLING_RAZORPAY_TEST_BYPASS` | `false` for User Choice; `true` only for sideloaded Razorpay-direct |
 | `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`, `PLAY_PACKAGE_NAME` | Play verify + ExternalTransactions |
 | `GOOGLE_PLAY_RTDN_VERIFICATION_TOKEN` | RTDN webhook auth |
 | `CHECKOUT_ALLOWED_RETURN_ORIGINS` | Include `agastya://` for deep links |
@@ -350,7 +352,7 @@ Add these secrets in GitHub → Settings → Secrets → Actions:
 | `EXPO_PUBLIC_AGASTYA_API_URL` | Your deployed backend URL |
 | `EXPO_PUBLIC_SUPABASE_URL` | Supabase project URL |
 | `EXPO_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key |
-| `EXPO_PUBLIC_PLAY_PRODUCT_ID` | Google Play one-time SKU (`premium_unlock`) |
+| `EXPO_PUBLIC_PLAY_PRODUCT_MONTHLY` / `_ANNUAL` | Play SKUs (`premium_monthly` / `premium_annual`) |
 | `EXPO_PUBLIC_SENTRY_DSN` | Sentry client DSN |
 | `EXPO_PUBLIC_FACEBOOK_APP_ID` | Meta Developers → App ID (optional; ads measurement) |
 | `EXPO_PUBLIC_FACEBOOK_CLIENT_TOKEN` | Meta Developers → Client Token |

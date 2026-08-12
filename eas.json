@@ -8,6 +8,23 @@
       "developmentClient": true,
       "distribution": "internal"
     },
+    "prototype": {
+      "distribution": "internal",
+      "environment": "preview",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_AGASTYA_API_URL": "https://agastya-production-b395.up.railway.app",
+        "EXPO_PUBLIC_PLAY_PRODUCT_MONTHLY": "premium_monthly",
+        "EXPO_PUBLIC_PLAY_PRODUCT_ANNUAL": "premium_annual",
+        "EXPO_PUBLIC_BILLING_DEFAULT_ADMIN_AREA": "KA",
+        "EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS": "true",
+        "EXPO_PUBLIC_PREMIUM_EMAIL_ALLOWLIST": "sohambhalotia@gmail.com,testuser@gmail.com",
+        "EXPO_UPDATES_ENABLED": "false",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+      }
+    },
     "preview": {
       "distribution": "internal",
       "environment": "preview",
@@ -23,22 +40,7 @@
         "EXPO_PUBLIC_PLAY_PRODUCT_ANNUAL": "premium_annual",
         "EXPO_PUBLIC_BILLING_DEFAULT_ADMIN_AREA": "KA",
         "EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS": "true",
-        "EXPO_UPDATES_ENABLED": "false",
-        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
-      }
-    },
-    "prototype": {
-      "distribution": "internal",
-      "environment": "preview",
-      "android": {
-        "buildType": "apk"
-      },
-      "env": {
-        "EXPO_PUBLIC_AGASTYA_API_URL": "https://agastya-production-b395.up.railway.app",
-        "EXPO_PUBLIC_PLAY_PRODUCT_MONTHLY": "premium_monthly",
-        "EXPO_PUBLIC_PLAY_PRODUCT_ANNUAL": "premium_annual",
-        "EXPO_PUBLIC_BILLING_DEFAULT_ADMIN_AREA": "KA",
-        "EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS": "true",
+        "EXPO_PUBLIC_PREMIUM_EMAIL_ALLOWLIST": "sohambhalotia@gmail.com,testuser@gmail.com",
         "EXPO_UPDATES_ENABLED": "false",
         "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       }
@@ -54,7 +56,7 @@
         "EXPO_PUBLIC_PLAY_PRODUCT_MONTHLY": "premium_monthly",
         "EXPO_PUBLIC_PLAY_PRODUCT_ANNUAL": "premium_annual",
         "EXPO_PUBLIC_BILLING_DEFAULT_ADMIN_AREA": "KA",
-        "EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS": "true",
+        "EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS": "false",
         "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       }
     }
