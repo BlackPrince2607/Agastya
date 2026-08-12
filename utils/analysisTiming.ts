@@ -1,8 +1,46 @@
 import { ANALYSIS_MIN_DURATION_MS } from '@/constants/onboarding';
 import type { PalmAnalysisDto } from '@/types/palmAnalysis';
 
+/** Matches client fetch budget for /v1/palm/analyze (vision ~75s + buffer). */
+export const PALM_ANALYZE_CLIENT_TIMEOUT_MS = 100_000;
+
+/** Soft creep while frozen on the "Analyzing palm…" stage (28% / 35%). */
+export const ANALYSIS_ANALYZE_CREEP_MS = 90_000;
+
+/**
+ * Hard ceiling for the whole analysis screen.
+ * Must exceed analyze + report client budgets; also aborts in-flight work.
+ */
+export const ANALYSIS_FLOW_WATCHDOG_MS = 160_000;
+
 export function delay(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
+/** Reject after `ms`, or sooner if `signal` aborts (RN fetch abort can be flaky). */
+export function rejectAfterMs(ms: number, message: string, signal?: AbortSignal): Promise<never> {
+  return new Promise((_, reject) => {
+    if (signal?.aborted) {
+      reject(new Error(message));
+      return;
+    }
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new Error(message));
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+/** Race a promise against a hard deadline (and optional AbortSignal). */
+export function raceWithTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  label: string,
+  signal?: AbortSignal,
+): Promise<T> {
+  return Promise.race([promise, rejectAfterMs(ms, `timeout ${label}`, signal)]);
 }
 
 /** Fixed presentation window for the analysis progress UI (0 → 100%). */

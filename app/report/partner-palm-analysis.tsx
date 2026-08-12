@@ -28,7 +28,13 @@ import type { PalmAnalysisDto } from '@/types/palmAnalysis';
 import { isLivePalmAnalysis, palmNeedsRetake } from '@/types/palmAnalysis';
 import { useSessionStore } from '@/store/sessionStore';
 import { deferRouterReplace } from '@/utils/routerDefer';
-import { delay } from '@/utils/analysisTiming';
+import {
+  ANALYSIS_ANALYZE_CREEP_MS,
+  ANALYSIS_FLOW_WATCHDOG_MS,
+  PALM_ANALYZE_CLIENT_TIMEOUT_MS,
+  delay,
+  raceWithTimeout,
+} from '@/utils/analysisTiming';
 import { withApiRetry } from '@/utils/apiRetry';
 import { trimBase64Payload } from '@/utils/palmLandmarks';
 
@@ -92,21 +98,47 @@ export default function PartnerPalmAnalysisScreen() {
     setSampleBadge(false);
 
     let cancelled = false;
+    const runAbort = new AbortController();
+    let creepTimer: ReturnType<typeof setInterval> | null = null;
 
-    const watchdog = setTimeout(() => {
+    const clearCreep = () => {
+      if (creepTimer) {
+        clearInterval(creepTimer);
+        creepTimer = null;
+      }
+    };
+
+    const tripWatchdog = () => {
       if (cancelled || runId !== runIdRef.current) return;
       cancelled = true;
       runIdRef.current += 1;
+      clearCreep();
+      runAbort.abort();
       showRetry('This is taking longer than expected. Please try again.', [
         'request timed out',
         'check your connection',
       ]);
-    }, 210_000);
+    };
+
+    const watchdog = setTimeout(tripWatchdog, ANALYSIS_FLOW_WATCHDOG_MS);
 
     const advance = (next: WorkStage) => {
       if (cancelled || runId !== runIdRef.current) return;
       setStage(next);
       setPct(stagePct(next));
+      clearCreep();
+      // Soft creep during analyze so a long OpenRouter call does not look frozen at 35%.
+      if (next === 1) {
+        const started = Date.now();
+        creepTimer = setInterval(() => {
+          if (cancelled || runId !== runIdRef.current) {
+            clearCreep();
+            return;
+          }
+          const t = Math.min(1, (Date.now() - started) / ANALYSIS_ANALYZE_CREEP_MS);
+          setPct(Math.round(35 + t * 23));
+        }, 1200);
+      }
     };
 
     void (async () => {
@@ -136,14 +168,22 @@ export default function PartnerPalmAnalysisScreen() {
 
         if (isApiConfigured()) {
           try {
-            palm = await withApiRetry(() =>
-              analyzePalm({
-                sessionId: snap.sessionId!,
-                deviceInstallId: snap.deviceInstallId!,
-                seed: resolvedSeed,
-                imageBase64: capture,
-                dominantHand: snap.partnerPalmScanHand ?? 'right',
-              }),
+            palm = await raceWithTimeout(
+              withApiRetry(() =>
+                analyzePalm(
+                  {
+                    sessionId: snap.sessionId!,
+                    deviceInstallId: snap.deviceInstallId!,
+                    seed: resolvedSeed,
+                    imageBase64: capture,
+                    dominantHand: snap.partnerPalmScanHand ?? 'right',
+                  },
+                  { signal: runAbort.signal, timeoutMs: PALM_ANALYZE_CLIENT_TIMEOUT_MS },
+                ),
+              ),
+              PALM_ANALYZE_CLIENT_TIMEOUT_MS + 8_000,
+              '/v1/palm/analyze',
+              runAbort.signal,
             );
           } catch (err) {
             if (cancelled || runId !== runIdRef.current) return;
@@ -200,12 +240,15 @@ export default function PartnerPalmAnalysisScreen() {
         setPartnerPalmAnalysis(FALLBACK_PALM);
         deferRouterReplace('/report/compatibility' as never);
       } finally {
+        clearCreep();
         clearTimeout(watchdog);
       }
     })();
 
     return () => {
       cancelled = true;
+      clearCreep();
+      runAbort.abort();
       clearTimeout(watchdog);
     };
   }, [seed, setPartnerPalmAnalysis, showRetry]);

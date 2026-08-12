@@ -147,8 +147,8 @@ export function resolveLineGeometry(
   return fromVision;
 }
 
-/** Trim base64 payload size — keep under OpenRouter vision upload limits. */
-export function trimBase64Payload(base64: string, maxChars = 4_000_000): string {
-  const raw = base64.replace(/^data:image\/[^;]+;base64,/, '');
-  return raw.length > maxChars ? raw.slice(0, maxChars) : raw;
+/** Strip data-URL prefix only. Never slice mid-base64 (that corrupts JPEGs);
+ *  the server downscales captures before OpenRouter. */
+export function trimBase64Payload(base64: string, _maxChars = 4_000_000): string {
+  return base64.replace(/^data:image\/[^;]+;base64,/, '');
 }

@@ -367,16 +367,19 @@ export async function fetchBillingConfig(platform: 'android' | 'ios' | 'web' = '
   );
 }
 
-export async function analyzePalm(body: {
-  sessionId: string;
-  deviceInstallId: string;
-  seed: string;
-  imageBase64?: string | null;
-  dominantHand?: 'left' | 'right' | null;
-  gender?: string | null;
-  landmarks?: HandLandmark[] | null;
-  landmarksSource?: 'mediapipe' | 'roi_estimate' | null;
-}) {
+export async function analyzePalm(
+  body: {
+    sessionId: string;
+    deviceInstallId: string;
+    seed: string;
+    imageBase64?: string | null;
+    dominantHand?: 'left' | 'right' | null;
+    gender?: string | null;
+    landmarks?: HandLandmark[] | null;
+    landmarksSource?: 'mediapipe' | 'roi_estimate' | null;
+  },
+  opts?: { signal?: AbortSignal; timeoutMs?: number },
+) {
   // Vision + crease path often exceeds the default 8s client timeout.
   return postJson<PalmAnalysisDto>(
     '/v1/palm/analyze',
@@ -391,8 +394,8 @@ export async function analyzePalm(body: {
       landmarksSource: body.landmarksSource ?? undefined,
     },
     false,
-    // Single server vision attempt (~90s) + buffer; server no longer double-retries timeouts.
-    { timeoutMs: 100_000 },
+    // Single server vision attempt (~75s) + buffer; server no longer double-retries timeouts.
+    { timeoutMs: opts?.timeoutMs ?? 100_000, signal: opts?.signal },
   );
 }
 
@@ -420,17 +423,20 @@ export async function deleteAccountFromServer() {
   return postJson<{ ok: boolean; deletedSessions: number }>('/v1/auth/delete-account', {}, true);
 }
 
-export async function generateReport(body: {
-  sessionId: string;
-  deviceInstallId?: string;
-  seed: string;
-  palmAnalysis?: PalmAnalysisDto | null;
-  focusTopics: FocusTopic[];
-  mode: 'preview' | 'full';
-  displayName?: string;
-  gender?: string;
-  expoPushToken?: string | null;
-}) {
+export async function generateReport(
+  body: {
+    sessionId: string;
+    deviceInstallId?: string;
+    seed: string;
+    palmAnalysis?: PalmAnalysisDto | null;
+    focusTopics: FocusTopic[];
+    mode: 'preview' | 'full';
+    displayName?: string;
+    gender?: string;
+    expoPushToken?: string | null;
+  },
+  opts?: { signal?: AbortSignal; timeoutMs?: number },
+) {
   const deviceInstallId = body.deviceInstallId ?? useSessionStore.getState().deviceInstallId;
   if (!deviceInstallId) {
     throw new Error('Device identity is not ready yet. Please try again.');
@@ -450,7 +456,7 @@ export async function generateReport(body: {
     },
     false,
     // Single server chat-model attempt (~60s) + buffer.
-    { timeoutMs: 70_000 },
+    { timeoutMs: opts?.timeoutMs ?? 70_000, signal: opts?.signal },
   );
 }
 

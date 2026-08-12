@@ -429,3 +429,111 @@ def test_palm_analyze_503_when_vision_fails_in_production(mock_vision, monkeypat
     )
     assert res.status_code == 503
     assert "unavailable" in (res.json().get("detail") or "").lower()
+
+
+@patch("app.services.palm_pipeline.palm_analysis_from_vision", new_callable=AsyncMock)
+@patch("app.services.palm_pipeline.detect_hand_landmarks_from_bytes")
+def test_palm_analyze_skips_landmarks_when_vision_has_geometry(mock_landmarks, mock_vision, vision_client):
+    """Happy path: vision motifs+geometry must not wait on MediaPipe."""
+    mock_landmarks.return_value = (None, "not_found")
+    mock_vision.return_value = PalmAnalysis(
+        life_line="strong",
+        heart_line="curved",
+        head_line="long",
+        personality="quiet visionary",
+        traits=["thoughtful", "resilient"],
+        analysis_source="openrouter_vision",
+        image_quality="good",
+        geometry_source="vision_model",
+        line_geometry=[
+            {"name": "life_line", "points": [{"x": 0.3, "y": 0.4}, {"x": 0.35, "y": 0.7}]},
+            {"name": "heart_line", "points": [{"x": 0.2, "y": 0.28}, {"x": 0.8, "y": 0.3}]},
+            {"name": "head_line", "points": [{"x": 0.25, "y": 0.4}, {"x": 0.75, "y": 0.45}]},
+        ],
+    )
+    b64, _ = _synthetic_palm_jpeg_and_landmarks()
+    session_id = str(uuid.uuid4())
+    vision_client.post(
+        "/v1/sessions/register",
+        json={"sessionId": session_id, "deviceInstallId": "device-test-1"},
+    )
+    res = vision_client.post(
+        "/v1/palm/analyze",
+        json={
+            "sessionId": session_id,
+            "deviceInstallId": "device-test-1",
+            "seed": "unit-test",
+            "imageBase64": b64,
+        },
+    )
+    assert res.status_code == 200
+    assert res.json()["analysis_source"] == "openrouter_vision"
+    mock_landmarks.assert_not_called()
+
+
+@patch("app.services.palm_pipeline.palm_analysis_from_vision", new_callable=AsyncMock)
+@patch("app.services.palm_pipeline.detect_hand_landmarks_from_bytes")
+def test_palm_analyze_runs_vision_before_landmarks(mock_landmarks, mock_vision, monkeypatch):
+    """When geometry is missing, landmarks may run — but only after vision returns."""
+    order: list[str] = []
+
+    async def _vision(*_a, **_k):
+        order.append("vision")
+        return PalmAnalysis(
+            life_line="moderate",
+            heart_line="curved",
+            head_line="medium",
+            personality="steady navigator",
+            traits=["grounded", "curious"],
+            analysis_source="openrouter_vision",
+            image_quality="acceptable",
+            geometry_source=None,
+            line_geometry=None,
+        )
+
+    def _lm(*_a, **_k):
+        order.append("landmarks")
+        return None, "not_found"
+
+    mock_vision.side_effect = _vision
+    mock_landmarks.side_effect = _lm
+    monkeypatch.setenv("PALM_ANALYSIS_MODE", "vision")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test-key")
+    get_settings.cache_clear()
+    client = TestClient(create_app())
+    b64, _ = _synthetic_palm_jpeg_and_landmarks()
+    session_id = str(uuid.uuid4())
+    client.post(
+        "/v1/sessions/register",
+        json={"sessionId": session_id, "deviceInstallId": "device-test-1"},
+    )
+    res = client.post(
+        "/v1/palm/analyze",
+        json={
+            "sessionId": session_id,
+            "deviceInstallId": "device-test-1",
+            "seed": "unit-test",
+            "imageBase64": b64,
+        },
+    )
+    assert res.status_code == 200
+    assert order[0] == "vision"
+    assert "landmarks" in order
+    assert order.index("vision") < order.index("landmarks")
+
+
+def test_downscale_for_vision_bounds_edge():
+    import base64
+    import io
+
+    from PIL import Image
+
+    from app.services.palm_ai import _downscale_for_vision
+
+    buf = io.BytesIO()
+    Image.new("RGB", (2400, 1800), (190, 140, 120)).save(buf, format="JPEG", quality=92)
+    payload = base64.b64encode(buf.getvalue()).decode("ascii")
+    out_b64, media = _downscale_for_vision(payload, "jpeg", 1024)
+    assert media == "jpeg"
+    with Image.open(io.BytesIO(base64.b64decode(out_b64))) as img:
+        assert max(img.size) <= 1024

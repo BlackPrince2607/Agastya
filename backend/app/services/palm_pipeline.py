@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -54,8 +55,18 @@ def _entropy_from_body(body: PalmAnalyzeBody) -> str:
     return entropy
 
 
-def _resolve_landmarks(body: PalmAnalyzeBody) -> tuple[list[list[float]] | None, str | None]:
+def _client_landmarks(body: PalmAnalyzeBody) -> tuple[list[list[float]] | None, str | None]:
+    if body.landmarks and body.landmarks_source == "mediapipe":
+        return body.landmarks, body.landmarks_source
+    return None, None
+
+
+def _resolve_landmarks(body: PalmAnalyzeBody, *, fast: bool = True) -> tuple[list[list[float]] | None, str | None]:
     """Best-effort MediaPipe landmarks — optional enrichment only."""
+    client_lm, client_src = _client_landmarks(body)
+    if client_lm is not None:
+        return client_lm, client_src
+
     img = body.image_base64
     if img:
         decoded = decode_capture_bytes(img)
@@ -65,15 +76,44 @@ def _resolve_landmarks(body: PalmAnalyzeBody) -> tuple[list[list[float]] | None,
                 landmarks, source = detect_hand_landmarks_from_bytes(
                     data,
                     dominant_hand=body.dominant_hand or "right",
+                    fast=fast,
                 )
                 if landmarks and source == "mediapipe":
                     return landmarks, source
             except Exception:
                 logger.exception("landmark detection failed — continuing with vision-only")
 
-    if body.landmarks and body.landmarks_source == "mediapipe":
-        return body.landmarks, body.landmarks_source
     return None, None
+
+
+async def _landmarks_with_budget(
+    body: PalmAnalyzeBody,
+    timeout_seconds: float,
+    *,
+    fast: bool = True,
+) -> tuple[list[list[float]] | None, str | None]:
+    """Run landmark detection off the event loop with a hard wall-clock budget."""
+    client_lm, client_src = _client_landmarks(body)
+    if client_lm is not None:
+        return client_lm, client_src
+    if not body.image_base64:
+        return None, None
+    # Shield so a timeout abandons the result immediately — MediaPipe/TFLite
+    # cannot be cancelled mid-inference; waiting on cancel would reintroduce hangs.
+    loop = asyncio.get_running_loop()
+    fut = loop.run_in_executor(None, lambda: _resolve_landmarks(body, fast=fast))
+    try:
+        return await asyncio.wait_for(asyncio.shield(fut), timeout=max(0.5, float(timeout_seconds)))
+    except TimeoutError:
+        logger.warning(
+            "landmark detection budget exceeded (%.1fs) — continuing without landmarks",
+            timeout_seconds,
+        )
+        fut.add_done_callback(lambda f: f.exception() if not f.cancelled() else None)
+        return None, None
+    except Exception:
+        logger.exception("landmark detection failed — continuing without landmarks")
+        return None, None
 
 
 def _has_usable_geometry(palm: PalmAnalysis | None) -> bool:
@@ -141,13 +181,14 @@ async def analyze_palm(settings: Settings, body: PalmAnalyzeBody) -> PalmAnalysi
     has_image = bool(img)
     mode = settings.palm_analysis_mode
     ai_mode = mode in {"vision", "hybrid"}
-
-    landmarks, _lm_source = _resolve_landmarks(body)
+    lm_budget = float(settings.palm_landmarks_timeout_seconds)
 
     if mode == "dummy":
+        landmarks, _lm_source = await _landmarks_with_budget(body, lm_budget, fast=True)
         result = dummy_palm_analysis(entropy)
         if has_image and landmarks:
-            return merge_cv_into_analysis(
+            return await asyncio.to_thread(
+                merge_cv_into_analysis,
                 result,
                 landmarks,
                 image_base64=img,
@@ -166,6 +207,7 @@ async def analyze_palm(settings: Settings, body: PalmAnalyzeBody) -> PalmAnalysi
             reason="vision_not_configured",
         )
 
+    # Vision first — never serialize MediaPipe ahead of OpenRouter (root cause of 28% hangs).
     inferred: PalmAnalysis | None = None
     if settings.llm_enabled and has_image and ai_mode:
         try:
@@ -186,7 +228,21 @@ async def analyze_palm(settings: Settings, body: PalmAnalyzeBody) -> PalmAnalysi
             inferred = None
 
     if inferred is not None:
-        result = _attach_cv_if_possible(inferred, body, landmarks, settings)
+        # Prefer client landmarks (free). Only run server MediaPipe when vision
+        # did not already produce usable geometry / quality.
+        landmarks, _lm_source = _client_landmarks(body)
+        needs_server_landmarks = landmarks is None and (
+            not _has_usable_geometry(inferred)
+            or inferred.image_quality in {"poor", "no_hand"}
+        )
+        if needs_server_landmarks:
+            landmarks, _lm_source = await _landmarks_with_budget(body, lm_budget, fast=True)
+        if landmarks:
+            inferred = await asyncio.to_thread(
+                _attach_cv_if_possible, inferred, body, landmarks, settings
+            )
+
+        result = inferred
 
         # Optional anatomic guide for overlays — never required for success.
         if not _has_usable_geometry(result) and landmarks:
@@ -227,9 +283,11 @@ async def analyze_palm(settings: Settings, body: PalmAnalyzeBody) -> PalmAnalysi
         log_ai_fallback("palm_analyze", "openrouter_vision_failed", seed_prefix=body.seed[:32])
 
     # Vision unavailable — try CV-only when landmarks exist.
+    landmarks, _lm_source = await _landmarks_with_budget(body, lm_budget, fast=True)
     if has_image and landmarks:
         base = dummy_palm_analysis(entropy)
-        merged = merge_cv_into_analysis(
+        merged = await asyncio.to_thread(
+            merge_cv_into_analysis,
             base,
             landmarks,
             image_base64=img,
@@ -252,7 +310,8 @@ async def analyze_palm(settings: Settings, body: PalmAnalyzeBody) -> PalmAnalysi
     fallback = dummy_palm_analysis(entropy)
     fallback = fallback.model_copy(update={"analysis_source": "fallback"})
     if has_image and landmarks:
-        return merge_cv_into_analysis(
+        return await asyncio.to_thread(
+            merge_cv_into_analysis,
             fallback,
             landmarks,
             image_base64=img,

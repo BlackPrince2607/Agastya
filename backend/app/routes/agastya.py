@@ -4,7 +4,7 @@ import asyncio
 import logging
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query
 
 from app.auth.supabase_jwt import _bearer_token, verify_supabase_access_token
 from app.config import Settings, get_settings
@@ -123,6 +123,30 @@ async def _persist(session_id: str, settings: Settings) -> None:
         raise HTTPException(
             status_code=503,
             detail="Failed to save session. Please try again.",
+        )
+
+
+async def _upload_palm_capture_background(
+    settings: Settings,
+    session_id: str,
+    image_base64: str | None,
+) -> None:
+    """Storage is best-effort — never block the analyze HTTP response on upload latency."""
+    try:
+        storage_path = await upload_palm_capture_if_configured(
+            settings,
+            session_id=session_id,
+            image_base64=image_base64,
+        )
+        if not storage_path:
+            return
+        bkt = bucket(session_id)
+        bkt.meta["palmStoragePath"] = storage_path
+        if session_repository.is_enabled(settings):
+            await session_repository.save(session_id, bkt, settings)
+    except Exception:
+        logger.warning(
+            "background palm upload failed session=%s", session_id[:8], exc_info=True
         )
 
 
@@ -492,6 +516,7 @@ async def merge_session(
 async def palm_analyze(
     body: PalmAnalyzeBody,
     settings: Annotated[Settings, Depends(get_settings)],
+    background_tasks: BackgroundTasks,
 ) -> dict[str, Any]:
     try:
         await _hydrate(body.session_id, settings)
@@ -499,14 +524,16 @@ async def palm_analyze(
         _bind_device(bkt, body.session_id, body.device_install_id)
         palm = await analyze_palm(settings, body)
         bkt.palm = palm
-        storage_path = await upload_palm_capture_if_configured(
-            settings,
-            session_id=body.session_id,
-            image_base64=body.image_base64,
-        )
-        if storage_path:
-            bkt.meta["palmStoragePath"] = storage_path
+        # Persist palm first; upload capture off the critical path so clients
+        # are not stuck at 28% waiting on Storage after OpenRouter returns.
         await _persist(body.session_id, settings)
+        if body.image_base64:
+            background_tasks.add_task(
+                _upload_palm_capture_background,
+                settings,
+                body.session_id,
+                body.image_base64,
+            )
         return palm.model_dump()
     except HTTPException:
         raise

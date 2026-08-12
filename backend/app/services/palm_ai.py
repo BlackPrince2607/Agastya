@@ -93,6 +93,29 @@ def _clamp01(value: float) -> float:
     return max(0.0, min(1.0, value))
 
 
+def _downscale_for_vision(payload_b64: str, mime: str | None, max_edge: int) -> tuple[str, str]:
+    """Re-encode captures to a bounded JPEG so OpenRouter vision stays fast/reliable."""
+    import io
+
+    from PIL import Image, ImageOps
+
+    raw = base64.b64decode(payload_b64, validate=False)
+    with Image.open(io.BytesIO(raw)) as pil:
+        img = ImageOps.exif_transpose(pil).convert("RGB")
+    w, h = img.size
+    long_side = max(w, h)
+    edge = max(256, int(max_edge))
+    if long_side > edge:
+        scale = edge / float(long_side)
+        img = img.resize(
+            (max(1, int(w * scale)), max(1, int(h * scale))),
+            Image.Resampling.LANCZOS,
+        )
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=85, optimize=True)
+    return base64.b64encode(buf.getvalue()).decode("ascii"), "jpeg"
+
+
 def _parse_point(raw: object) -> dict[str, float] | None:
     if not isinstance(raw, dict):
         return None
@@ -140,23 +163,34 @@ async def palm_analysis_from_vision(
 ) -> PalmAnalysis | None:
     mime, payload = _parse_data_url(image_base64)
     if _decode_len_hint(payload) > 3_800_000:
-        logger.warning("Palm image exceeds vision size cap")
+        logger.warning("Palm image exceeds vision size cap (pre-downscale)")
         return None
     if settings.openrouter_api_key is None:
         return None
     mime = mime or "jpeg"
-    if mime in {"jpeg", "jpg"}:
-        media = "jpeg"
-    elif mime in {"png", "webp", "gif"}:
-        media = mime
-    else:
-        media = "jpeg"
     try:
         # Use b64decode (not standard_b64decode) — only b64decode accepts validate=.
         base64.b64decode(payload, validate=True)
     except (binascii.Error, ValueError):
         logger.warning("Invalid palm image base64")
         return None
+
+    # Phone captures are often multi‑MB; downscale before OpenRouter so vision
+    # completes within client/server budgets instead of hanging at 28%.
+    try:
+        payload, media = _downscale_for_vision(
+            payload,
+            mime,
+            settings.palm_vision_max_edge,
+        )
+    except Exception:
+        logger.exception("palm vision downscale failed — using original capture")
+        if mime in {"jpeg", "jpg"}:
+            media = "jpeg"
+        elif mime in {"png", "webp", "gif"}:
+            media = mime
+        else:
+            media = "jpeg"
 
     img_url = f"data:image/{media};base64,{payload}"
     seed_note = seed[:280]

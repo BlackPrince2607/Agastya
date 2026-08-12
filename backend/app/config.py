@@ -80,6 +80,10 @@ class Settings(BaseSettings):
     palm_analysis_mode: Literal["dummy", "vision", "hybrid"] = "vision"
     # Debug only: invent overlays from knuckle geometry when crease CV fails.
     palm_crease_fallback_heuristic: bool = False
+    # MediaPipe is optional enrichment — hard budget so it cannot starve OpenRouter vision.
+    palm_landmarks_timeout_seconds: float = 8.0
+    # Downscale captures before OpenRouter (phone JPEGs are often multi‑MB).
+    palm_vision_max_edge: int = 1024
 
     # --- Rate limiting (optional Redis / Upstash for multi-worker deploys) ---
     redis_url: str | None = None
@@ -105,7 +109,8 @@ class Settings(BaseSettings):
     # Same model handles vision on OpenRouter; do NOT use openai/gpt-4o-vision (invalid slug).
     openrouter_vision_model: str = "openai/gpt-4o-mini"
     openrouter_chat_timeout_seconds: float = 60.0
-    openrouter_vision_timeout_seconds: float = 90.0
+    # Vision images are downscaled server-side; keep under client analyze budget (~100s).
+    openrouter_vision_timeout_seconds: float = 75.0
     openrouter_app_url: str = "https://agastya.app"
     openrouter_app_name: str = "Agastya"
     allow_llm_fallback: bool = True

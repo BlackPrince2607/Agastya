@@ -61,7 +61,7 @@ class _Variant:
         return [[max(0.0, min(1.0, x)), max(0.0, min(1.0, y))] for x, y in pts]
 
 
-def _prepare_rgb_variants(image_bytes: bytes) -> list[_Variant]:
+def _prepare_rgb_variants(image_bytes: bytes, *, fast: bool = False) -> list[_Variant]:
     """Decode + downscale / contrast / crop / pad / mirror for more reliable static detection."""
     import numpy as np
     from PIL import Image, ImageEnhance, ImageOps
@@ -123,6 +123,19 @@ def _prepare_rgb_variants(image_bytes: bytes) -> list[_Variant]:
             arr = np.ascontiguousarray(arr[:, ::-1])
         return _Variant(arr=arr, mirrored=mirrored, full_w=w, full_h=h)
 
+    contrasted = ImageOps.autocontrast(pil, cutoff=1)
+
+    # Fast path for /palm/analyze: few high-yield variants so MediaPipe cannot
+    # serialize ahead of OpenRouter vision on the critical path.
+    if fast:
+        return [
+            as_variant(pil, pad_ratio=0.22),
+            as_variant(pil, pad_ratio=0.22, mirrored=True),
+            as_variant(contrasted, pad_ratio=0.28),
+            as_variant(pil),
+            as_variant(pil, mirrored=True),
+        ]
+
     margin_x = int(w * 0.12)
     margin_y = int(h * 0.10)
     center_crop = (margin_x, margin_y, w - margin_x, h - margin_y)
@@ -130,7 +143,6 @@ def _prepare_rgb_variants(image_bytes: bytes) -> list[_Variant]:
     tight_y = int(h * 0.14)
     tight_crop = (tight_x, tight_y, w - tight_x, h - tight_y)
 
-    contrasted = ImageOps.autocontrast(pil, cutoff=1)
     bright = ImageEnhance.Brightness(pil).enhance(1.18)
     bright = ImageEnhance.Contrast(bright).enhance(1.12)
 
@@ -175,7 +187,11 @@ def _ensure_hand_model() -> str:
     dest = cache_dir / "agastya_hand_landmarker.task"
     if not dest.is_file() or dest.stat().st_size < 1000:
         logger.info("Downloading MediaPipe hand landmarker model…")
-        urllib.request.urlretrieve(_MODEL_URL, dest)  # noqa: S310 — pinned Google CDN model
+        # Hard timeout — urlretrieve can hang forever and block /palm/analyze.
+        with urllib.request.urlopen(_MODEL_URL, timeout=30) as resp:  # noqa: S310 — pinned Google CDN
+            dest.write_bytes(resp.read())
+        if dest.stat().st_size < 1000:
+            raise RuntimeError("MediaPipe hand model download incomplete")
     _landmarker_path = str(dest)
     return _landmarker_path
 
@@ -268,11 +284,14 @@ def _landmarks_from_solutions(results, dominant_hand: str) -> list[list[float]] 
 def _detect_with_tasks(
     variants: list[_Variant],
     hands_order: list[str],
+    *,
+    fast: bool = False,
 ) -> list[list[float]] | None:
     import mediapipe as mp
     import numpy as np
 
-    for confidence in (0.35, 0.22, 0.12, 0.08):
+    confidences = (0.35, 0.20) if fast else (0.35, 0.22, 0.12, 0.08)
+    for confidence in confidences:
         landmarker = _get_tasks_landmarker(confidence)
         for variant in variants:
             arr = np.ascontiguousarray(variant.arr, dtype=np.uint8)
@@ -288,14 +307,18 @@ def _detect_with_tasks(
 def _detect_with_solutions(
     variants: list[_Variant],
     hands_order: list[str],
+    *,
+    fast: bool = False,
 ) -> list[list[float]] | None:
     import mediapipe as mp
 
     if not hasattr(mp, "solutions"):
         return None
 
-    for model_complexity in (1, 0):
-        for confidence in (0.35, 0.22, 0.12, 0.08):
+    complexities = (0,) if fast else (1, 0)
+    confidences = (0.35, 0.20) if fast else (0.35, 0.22, 0.12, 0.08)
+    for model_complexity in complexities:
+        for confidence in confidences:
             with mp.solutions.hands.Hands(
                 static_image_mode=True,
                 max_num_hands=2,
@@ -314,12 +337,15 @@ def _detect_with_solutions(
 def detect_hand_landmarks_from_bytes(
     image_bytes: bytes,
     dominant_hand: str = "right",
+    *,
+    fast: bool = False,
 ) -> tuple[list[list[float]] | None, str]:
     """
     Detect 21 normalized hand landmarks from a JPEG/PNG capture.
 
     Returns (landmarks, source) where source is mediapipe | not_found | unavailable.
     Prefers MediaPipe Tasks (0.10.30+); falls back to classic solutions when present.
+    ``fast=True`` uses fewer variants/confidences for the analyze critical path.
     """
     try:
         import mediapipe as mp  # noqa: F401
@@ -330,7 +356,7 @@ def detect_hand_landmarks_from_bytes(
         return None, "unavailable"
 
     try:
-        variants = _prepare_rgb_variants(image_bytes)
+        variants = _prepare_rgb_variants(image_bytes, fast=fast)
     except Exception:
         logger.warning("palm landmark image decode failed")
         return None, "not_found"
@@ -345,13 +371,13 @@ def detect_hand_landmarks_from_bytes(
         try:
             from mediapipe.tasks.python import vision  # noqa: F401
 
-            hit = _detect_with_tasks(variants, hands_order)
+            hit = _detect_with_tasks(variants, hands_order, fast=fast)
             if hit:
                 return hit, "mediapipe"
         except Exception:
             logger.exception("mediapipe Tasks hand detection failed — trying solutions")
 
-        hit = _detect_with_solutions(variants, hands_order)
+        hit = _detect_with_solutions(variants, hands_order, fast=fast)
         if hit:
             return hit, "mediapipe"
     except Exception:

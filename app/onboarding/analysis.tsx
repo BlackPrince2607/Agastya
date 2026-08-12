@@ -34,7 +34,13 @@ import { isLivePalmAnalysis, palmNeedsRetake } from '@/types/palmAnalysis';
 import { useSessionStore } from '@/store/sessionStore';
 import { ANALYSIS_SETTLE_MS, ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS } from '@/constants/onboarding';
 import { deferRouterReplace } from '@/utils/routerDefer';
-import { delay } from '@/utils/analysisTiming';
+import {
+  ANALYSIS_ANALYZE_CREEP_MS,
+  ANALYSIS_FLOW_WATCHDOG_MS,
+  PALM_ANALYZE_CLIENT_TIMEOUT_MS,
+  delay,
+  raceWithTimeout,
+} from '@/utils/analysisTiming';
 import { withApiRetry } from '@/utils/apiRetry';
 import { palmHandForGender } from '@/utils/palmHand';
 import { trimBase64Payload } from '@/utils/palmLandmarks';
@@ -111,22 +117,38 @@ export default function AnalysisScreen() {
     setSampleBadge(false);
 
     let cancelled = false;
+    const runAbort = new AbortController();
 
-    // Hard ceiling so a hung native fetch/auth call cannot leave this screen spinning forever.
-    const watchdog = setTimeout(() => {
+    const tripWatchdog = () => {
       if (cancelled || runId !== runIdRef.current) return;
       cancelled = true;
       runIdRef.current += 1;
+      runAbort.abort();
       showRetry('This is taking longer than expected. Please try again.', [
         'request timed out',
         'check your connection',
       ]);
-    }, 210_000);
+    };
+
+    // Hard ceiling so a hung native fetch cannot leave this screen spinning forever.
+    const watchdog = setTimeout(tripWatchdog, ANALYSIS_FLOW_WATCHDOG_MS);
 
     const advance = (next: WorkStage) => {
       if (cancelled || runId !== runIdRef.current) return;
       setStage(next);
-      animatedPct.value = withTiming(stagePct(next), { duration: 900 });
+      const target = stagePct(next);
+      // Soft creep during analyze (28%→48%) so a long OpenRouter call does not look frozen.
+      if (next === 1) {
+        animatedPct.value = target;
+        animatedPct.value = withTiming(48, { duration: ANALYSIS_ANALYZE_CREEP_MS });
+        return;
+      }
+      if (next === 3) {
+        animatedPct.value = target;
+        animatedPct.value = withTiming(90, { duration: 55_000 });
+        return;
+      }
+      animatedPct.value = withTiming(target, { duration: 900 });
     };
 
     void (async () => {
@@ -157,15 +179,24 @@ export default function AnalysisScreen() {
 
         if (isApiConfigured()) {
           try {
-            palm = await withApiRetry(() =>
-              analyzePalm({
-                sessionId: snap.sessionId!,
-                deviceInstallId: snap.deviceInstallId!,
-                seed: resolvedSeed,
-                imageBase64: capture,
-                dominantHand: handSnapshot,
-                gender: snap.userGender,
-              }),
+            // Promise.race covers RN cases where fetch abort never rejects.
+            palm = await raceWithTimeout(
+              withApiRetry(() =>
+                analyzePalm(
+                  {
+                    sessionId: snap.sessionId!,
+                    deviceInstallId: snap.deviceInstallId!,
+                    seed: resolvedSeed,
+                    imageBase64: capture,
+                    dominantHand: handSnapshot,
+                    gender: snap.userGender,
+                  },
+                  { signal: runAbort.signal, timeoutMs: PALM_ANALYZE_CLIENT_TIMEOUT_MS },
+                ),
+              ),
+              PALM_ANALYZE_CLIENT_TIMEOUT_MS + 8_000,
+              '/v1/palm/analyze',
+              runAbort.signal,
             );
           } catch (err) {
             if (cancelled || runId !== runIdRef.current) return;
@@ -210,23 +241,26 @@ export default function AnalysisScreen() {
             expoPushToken = await getExpoPushToken();
             const runGenerate = () =>
               withApiRetry(() =>
-                generateReport({
-                  sessionId: snap2.sessionId!,
-                  seed: resolvedSeed,
-                  palmAnalysis: palm,
-                  focusTopics: snap2.focusTopics,
-                  mode: 'preview',
-                  displayName: snap2.userDisplayName,
-                  gender: snap2.userGender,
-                  expoPushToken,
-                }),
+                generateReport(
+                  {
+                    sessionId: snap2.sessionId!,
+                    seed: resolvedSeed,
+                    palmAnalysis: palm,
+                    focusTopics: snap2.focusTopics,
+                    mode: 'preview',
+                    displayName: snap2.userDisplayName,
+                    gender: snap2.userGender,
+                    expoPushToken,
+                  },
+                  { signal: runAbort.signal },
+                ),
               );
-            let previewPayload;
-            try {
-              previewPayload = await runGenerate();
-            } catch {
-              previewPayload = await runGenerate();
-            }
+            const previewPayload = await raceWithTimeout(
+              runGenerate(),
+              78_000,
+              '/v1/reports/generate',
+              runAbort.signal,
+            );
             setPreviewReading(normalizeFullReport(previewPayload));
           } else {
             setPreviewReading(buildSimulatedReading(resolvedSeed, snap2.focusTopics, palm));
@@ -282,6 +316,7 @@ export default function AnalysisScreen() {
 
     return () => {
       cancelled = true;
+      runAbort.abort();
       clearTimeout(watchdog);
     };
   }, [seed, setPalmAnalysis, setPreviewReading, setReadingSeed, showRetry]);
