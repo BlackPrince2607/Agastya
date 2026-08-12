@@ -55,8 +55,17 @@ export const isSupabaseEnabled = Boolean(supabaseUrl && supabaseAnonKey);
 export async function getSupabaseAccessToken(): Promise<string | null> {
   const sb = getSupabase();
   if (!sb) return null;
-  const { data } = await sb.auth.getSession();
-  return data.session?.access_token ?? null;
+  try {
+    const result = await Promise.race([
+      sb.auth.getSession(),
+      new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('supabase_session_timeout')), 8000);
+      }),
+    ]);
+    return result.data.session?.access_token ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /** Wait briefly for session storage to settle after OAuth / magic-link exchange. */

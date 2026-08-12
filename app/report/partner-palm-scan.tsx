@@ -1,6 +1,6 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router } from 'expo-router';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -28,9 +28,13 @@ import { pickPalmImage } from '@/utils/pickPalmImage';
 import { assessPalmCaptureQuality, confirmSoftQualityOrProceed } from '@/utils/palmCaptureQuality';
 import { deferRouterPush } from '@/utils/routerDefer';
 
+/** If expo-camera never resolves permission status, escape the spinner. */
+const CAMERA_PERMISSION_WAIT_MS = 5000;
+
 /** Scan a partner's palm for compatibility matching — capture → analysis, no review. */
 export default function PartnerPalmScanScreen() {
   const [permission, requestPermission] = useCameraPermissions();
+  const [permissionWaitTimedOut, setPermissionWaitTimedOut] = useState(false);
   const [uploadBusy, setUploadBusy] = useState(false);
   const [capturing, setCapturing] = useState(false);
   const [selectedHand, setSelectedHand] = useState<PalmScanHand>(
@@ -44,6 +48,15 @@ export default function PartnerPalmScanScreen() {
   const frameSize = Math.min(windowWidth - PAGE_PADDING * 2 - 8, 300);
 
   const hand = selectedHand;
+
+  useEffect(() => {
+    if (permission) {
+      setPermissionWaitTimedOut(false);
+      return;
+    }
+    const t = setTimeout(() => setPermissionWaitTimedOut(true), CAMERA_PERMISSION_WAIT_MS);
+    return () => clearTimeout(t);
+  }, [permission]);
 
   const goToAnalysis = (base64: string) => {
     const seed = `partner-${hand}-${Date.now()}`;
@@ -71,22 +84,33 @@ export default function PartnerPalmScanScreen() {
       const base64 = await pickPalmImage();
       if (!base64) return;
       await submitCapture(base64);
+    } catch {
+      Alert.alert("Couldn't open gallery", PALM_CAPTURE_FAILED);
     } finally {
       setUploadBusy(false);
     }
   };
 
-  if (!permission) {
+  if (!permission && !permissionWaitTimedOut) {
     return (
       <CosmicScreen insetTop={false}>
-        <View className="flex-1 items-center justify-center px-8">
+        <View className="flex-1 items-center justify-center gap-6 px-8">
           <LoadingBlock message={CAMERA_PERMISSION_LOADING} />
+          <CosmicButton
+            variant="ghost"
+            label={uploadBusy ? GALLERY_OPENING : 'Upload from gallery instead'}
+            disabled={uploadBusy}
+            onPress={() => {
+              void triggerLightTap();
+              void uploadFromGallery();
+            }}
+          />
         </View>
       </CosmicScreen>
     );
   }
 
-  if (!permission.granted) {
+  if (!permission?.granted) {
     return (
       <CosmicScreen>
         <View className="flex-1">
@@ -108,10 +132,17 @@ export default function PartnerPalmScanScreen() {
               </Text>
             </View>
             <View className="gap-3">
-              <CosmicButton gradient="nebulaMd3" label="Allow camera" onPress={() => requestPermission()} />
+              <CosmicButton
+                gradient="nebulaMd3"
+                label="Allow camera"
+                onPress={() => {
+                  void requestPermission().catch(() => undefined);
+                }}
+              />
               <CosmicButton
                 variant="ghost"
-                label="Upload from gallery instead"
+                label={uploadBusy ? GALLERY_OPENING : 'Upload from gallery instead'}
+                disabled={uploadBusy}
                 onPress={() => {
                   void triggerLightTap();
                   void uploadFromGallery();

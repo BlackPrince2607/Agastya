@@ -1,6 +1,6 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useLocalSearchParams } from 'expo-router';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -34,6 +34,9 @@ import { deferRouterPush } from '@/utils/routerDefer';
 
 type ScanStep = 'briefing' | 'camera';
 
+/** If expo-camera never resolves permission status, escape the spinner. */
+const CAMERA_PERMISSION_WAIT_MS = 5000;
+
 function decodeRetakeReason(raw?: string): string | null {
   if (!raw || typeof raw !== 'string') return null;
   try {
@@ -57,6 +60,7 @@ export default function PalmScanScreen() {
   const recommendedHand = palmHandForGender(userGender);
 
   const [permission, requestPermission] = useCameraPermissions();
+  const [permissionWaitTimedOut, setPermissionWaitTimedOut] = useState(false);
   const [step, setStep] = useState<ScanStep>('briefing');
   const [uploadBusy, setUploadBusy] = useState(false);
   const [capturing, setCapturing] = useState(false);
@@ -69,6 +73,15 @@ export default function PalmScanScreen() {
 
   const frameSize = Math.min(windowWidth - PAGE_PADDING * 2 - 8, Math.round(windowHeight * 0.42), 320);
   const hand = handLocked ? recommendedHand : selectedHand;
+
+  useEffect(() => {
+    if (permission) {
+      setPermissionWaitTimedOut(false);
+      return;
+    }
+    const t = setTimeout(() => setPermissionWaitTimedOut(true), CAMERA_PERMISSION_WAIT_MS);
+    return () => clearTimeout(t);
+  }, [permission]);
 
   const chooseHand = (next: PalmScanHand) => {
     if (handLocked) return;
@@ -105,28 +118,25 @@ export default function PalmScanScreen() {
       const nextHand = handLocked ? recommendedHand : scanHand;
       setSelectedHand(nextHand);
       await submitCapture(base64, nextHand, 'gallery');
+    } catch {
+      Alert.alert("Couldn't open gallery", PALM_CAPTURE_FAILED);
     } finally {
       setUploadBusy(false);
     }
   };
 
-  if (!permission) {
-    return (
-      <CosmicScreen>
-        <View className="flex-1 items-center justify-center px-8">
-          <LoadingBlock message={CAMERA_PERMISSION_LOADING} />
-        </View>
-      </CosmicScreen>
-    );
-  }
-
   const requestAndContinue = async (scanHand: PalmScanHand) => {
     track(AnalyticsEvent.PALM_SCAN_STARTED, { source: 'camera' });
     setSelectedHand(handLocked ? recommendedHand : scanHand);
     setStep('camera');
-    await requestPermission();
+    try {
+      await requestPermission();
+    } catch {
+      // Fall through to the allow-camera / gallery UI below.
+    }
   };
 
+  // Briefing does not need camera permission — never block gallery behind a spinner.
   if (step === 'briefing') {
     return (
       <View className="flex-1">
@@ -162,7 +172,28 @@ export default function PalmScanScreen() {
     );
   }
 
-  if (!permission.granted) {
+  // Only wait for permission once the user chose the camera path.
+  if (!permission && !permissionWaitTimedOut) {
+    return (
+      <CosmicScreen>
+        <View className="flex-1 items-center justify-center gap-6 px-8">
+          <LoadingBlock message={CAMERA_PERMISSION_LOADING} />
+          <CosmicButton
+            variant="ghost"
+            label={uploadBusy ? GALLERY_OPENING : 'Upload from gallery instead'}
+            disabled={uploadBusy}
+            onPress={() => {
+              void triggerLightTap();
+              void uploadFromGallery(selectedHand);
+            }}
+          />
+          <CosmicButton variant="ghost" label="Back to checklist" onPress={() => setStep('briefing')} />
+        </View>
+      </CosmicScreen>
+    );
+  }
+
+  if (!permission?.granted) {
     return (
       <View className="flex-1 bg-surface-container-lowest">
         <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={{ flex: 1 }}>
@@ -180,10 +211,17 @@ export default function PalmScanScreen() {
               </Text>
             </View>
             <View className="gap-3">
-              <CosmicButton gradient="nebulaMd3" label="Allow camera" onPress={() => requestPermission()} />
+              <CosmicButton
+                gradient="nebulaMd3"
+                label="Allow camera"
+                onPress={() => {
+                  void requestPermission().catch(() => undefined);
+                }}
+              />
               <CosmicButton
                 variant="ghost"
-                label="Upload from gallery instead"
+                label={uploadBusy ? GALLERY_OPENING : 'Upload from gallery instead'}
+                disabled={uploadBusy}
                 onPress={() => {
                   void triggerLightTap();
                   void uploadFromGallery(selectedHand);

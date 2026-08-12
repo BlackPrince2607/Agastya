@@ -112,6 +112,17 @@ export default function AnalysisScreen() {
 
     let cancelled = false;
 
+    // Hard ceiling so a hung native fetch/auth call cannot leave this screen spinning forever.
+    const watchdog = setTimeout(() => {
+      if (cancelled || runId !== runIdRef.current) return;
+      cancelled = true;
+      runIdRef.current += 1;
+      showRetry('This is taking longer than expected. Please try again.', [
+        'request timed out',
+        'check your connection',
+      ]);
+    }, 210_000);
+
     const advance = (next: WorkStage) => {
       if (cancelled || runId !== runIdRef.current) return;
       setStage(next);
@@ -264,11 +275,14 @@ export default function AnalysisScreen() {
           pathname: '/onboarding/report-preview',
           params: { seed: resolvedSeedOffline },
         });
+      } finally {
+        clearTimeout(watchdog);
       }
     })();
 
     return () => {
       cancelled = true;
+      clearTimeout(watchdog);
     };
   }, [seed, setPalmAnalysis, setPreviewReading, setReadingSeed, showRetry]);
 
