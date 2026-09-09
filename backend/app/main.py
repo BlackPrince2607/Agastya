@@ -127,7 +127,9 @@ def create_app() -> FastAPI:
 
     app.add_middleware(CORSMiddleware, **cors_kw)
 
+    # Root paths for sharvo.online / Play Console custom URLs; /legal/* for explicit paths.
     app.include_router(legal.router)
+    app.include_router(legal.router, prefix="/legal")
     app.include_router(health.router, prefix=settings.api_v1_prefix)
     app.include_router(auth.router, prefix=settings.api_v1_prefix)
     app.include_router(agastya.router, prefix=settings.api_v1_prefix)

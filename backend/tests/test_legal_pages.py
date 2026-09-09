@@ -1,4 +1,4 @@
-"""Public legal HTML pages served at site root (no /v1 prefix)."""
+"""Public legal HTML pages served at site root and under /legal (no /v1 prefix)."""
 
 from __future__ import annotations
 
@@ -15,7 +15,18 @@ def test_legal_pages_served_from_repo_legal_dir():
     legal_dir = Path(__file__).resolve().parents[2] / "legal"
     assert legal_dir.is_dir(), f"expected {legal_dir} in repo"
 
-    for path in ("/", "/delete-account", "/privacy", "/terms", "/support"):
+    for path in (
+        "/",
+        "/delete-account",
+        "/privacy",
+        "/terms",
+        "/support",
+        "/legal/",
+        "/legal/delete-account",
+        "/legal/privacy",
+        "/legal/terms",
+        "/legal/support",
+    ):
         res = client.get(path)
         assert res.status_code == 200, path
         assert "text/html" in res.headers.get("content-type", "")
