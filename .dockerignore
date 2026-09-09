@@ -1,4 +1,6 @@
-# Railway/Fly Docker build — only include backend/ (repo root is the build context).
+# Railway/Fly Docker build — only include backend/ + legal/ (repo root is the build context).
 *
 !backend
 !backend/**
+!legal
+!legal/**
