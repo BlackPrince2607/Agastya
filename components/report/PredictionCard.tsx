@@ -45,6 +45,7 @@ type PredictionCardProps = {
   expanded?: boolean;
   onOpen?: () => void;
   onClose?: () => void;
+  onLockedPress?: () => void;
 };
 
 export function PredictionCard({
@@ -57,12 +58,17 @@ export function PredictionCard({
   expanded = false,
   onOpen,
   onClose,
+  onLockedPress,
 }: PredictionCardProps) {
   const meta = CATEGORY_META[category];
   const teaserHeadline = `Unlock your ${meta.label.toLowerCase()} insight`;
+  const body = (insight?.trim() || detail).trim();
 
   const toggle = () => {
-    if (locked) return;
+    if (locked) {
+      onLockedPress?.();
+      return;
+    }
     if (expanded) onClose?.();
     else onOpen?.();
   };
@@ -70,9 +76,9 @@ export function PredictionCard({
   return (
     <Pressable
       onPress={toggle}
-      disabled={locked}
+      delayPressIn={0}
       accessibilityRole="button"
-      accessibilityState={{ expanded: expanded && !locked, disabled: Boolean(locked) }}
+      accessibilityState={{ expanded: expanded && !locked, disabled: false }}
       accessibilityLabel={
         locked
           ? `${meta.label} prediction locked. ${teaserHeadline}`
@@ -83,7 +89,7 @@ export function PredictionCard({
           colors={[...meta.gradient]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          style={{ padding: 20, gap: 8 }}>
+          style={{ padding: 20, gap: 10 }}>
           <View className="flex-row items-center justify-between">
             <View className="flex-row items-center gap-2.5">
               <View
@@ -98,7 +104,7 @@ export function PredictionCard({
             {locked ? (
               <Icon name="lock" size={16} color="rgba(232,225,229,0.4)" />
             ) : (
-              <Icon name={expanded ? 'expand_less' : 'expand_more'} size={20} color={meta.tint} />
+              <Icon name={expanded ? 'expand_less' : 'expand_more'} size={22} color={meta.tint} />
             )}
           </View>
           {locked ? (
@@ -108,22 +114,17 @@ export function PredictionCard({
           )}
           {locked ? (
             <Text className="font-body text-[14px] leading-6 text-on-surface-variant" style={{ opacity: 0.5 }}>
-              Unlock predictions to reveal this insight.
+              Tap to unlock longer-range forecasts.
             </Text>
-          ) : expanded ? (
-            <View className="gap-3">
-              <Text className="font-body text-[14px] leading-6 text-on-surface-variant">{detail}</Text>
-              {insight?.trim() && insight.trim() !== detail.trim() ? (
-                <Text className="font-body text-[14px] leading-6 text-on-surface-variant">{insight.trim()}</Text>
-              ) : null}
-            </View>
           ) : (
-            <Text className="font-body text-[14px] leading-6 text-on-surface-variant" numberOfLines={5}>
-              {detail}
+            <Text
+              className="font-body text-[14px] leading-6 text-on-surface-variant"
+              numberOfLines={expanded ? undefined : 3}>
+              {expanded ? body : detail}
             </Text>
           )}
           {expanded && !locked && beats && beats.length > 0 ? (
-            <View className="mt-2 gap-3">
+            <View className="mt-1 gap-2.5">
               {beats.map((beat) => (
                 <View key={beat.label} className="gap-1 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2.5">
                   <Text className="font-label text-[11px] uppercase tracking-[0.12em]" style={{ color: meta.tint }}>
@@ -133,6 +134,11 @@ export function PredictionCard({
                 </View>
               ))}
             </View>
+          ) : null}
+          {!locked && !expanded ? (
+            <Text className="font-label text-[11px] uppercase tracking-[0.12em]" style={{ color: meta.tint }}>
+              Tap to expand
+            </Text>
           ) : null}
         </LinearGradient>
       </GlassCard>

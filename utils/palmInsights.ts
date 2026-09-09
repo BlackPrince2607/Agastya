@@ -163,8 +163,8 @@ const MARRIAGE: Record<string, { descriptor: string; text: string }> = {
 };
 
 const UNCLEAR = {
-  descriptor: 'Not clearly marked',
-  text: 'Not clearly visible in the provided scan. Traditional palmistry would not invent this line — clearer light and a fuller open palm would help.',
+  descriptor: 'Softly marked',
+  text: 'This Rekha was not strongly marked in the scan, so the reading stays gentle and general — clearer light and a fuller open palm can refine it later.',
 };
 
 function pick<T>(map: Record<string, T>, key: string, fallback: T): T {
@@ -269,7 +269,6 @@ export function palmLineInsights(palm: PalmAnalysisDto, seed: string): PalmLineI
     },
   ];
 
-  const majors = new Set(['life_line', 'heart_line', 'head_line']);
   const mapped = rows.map(({ key, base, dig, min, max }) => {
     const meta = REKHA[key]!;
     const fields = lineDetailFields(palm, key);
@@ -287,22 +286,8 @@ export function palmLineInsights(palm: PalmAnalysisDto, seed: string): PalmLineI
     };
   });
 
-  const majorCards = mapped.filter((row) => majors.has(row.lineKey));
-  const secondaryCards = mapped.filter((row) => !majors.has(row.lineKey) && !row.unclear);
-  const missingSecondary = mapped.some((row) => !majors.has(row.lineKey) && row.unclear);
-  if (!missingSecondary) return [...majorCards, ...secondaryCards];
-  return [
-    ...majorCards,
-    ...secondaryCards,
-    {
-      lineKey: 'other_lines',
-      lineName: 'Other lines',
-      descriptor: UNCLEAR.descriptor,
-      interpretation: UNCLEAR.text,
-      score: 0,
-      unclear: true,
-    },
-  ];
+  // Always surface all six Rekhas individually — never collapse into "Other lines".
+  return mapped;
 }
 
 export type PersonalityProfile = {

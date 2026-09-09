@@ -1,6 +1,6 @@
 import { Pressable, Text, View } from 'react-native';
 
-import { GlassCard, Icon, ProgressBar } from '@/components/ui';
+import { GlassCard, Icon } from '@/components/ui';
 import { colors } from '@/constants/theme';
 
 type PalmLineCardProps = {
@@ -8,7 +8,7 @@ type PalmLineCardProps = {
   lineName: string;
   descriptor: string;
   interpretation: string;
-  score: number;
+  score?: number;
   length?: string;
   depth?: string;
   breaks?: number;
@@ -39,7 +39,6 @@ export function PalmLineCard({
   lineName,
   descriptor,
   interpretation,
-  score,
   length,
   depth,
   breaks,
@@ -65,22 +64,11 @@ export function PalmLineCard({
         <View className="flex-1 gap-2.5">
           <View className="flex-row items-start justify-between gap-2">
             <Text className="flex-1 font-headline-md text-[17px] leading-6 text-on-surface">{lineName}</Text>
-            <View className="flex-row items-center gap-2">
-              {unclear ? (
-                <Text className="font-label text-[11px] uppercase tracking-[0.1em] text-on-surface-variant">
-                  Not marked
-                </Text>
-              ) : (
-                <Text className="font-label text-[22px] font-bold" style={{ color: tint }}>
-                  {score}%
-                </Text>
-              )}
-              <Icon
-                name={expanded ? 'expand_less' : 'expand_more'}
-                size={20}
-                color={colors.onSurfaceVariant}
-              />
-            </View>
+            <Icon
+              name={expanded ? 'expand_less' : 'expand_more'}
+              size={20}
+              color={colors.onSurfaceVariant}
+            />
           </View>
           <Text className="font-label text-[11px] uppercase tracking-[0.14em]" style={{ color: tint }}>
             {descriptor}
@@ -102,14 +90,9 @@ export function PalmLineCard({
               {notes?.trim() && notes.trim() !== interpretation ? (
                 <Text className="font-body text-[13px] leading-5 text-on-surface-variant/80">{notes}</Text>
               ) : null}
-              {!unclear ? (
-                <View className="mt-1 gap-1">
-                  <ProgressBar value={score} height={8} palette="progress" />
-                </View>
-              ) : null}
             </>
           ) : (
-            <Text className="font-body text-[14px] leading-6 text-on-surface-variant" numberOfLines={2}>
+            <Text className="font-body text-[14px] leading-6 text-on-surface-variant" numberOfLines={3}>
               {interpretation}
             </Text>
           )}

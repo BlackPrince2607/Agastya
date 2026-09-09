@@ -672,7 +672,7 @@ export async function fetchPredictions(body: {
   if (!deviceInstallId) {
     throw new Error('Device identity is not ready yet. Please try again.');
   }
-  // LLM-backed; default 8s abort is far below OpenRouter chat budget (~60s).
+  // LLM-backed; keep under chat budget but fail faster than a full minute.
   return postJson<PredictionsResponse>(
     '/v1/predictions/generate',
     {
@@ -680,7 +680,7 @@ export async function fetchPredictions(body: {
       deviceInstallId,
     },
     false,
-    { timeoutMs: 60_000 },
+    { timeoutMs: 28_000 },
   );
 }
 

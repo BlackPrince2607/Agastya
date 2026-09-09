@@ -3,25 +3,23 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { colors } from '@/constants/theme';
 
-import { EmptyState, LoadingBlock, PageTitle, StatusPill } from '@/components/feedback';
+import { EmptyState, PageTitle, StatusPill } from '@/components/feedback';
 import { BackButton } from '@/components/layout/BackButton';
 import { StackScroll } from '@/components/layout/StackScroll';
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { AuraNebulaCard, GradientText, InsightCard, MetricDonut } from '@/components/primitives';
-import { PalmLineCard, PalmLineMap, PredictionCard, StrengthDots } from '@/components/report';
+import { PalmLineCard, PredictionCard, StrengthDots } from '@/components/report';
 import { AuraChip, GlassCard, Icon, PrimaryButton } from '@/components/ui';
 import { PressableScale } from '@/components/ui/PressableScale';
-import { REPORT_EMPTY, REPORT_PREDICTIONS_LOADING } from '@/constants/userCopy';
+import { REPORT_EMPTY } from '@/constants/userCopy';
 import { fetchPredictions } from '@/services/agastyaApi';
 import { buildSimulatedReading } from '@/services/simulatedReading';
 import { useSessionStore } from '@/store/sessionStore';
 import type { PalmAnalysisDto } from '@/types/palmAnalysis';
 import { PREDICTION_PERIODS, type PredictionPeriod } from '@/types/predictions';
 import { buildLocalPredictions } from '@/utils/localPredictions';
-import { withApiRetry } from '@/utils/apiRetry';
 import { normalizeLifeMetrics } from '@/utils/lifeMetrics';
 import { palmLineInsights, personalityProfile, headlineNeedsPalmFix, mountSummaries } from '@/utils/palmInsights';
-import { palmCaptureDataUri } from '@/utils/palmCaptureUri';
 import { paywallRouteParams } from '@/utils/paywallNavigation';
 
 type ReportTab = 'overview' | 'lines' | 'personality' | 'predictions';
@@ -50,9 +48,6 @@ export default function ReportScreen() {
   const fullReading = useSessionStore((s) => s.fullReading);
   const premium = useSessionStore((s) => s.hasUnlockedPremium);
   const predictionsCache = useSessionStore((s) => s.predictions);
-  const palmCapturePreview = useSessionStore((s) => s.palmCapturePreview);
-  const palmCaptureBase64 = useSessionStore((s) => s.palmCaptureBase64);
-  const palmImageUri = palmCaptureDataUri(palmCapturePreview ?? palmCaptureBase64);
 
   const initialTab = (TABS.find((t) => t.id === tab)?.id ?? 'overview') as ReportTab;
   const [active, setActive] = useState<ReportTab>(initialTab);
@@ -62,8 +57,6 @@ export default function ReportScreen() {
   const [openPrediction, setOpenPrediction] = useState<string | null>(null);
   const [selectedLineKey, setSelectedLineKey] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
-  const linesSectionY = useRef(0);
-  const lineCardY = useRef<Record<string, number>>({});
 
   const selectTab = (next: ReportTab) => {
     setActive(next);
@@ -114,7 +107,7 @@ export default function ReportScreen() {
     [predictionsCache, period, seed, palm],
   );
 
-  // Fetch + cache real predictions when an unlocked period is viewed and not cached yet.
+  // Local predictions render immediately; enrich from API in the background.
   useEffect(() => {
     if (active !== 'predictions' || !periodUnlocked) return;
     if (predictionsCache?.[period] || !sessionId || !palmAnalysis) return;
@@ -122,15 +115,13 @@ export default function ReportScreen() {
     setPredictionsLoading(true);
     void (async () => {
       try {
-        const result = await withApiRetry(() =>
-          fetchPredictions({
-            sessionId,
-            period,
-            seed: seed ?? undefined,
-            palmAnalysis,
-            focusTopics,
-          }),
-        );
+        const result = await fetchPredictions({
+          sessionId,
+          period,
+          seed: seed ?? undefined,
+          palmAnalysis,
+          focusTopics,
+        });
         if (alive) setPredictions(period, result);
       } catch {
         // Local fallback already renders; ignore network errors silently.
@@ -236,34 +227,10 @@ export default function ReportScreen() {
           ) : null}
 
           {active === 'lines' ? (
-            <View
-              className="w-full gap-4"
-              onLayout={(e) => {
-                linesSectionY.current = e.nativeEvent.layout.y;
-              }}>
-              <PalmLineMap
-                palm={palm}
-                imageUri={palmImageUri}
-                selectedName={selectedLineKey}
-                onSelectLine={(name) => {
-                  setSelectedLineKey(name);
-                  const y = lineCardY.current[name];
-                  if (typeof y === 'number') {
-                    scrollRef.current?.scrollTo({ y: Math.max(0, y - 16), animated: true });
-                  }
-                }}
-              />
-              {palm.quality_warnings?.length ? (
-                <GlassCard muted className="w-full p-4" innerClassName="gap-2">
-                  <View className="gap-1">
-                    {palm.quality_warnings.map((w) => (
-                      <Text key={w} className="font-body text-[13px] text-amber-200/90">
-                        {w}
-                      </Text>
-                    ))}
-                  </View>
-                </GlassCard>
-              ) : null}
+            <View className="w-full gap-4">
+              <Text className="font-body text-[14px] leading-5 text-on-surface-variant">
+                Your six classical Rekhas — tap a card to read the full insight.
+              </Text>
               {mountSummaries(palm).length > 0 ? (
                 <GlassCard muted className="w-full p-4" innerClassName="gap-2">
                   <Text className="font-label text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">
@@ -277,22 +244,15 @@ export default function ReportScreen() {
                 </GlassCard>
               ) : null}
               {lines.map((line) => (
-                <View
+                <PalmLineCard
                   key={line.lineKey ?? line.lineName}
-                  onLayout={(e) => {
-                    if (line.lineKey) {
-                      lineCardY.current[line.lineKey] = linesSectionY.current + e.nativeEvent.layout.y;
-                    }
-                  }}>
-                  <PalmLineCard
-                    {...line}
-                    selected={selectedLineKey === line.lineKey}
-                    expanded={selectedLineKey === line.lineKey}
-                    onPress={() =>
-                      setSelectedLineKey((cur) => (cur === line.lineKey ? null : line.lineKey ?? null))
-                    }
-                  />
-                </View>
+                  {...line}
+                  selected={selectedLineKey === line.lineKey}
+                  expanded={selectedLineKey === line.lineKey}
+                  onPress={() =>
+                    setSelectedLineKey((cur) => (cur === line.lineKey ? null : line.lineKey ?? null))
+                  }
+                />
               ))}
             </View>
           ) : null}
@@ -378,26 +338,27 @@ export default function ReportScreen() {
                 ))}
               </View>
 
-              {usingLocalPredictions && !predictionsLoading ? (
+              {usingLocalPredictions && predictionsLoading ? (
+                <StatusPill label="Refreshing forecast…" variant="offline" />
+              ) : usingLocalPredictions ? (
                 <StatusPill label="Sample forecast — sync when online" variant="offline" />
-              ) : null}
-
-              {predictionsLoading && !predictionsCache?.[period] ? (
-                <LoadingBlock variant="skeleton" compact message={REPORT_PREDICTIONS_LOADING} />
               ) : null}
 
               {predictions.items.map((item) => (
                 <PredictionCard
-                  key={item.category}
+                  key={`${period}-${item.category}`}
                   category={item.category}
                   headline={item.headline}
                   detail={item.detail}
                   insight={item.insight}
                   beats={item.beats}
                   locked={!periodUnlocked}
-                  expanded={openPrediction === item.category}
+                  expanded={periodUnlocked && openPrediction === item.category}
                   onOpen={() => setOpenPrediction(item.category)}
                   onClose={() => setOpenPrediction((cur) => (cur === item.category ? null : cur))}
+                  onLockedPress={() =>
+                    router.push(paywallRouteParams('/report', useSessionStore.getState().readingSeed ?? undefined))
+                  }
                 />
               ))}
 
