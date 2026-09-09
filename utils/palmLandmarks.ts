@@ -76,7 +76,14 @@ function clamp01(n: number): number {
 
 function sanitizeGeometry(geometry: PalmLineGeometry[] | null | undefined): PalmLineGeometry[] {
   if (!geometry?.length) return [];
-  const allowed = new Set(['life_line', 'heart_line', 'head_line']);
+  const allowed = new Set([
+    'life_line',
+    'heart_line',
+    'head_line',
+    'fate_line',
+    'sun_line',
+    'marriage_line',
+  ]);
   return geometry
     .filter((line) => allowed.has(line.name) && line.points?.length >= 2)
     .map((line) => ({
@@ -135,15 +142,17 @@ export function landmarksToLineGeometry(landmarks: HandLandmark[] | null | undef
   ];
 }
 
-/** Prefer stored vision geometry, then derive from landmarks. */
+/**
+ * Prefer live vision/CV creases. Still draw stored polylines when the source tag
+ * is missing (legacy scans). Never invent knuckle heuristics as live creases.
+ */
 export function resolveLineGeometry(
   palm: PalmAnalysisDto | null | undefined,
-  landmarks?: HandLandmark[] | null,
+  _landmarks?: HandLandmark[] | null,
 ): PalmLineGeometry[] {
   const fromVision = sanitizeGeometry(palm?.line_geometry);
-  if (fromVision.length >= 3) return fromVision;
-  const fromLandmarks = landmarksToLineGeometry(landmarks);
-  if (fromLandmarks.length) return fromLandmarks;
+  if (fromVision.length < 2) return [];
+  if (palm?.geometry_source === 'landmark_heuristic') return [];
   return fromVision;
 }
 

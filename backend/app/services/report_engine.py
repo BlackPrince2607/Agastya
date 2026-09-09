@@ -12,6 +12,7 @@ from app.services.llm_client import llm_chat_completion
 from app.prompts.templates import REPORT_SYSTEM
 from app.schemas.palm import PalmAnalysis
 from app.schemas.report import AuraProfile, FullReport, InsightSection, LifeMetrics
+from app.services.palm_vedic import build_palm_dossier
 from app.utils.ai_errors import log_ai_fallback
 from app.utils.json_repair import loads_llm_json
 
@@ -88,7 +89,7 @@ def _visionary_subtitle(palm: PalmAnalysis) -> str:
     return VISIONARY_SUBTITLES.get(persona, "Reader of Your Inner Lines")
 
 
-def _archetype_line(palm: PalmAnalysis, gender_frag: str) -> str:
+def _archetype_line(palm: PalmAnalysis, gender_frag: str, dossier: dict | None = None) -> str:
     life_desc = LINE_DESCRIPTOR["life_line"].get((palm.life_line or "").lower(), "steady")
     heart_desc = LINE_DESCRIPTOR["heart_line"].get((palm.heart_line or "").lower(), "warm")
     traits = " and ".join(palm.traits[:2]) if palm.traits else "depth and intuition"
@@ -101,24 +102,93 @@ def _archetype_line(palm: PalmAnalysis, gender_frag: str) -> str:
         life_f = feat.get("life_line") if isinstance(feat.get("life_line"), dict) else None
         heart_f = feat.get("heart_line") if isinstance(feat.get("heart_line"), dict) else None
         if life_f and life_f.get("depth"):
-            bits.append(f"{life_f['depth']} life crease")
+            bits.append(f"{life_f['depth']} life crease (Jeevan Rekha)")
         if heart_f and heart_f.get("breaks", 0):
-            bits.append("interrupted heart crease")
+            bits.append("interrupted heart crease (Hridaya Rekha)")
         if bits:
             feature_frag = f" Measured on your scan: {', '.join(bits)}. "
+    themes = (dossier or {}).get("patternThemes") or []
+    theme_frag = ""
+    if themes:
+        theme_frag = f" The strongest tension in your palm is {themes[0]}."
     return (
-        f"{gender_frag}{hand_frag}your {life_desc} life line and {heart_desc} heart line suggest someone "
-        f"{traits}.{feature_frag} You take things in quietly and speak up only when it truly matters."
+        f"{gender_frag}{hand_frag}your {life_desc} Life Line · Jeevan Rekha and {heart_desc} "
+        f"Heart Line · Hridaya Rekha suggest someone {traits}.{feature_frag}"
+        f"{theme_frag} You take things in quietly and speak up only when it truly matters."
     )
 
 
-def _self_section_body(palm: PalmAnalysis) -> str:
-    motif = _palm_motif(palm)
-    head_desc = LINE_DESCRIPTOR["head_line"].get((palm.head_line or "").lower(), "balanced")
-    return (
-        "You turn overwhelm into plans. Sometimes that protects you; sometimes it keeps people at arm's length. "
-        f"Your {head_desc} mind and the pattern of {motif} keep surfacing whenever you put off being direct."
+def _section_from_dossier(
+    section_id: str,
+    title: str,
+    palm: PalmAnalysis,
+    dossier: dict,
+    name_hint: str,
+) -> InsightSection:
+    lines = dossier.get("lines") or {}
+    themes = dossier.get("patternThemes") or ["independence vs closeness"]
+    theme = themes[0]
+    hints = (dossier.get("pillarHints") or {}).get(
+        "personality" if section_id == "personality" else section_id, []
     )
+    hint_frag = ", ".join(hints[:2]) if hints else "your major creases"
+
+    if section_id == "personality":
+        head = lines.get("head_line") or {}
+        life = lines.get("life_line") or {}
+        body = (
+            f"{name_hint}, what stands out first is not a single crease but the relationship between "
+            f"your {head.get('label', 'Head Line · Mastishka Rekha')} ({head.get('motif', 'medium')}) "
+            f"and your {life.get('label', 'Life Line · Jeevan Rekha')} ({life.get('motif', 'moderate')}). "
+            f"{head.get('insight', '')} {life.get('insight', '')}\n\n"
+            f"The pattern of {theme} keeps showing up in how you think and how you pace yourself. "
+            f"Your challenge may not be lacking direction — it may be wanting certainty before you allow yourself to move."
+        )
+    elif section_id == "love":
+        heart = lines.get("heart_line") or {}
+        marriage = lines.get("marriage_line") or {}
+        marriage_bit = ""
+        if marriage.get("unclear") or marriage.get("motif") in {"not_clearly_visible", "absent"}:
+            marriage_bit = (
+                "Your Marriage Line · Vivah Rekha is not clearly marked in this scan — "
+                "traditional palmistry would not invent a partnership timeline here."
+            )
+        else:
+            marriage_bit = (
+                f"Your {marriage.get('label', 'Marriage Line')} reads {marriage.get('motif')}. "
+                f"{marriage.get('insight', '')}"
+            )
+        body = (
+            f"Affection in your palm is told through {heart.get('label', 'Heart Line · Hridaya Rekha')} "
+            f"({heart.get('motif', 'curved')}). {heart.get('insight', '')} "
+            f"You may not give trust quickly, but once someone has earned it, you tend to take the bond seriously.\n\n"
+            f"{marriage_bit} The emotional thread of {theme} can make closeness feel both necessary and carefully paced."
+        )
+    elif section_id == "career":
+        head = lines.get("head_line") or {}
+        fate = lines.get("fate_line") or {}
+        fate_bit = fate.get("insight", "")
+        body = (
+            f"Your professional story sits between {head.get('label', 'Head Line · Mastishka Rekha')} "
+            f"({head.get('motif', 'medium')}) and {fate.get('label', 'Fate Line · Bhagya Rekha')} "
+            f"({fate.get('motif', 'not_clearly_visible')}). {fate_bit} "
+            f"Traditional palmistry would read this less as a single job title and more as the kind of environment "
+            f"where you thrive — ownership, clarity, and work that feels like it belongs to you.\n\n"
+            f"What could hold you back is the same pattern of {theme}: waiting for perfect certainty "
+            f"before claiming the path you're already walking."
+        )
+    else:  # money
+        sun = lines.get("sun_line") or {}
+        body = (
+            f"Material life in your palm leans on {sun.get('label', 'Sun Line · Surya Rekha')} "
+            f"({sun.get('motif', 'not_clearly_visible')}) and the mounts that support recognition. "
+            f"{sun.get('insight', '')} Your palm is traditionally more compatible with wealth built through "
+            f"skill and persistence than sudden luck.\n\n"
+            f"Signals from {hint_frag} suggest naming fear early and letting small discipline compound — "
+            f"not chasing dramatic windfalls."
+        )
+
+    return InsightSection(id=section_id, title=title, body=body.strip(), tone="grounded")
 
 
 def _digits(seed: str) -> list[int]:
@@ -224,44 +294,17 @@ def deterministic_report(
     display_name: str | None,
     gender: str | None,
 ) -> FullReport:
+    dossier = build_palm_dossier(palm, gender=gender)
     motif = _palm_motif(palm)
-    traits_join = ", ".join(palm.traits)
-    name_hint = display_name or "traveler"
+    name_hint = display_name or "friend"
+    themes = dossier.get("patternThemes") or [motif]
+    theme = themes[0]
 
     sections_all = [
-        InsightSection(
-            id="personality",
-            title="Personality",
-            body=(
-                f"{name_hint}, your palm reads like {palm.personality} energy—traits "
-                f"({traits_join}) braid discipline with longing. "
-                f"The pattern of {motif} surfaces whenever you dodge naming desire aloud."
-            ),
-        ),
-        InsightSection(
-            id="love",
-            title="Love",
-            body=(
-                "Attachment learns your choreography early—you signal affection Sideways "
-                "until evidence piles up; someone patient earns the backstage version."
-            ),
-        ),
-        InsightSection(
-            id="career",
-            title="Career",
-            body=(
-                "Momentum arrives when stakes feel mythic, not merely productive. "
-                "Ambition hides behind refinement until deadlines sharpen."
-            ),
-        ),
-        InsightSection(
-            id="money",
-            title="Money",
-            body=(
-                "Resources trade between spreadsheets and phantom bills. "
-                "Naming the fear collapses half the tension—action handles the rest."
-            ),
-        ),
+        _section_from_dossier("personality", "Personality", palm, dossier, name_hint),
+        _section_from_dossier("love", "Love", palm, dossier, name_hint),
+        _section_from_dossier("career", "Career", palm, dossier, name_hint),
+        _section_from_dossier("money", "Money", palm, dossier, name_hint),
     ]
     sections = sections_all[:2] if mode == "preview" else sections_all
 
@@ -278,12 +321,13 @@ def deterministic_report(
         blueprint_title="Your Life Blueprint",
         visionary_title=_visionary_title(palm),
         visionary_subtitle=_visionary_subtitle(palm),
-        archetype_line=_archetype_line(palm, gender_frag),
-        headline=f'The pattern "{motif}" runs quietly through the way you move.',
+        archetype_line=_archetype_line(palm, gender_frag, dossier),
+        headline=f"There is an interesting tension running through your palm — {theme}.",
         sections=sections,
         bold_prediction=(
-            "Within forty quiet turns, a signal you shrugged off as coincidence knocks louder—"
-            "until you redraw one boundary you pretended was permanent."
+            f"The coming chapter appears more favorable for noticing where {theme} shows up in real choices "
+            f"than for waiting until every answer is certain. You don't need the whole map — "
+            f"your palm suggests your biggest shifts come from choosing a direction and following it."
         ),
         metrics=metrics,
         aura=aura,
@@ -312,6 +356,7 @@ async def build_report_payload(
     )
     if not settings.llm_enabled:
         return fallback
+    dossier = build_palm_dossier(palm, gender=gender)
     payload: dict = {
         "seed": seed,
         "mode": mode,
@@ -319,6 +364,7 @@ async def build_report_payload(
         "gender": gender,
         "focusTopics": topics,
         "palm": palm.model_dump(),
+        "palmDossier": dossier,
     }
     if life_journey:
         payload["lifeJourney"] = life_journey[:5]
@@ -338,7 +384,7 @@ async def build_report_payload(
                 {"role": "user", "content": json.dumps(payload)},
             ],
             temperature=0.6,
-            max_tokens=1200,
+            max_tokens=2800 if mode == "full" else 1400,
             feature="report",
         )
         if completion is None:

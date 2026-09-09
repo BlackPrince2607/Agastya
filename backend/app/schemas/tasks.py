@@ -23,7 +23,7 @@ class Task(BaseModel):
 class DailyTasksBody(BaseModel):
     session_id: str = Field(alias="sessionId")
     device_install_id: str = Field(alias="deviceInstallId")
-    palm_analysis: PalmAnalysis = Field(alias="palmAnalysis")
+    palm_analysis: PalmAnalysis | None = Field(default=None, alias="palmAnalysis")
     is_premium: bool = Field(default=False, alias="isPremium")
     focus_topics: list[str] = Field(default_factory=list, alias="focusTopics")
     streak: int | None = None

@@ -1,9 +1,9 @@
+import { Pressable, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Text, View } from 'react-native';
 
 import { GlassCard, Icon, type IconName } from '@/components/ui';
 import { colors } from '@/constants/theme';
-import type { PredictionCategory } from '@/types/predictions';
+import type { PredictionBeat, PredictionCategory } from '@/types/predictions';
 
 const CATEGORY_META: Record<
   PredictionCategory,
@@ -39,49 +39,103 @@ type PredictionCardProps = {
   category: PredictionCategory;
   headline: string;
   detail: string;
+  insight?: string | null;
+  beats?: PredictionBeat[];
   locked?: boolean;
+  expanded?: boolean;
+  onOpen?: () => void;
+  onClose?: () => void;
 };
 
-export function PredictionCard({ category, headline, detail, locked }: PredictionCardProps) {
+export function PredictionCard({
+  category,
+  headline,
+  detail,
+  insight,
+  beats,
+  locked,
+  expanded = false,
+  onOpen,
+  onClose,
+}: PredictionCardProps) {
   const meta = CATEGORY_META[category];
   const teaserHeadline = `Unlock your ${meta.label.toLowerCase()} insight`;
 
+  const toggle = () => {
+    if (locked) return;
+    if (expanded) onClose?.();
+    else onOpen?.();
+  };
+
   return (
-    <GlassCard className="w-full overflow-hidden p-0">
-      <LinearGradient
-        colors={[...meta.gradient]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={{ padding: 20, gap: 8 }}>
-        <View className="flex-row items-center justify-between">
-          <View className="flex-row items-center gap-2.5">
-            <View
-              className="h-10 w-10 items-center justify-center rounded-2xl"
-              style={{ backgroundColor: `${meta.tint}22` }}>
-              <Icon name={meta.icon} size={20} color={meta.tint} />
+    <Pressable
+      onPress={toggle}
+      disabled={locked}
+      accessibilityRole="button"
+      accessibilityState={{ expanded: expanded && !locked, disabled: Boolean(locked) }}
+      accessibilityLabel={
+        locked
+          ? `${meta.label} prediction locked. ${teaserHeadline}`
+          : `${meta.label}. ${headline}. Tap to ${expanded ? 'collapse' : 'read the full timeline'}`
+      }>
+      <GlassCard className="w-full overflow-hidden p-0" glow={expanded && !locked}>
+        <LinearGradient
+          colors={[...meta.gradient]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={{ padding: 20, gap: 8 }}>
+          <View className="flex-row items-center justify-between">
+            <View className="flex-row items-center gap-2.5">
+              <View
+                className="h-10 w-10 items-center justify-center rounded-2xl"
+                style={{ backgroundColor: `${meta.tint}22` }}>
+                <Icon name={meta.icon} size={20} color={meta.tint} />
+              </View>
+              <Text className="font-label text-[12px] uppercase tracking-[0.14em]" style={{ color: meta.tint }}>
+                {meta.label}
+              </Text>
             </View>
-            <Text className="font-label text-[12px] uppercase tracking-[0.14em]" style={{ color: meta.tint }}>
-              {meta.label}
-            </Text>
+            {locked ? (
+              <Icon name="lock" size={16} color="rgba(232,225,229,0.4)" />
+            ) : (
+              <Icon name={expanded ? 'expand_less' : 'expand_more'} size={20} color={meta.tint} />
+            )}
           </View>
-          {locked ? <Icon name="lock" size={16} color="rgba(232,225,229,0.4)" /> : null}
-        </View>
-        {locked ? (
-          <Text
-            className="font-headline-md text-[20px] leading-7 text-on-surface-variant"
-            accessibilityLabel={`${meta.label} prediction locked. ${teaserHeadline}`}>
-            {teaserHeadline}
-          </Text>
-        ) : (
-          <Text className="font-headline-md text-[20px] leading-7 text-on-surface">{headline}</Text>
-        )}
-        <Text
-          className="font-body text-[14px] leading-6 text-on-surface-variant"
-          numberOfLines={locked ? 1 : undefined}
-          style={locked ? { opacity: 0.5 } : undefined}>
-          {locked ? 'Unlock predictions to reveal this insight.' : detail}
-        </Text>
-      </LinearGradient>
-    </GlassCard>
+          {locked ? (
+            <Text className="font-headline-md text-[20px] leading-7 text-on-surface-variant">{teaserHeadline}</Text>
+          ) : (
+            <Text className="font-headline-md text-[20px] leading-7 text-on-surface">{headline}</Text>
+          )}
+          {locked ? (
+            <Text className="font-body text-[14px] leading-6 text-on-surface-variant" style={{ opacity: 0.5 }}>
+              Unlock predictions to reveal this insight.
+            </Text>
+          ) : expanded ? (
+            <View className="gap-3">
+              <Text className="font-body text-[14px] leading-6 text-on-surface-variant">{detail}</Text>
+              {insight?.trim() && insight.trim() !== detail.trim() ? (
+                <Text className="font-body text-[14px] leading-6 text-on-surface-variant">{insight.trim()}</Text>
+              ) : null}
+            </View>
+          ) : (
+            <Text className="font-body text-[14px] leading-6 text-on-surface-variant" numberOfLines={5}>
+              {detail}
+            </Text>
+          )}
+          {expanded && !locked && beats && beats.length > 0 ? (
+            <View className="mt-2 gap-3">
+              {beats.map((beat) => (
+                <View key={beat.label} className="gap-1 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2.5">
+                  <Text className="font-label text-[11px] uppercase tracking-[0.12em]" style={{ color: meta.tint }}>
+                    {beat.label}
+                  </Text>
+                  <Text className="font-body text-[13px] leading-5 text-on-surface-variant">{beat.text}</Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
+        </LinearGradient>
+      </GlassCard>
+    </Pressable>
   );
 }

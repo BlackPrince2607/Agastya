@@ -47,11 +47,14 @@ function getDevLanApiUrl() {
 }
 
 const basePlugins = appJson.expo.plugins ?? [];
-const hasSentryNativePlugin = basePlugins.some(
-  (entry) =>
-    entry === '@sentry/react-native' ||
-    (Array.isArray(entry) && entry[0] === '@sentry/react-native'),
-);
+// Treat both `@sentry/react-native` and `@sentry/react-native/expo` as present.
+// Previously we only matched the bare package name, so app.json's `/expo` plugin
+// still got a second `@sentry/react-native` appended — double-wrapping the entry
+// point and blank-screening release APKs.
+const hasSentryNativePlugin = basePlugins.some((entry) => {
+  const name = Array.isArray(entry) ? entry[0] : entry;
+  return typeof name === 'string' && name.startsWith('@sentry/react-native');
+});
 const plugins = hasSentryNativePlugin ? [...basePlugins] : [...basePlugins, '@sentry/react-native'];
 
 const facebookAppId = process.env.EXPO_PUBLIC_FACEBOOK_APP_ID?.trim() ?? '';

@@ -18,7 +18,7 @@ type ReportInsightCardProps = {
 
 /**
  * Report section insight — collapsed teaser with ellipsis, expands to full detail.
- * Close with the X; opening another card (controlled) collapses this one.
+ * The whole card is the press target (chevron included).
  */
 export function ReportInsightCard({ insight, expanded, onOpen, onClose }: ReportInsightCardProps) {
   const reduceMotion = useReduceMotion();
@@ -63,6 +63,11 @@ export function ReportInsightCard({ insight, expanded, onOpen, onClose }: Report
           : { type: 'spring', damping: 18, stiffness: 220 }
       }
       style={{ width: '100%' }}>
+      <Pressable
+        onPress={open ? closeCard : openCard}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        accessibilityLabel={`${insight.title}. Tap to ${open ? 'collapse' : 'read full insight'}`}>
       <GlassCard
         className="w-full overflow-hidden"
         muted={!open}
@@ -78,38 +83,28 @@ export function ReportInsightCard({ insight, expanded, onOpen, onClose }: Report
             </Text>
           </View>
           {open ? (
-            <Pressable
-              onPress={closeCard}
-              hitSlop={12}
-              accessibilityRole="button"
-              accessibilityLabel={`Close ${insight.title}`}
-              className="h-9 w-9 items-center justify-center rounded-full border border-white/12 bg-white/[0.06] active:opacity-80">
-              <Icon name="close" size={18} color={colors.onSurface} />
-            </Pressable>
+            <View
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+              className="h-9 w-9 items-center justify-center rounded-full border border-white/12 bg-white/[0.06]">
+              <Icon name="expand_less" size={18} color={colors.onSurface} />
+            </View>
           ) : (
-            <Pressable
-              onPress={openCard}
-              hitSlop={12}
-              accessibilityRole="button"
-              accessibilityLabel={`Open ${insight.title}`}
-              className="h-9 w-9 items-center justify-center rounded-full border border-white/12 bg-white/[0.06] active:opacity-80">
-              <Icon name="chevron_right" size={18} color={colors.primary} />
-            </Pressable>
+            <View
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+              className="h-9 w-9 items-center justify-center rounded-full border border-white/12 bg-white/[0.06]">
+              <Icon name="expand_more" size={18} color={colors.primary} />
+            </View>
           )}
         </View>
 
         {!open ? (
-          <Pressable
-            onPress={openCard}
-            accessibilityRole="button"
-            accessibilityLabel={`${insight.title}. Tap to read full insight`}
-            accessibilityHint="Expands this card with the full reading">
             <Text
               className="font-body text-[15px] leading-6 text-on-surface-variant"
               numberOfLines={3}>
               {insight.body}
             </Text>
-          </Pressable>
         ) : (
           <MotiView
             from={reduceMotion ? undefined : { opacity: 0, translateY: 8 }}
@@ -125,6 +120,7 @@ export function ReportInsightCard({ insight, expanded, onOpen, onClose }: Report
           </MotiView>
         )}
       </GlassCard>
+      </Pressable>
     </MotiView>
   );
 }

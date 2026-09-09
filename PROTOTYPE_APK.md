@@ -6,10 +6,10 @@ Installable `.apk` for Android (WhatsApp / Drive / email). No Play Store require
 
 | Item | Status |
 |------|--------|
-| Expo account | Logged in as `anish26` / team `anish26s-team` |
-| EAS project ID | `e734e717-48c7-49ec-8e5a-8810cfed0fa4` in `app.json` |
+| Expo account / team | `anish2607` / `anish2607s-team` |
+| EAS project ID | `d70934dd-a047-426a-95a6-a68e2166c811` in `app.json` |
 | Icons / splash | `assets/images/*` |
-| API URL | Railway in `eas.json` + EAS preview env |
+| API URL | `https://agastya-production-b395.up.railway.app` in `eas.json` + EAS preview env |
 | Supabase | EAS **preview** env has `EXPO_PUBLIC_SUPABASE_URL` + `ANON_KEY` |
 
 ## Build command
@@ -47,9 +47,9 @@ npm run build:apk:local
    - `agastya://**`
    - `agastya://auth/callback`
 3. Railway `CHECKOUT_ALLOWED_RETURN_ORIGINS` includes `agastya://`
-4. EAS project env (preview/production/development) — **must** be the live host only:
+4. EAS project env (preview/production/development) — **must** match the live host:
    - `EXPO_PUBLIC_AGASTYA_API_URL=https://agastya-production-b395.up.railway.app`
-   - This EAS secret overrides `eas.json` at build time. Never leave an old Railway slug (e.g. `eb56`) here.
+   - This EAS secret overrides `eas.json` at build time — keep it on the same host as `eas.json`.
    - Also confirm: `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`
 
 Optional extras on expo.dev → Environment variables → **preview**:
@@ -65,6 +65,12 @@ EXPO_PUBLIC_PREMIUM_EMAIL_ALLOWLIST=sohambhalotia@gmail.com
 1. Send the `.apk`
 2. Enable **Install unknown apps** for the browser/Files app
 3. Install and open
+
+**After an EAS account switch:** uninstall the old Agastya app before installing the new APK — the new project uses a different keystore, so Android will not overwrite the previous install. For Google Sign-In:
+
+1. Add the new keystore SHA-1 to the Google Cloud **Android** OAuth client (`com.agastya.app`).
+2. Put that Android client ID in Supabase → Auth → Providers → Google → **Authorized Client IDs**.
+3. Keep the **Web** client ID + secret as the primary Supabase Google credentials (app env has no `EXPO_PUBLIC_GOOGLE_*`).
 
 Grant premium for a tester without Play billing: Supabase `agastya_sessions.is_premium = true` for their session/user, or add their email to `EXPO_PUBLIC_PREMIUM_EMAIL_ALLOWLIST` / backend `PREMIUM_EMAIL_ALLOWLIST`.
 
@@ -86,6 +92,8 @@ Grant premium for a tester without Play billing: Supabase `agastya_sessions.is_p
 | Sentry upload fails build | `SENTRY_DISABLE_AUTO_UPLOAD=true` already in prototype profile |
 | Paywall “billing not available” | Rebuild prototype APK after enabling `EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS=true` in `eas.json`, or use Expo Go with that flag in `.env` |
 | Install blocked | Enable unknown sources |
+| Install fails / update conflict after EAS account switch | Uninstall old Agastya first (different signing key) |
+| Google Sign-In fails on new APK | Add SHA-1 to Google Android OAuth client; add that client ID to Supabase Authorized Client IDs; confirm Web client + secret + `agastya://**` redirects |
 
 ## Play Store later
 

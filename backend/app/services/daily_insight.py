@@ -318,3 +318,67 @@ async def generate_daily_guidance(
             source="fallback",
         )
         return enrich_guidance_response(fallback, bkt, streak=body.streak), True
+
+
+async def generate_daily_bundle(
+    settings: Settings,
+    body: "DailyBundleBody",
+    bkt: SessionBucket,
+) -> tuple["DailyBundleResponse", bool]:
+    """Guidance + tasks in one hydrate. Parallel LLM on cache miss; merge context after."""
+    import asyncio
+
+    from app.schemas.guidance import DailyBundleResponse, DailyGuidanceBody
+    from app.schemas.tasks import DailyTasksBody
+    from app.services.ai_interactions import _store_tasks_cache, generate_daily_tasks
+
+    guidance_body = DailyGuidanceBody(
+        session_id=body.session_id,
+        device_install_id=body.device_install_id,
+        palm_analysis=body.palm_analysis,
+        focus_topics=body.focus_topics,
+        streak=body.streak,
+    )
+    tasks_body = DailyTasksBody(
+        session_id=body.session_id,
+        device_install_id=body.device_install_id,
+        palm_analysis=body.palm_analysis,
+        is_premium=body.is_premium,
+        focus_topics=body.focus_topics,
+        streak=body.streak,
+    )
+
+    (guidance, g_changed), (tasks, variant, theme, t_changed, t_source) = await asyncio.gather(
+        generate_daily_guidance(settings, guidance_body, bkt),
+        generate_daily_tasks(settings, tasks_body, bkt),
+    )
+
+    if g_changed:
+        store_daily_context(
+            bkt,
+            title=guidance.title,
+            body=guidance.body,
+            focus_theme=guidance.focus_theme or theme,
+            source=guidance.source,
+        )
+    if t_changed:
+        _store_tasks_cache(
+            bkt,
+            utc_today_iso(),
+            theme,
+            variant,
+            tasks,
+            source=t_source,
+        )
+
+    return (
+        DailyBundleResponse(
+            guidance=guidance,
+            tasks=tasks,
+            variant=variant,
+            focus_theme=guidance.focus_theme or theme,
+            tasks_source=t_source,  # type: ignore[arg-type]
+            tasks_cached=not t_changed,
+        ),
+        g_changed or t_changed,
+    )

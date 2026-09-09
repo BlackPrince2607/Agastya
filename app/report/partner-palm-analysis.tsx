@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Text, View } from 'react-native';
+import { Platform, Text, View } from 'react-native';
 
 import { MotiView } from '@/components/moti/MotiView';
 import { CosmicDotGrid } from '@/components/layout/CosmicDotGrid';
@@ -21,7 +21,7 @@ import { PAGE_PADDING } from '@/constants/layout';
 import { ANALYSIS_SETTLE_MS } from '@/constants/onboarding';
 import { ApiHttpError, parsePalmUnreadable } from '@/services/apiErrors';
 import { analyzePalm } from '@/services/agastyaApi';
-import { bootstrapIdentity } from '@/services/identity';
+import { ensureDeviceIdentity, syncProfileRemote } from '@/services/identity';
 import { isApiConfigured } from '@/services/env';
 import { notifyPushEvent } from '@/services/notifications';
 import type { PalmAnalysisDto } from '@/types/palmAnalysis';
@@ -36,6 +36,7 @@ import {
   raceWithTimeout,
 } from '@/utils/analysisTiming';
 import { withApiRetry } from '@/utils/apiRetry';
+import { detectHandLandmarksFromBase64 } from '@/utils/handLandmarks';
 import { trimBase64Payload } from '@/utils/palmLandmarks';
 
 const FALLBACK_PALM: PalmAnalysisDto = {
@@ -136,15 +137,16 @@ export default function PartnerPalmAnalysisScreen() {
             return;
           }
           const t = Math.min(1, (Date.now() - started) / ANALYSIS_ANALYZE_CREEP_MS);
-          setPct(Math.round(35 + t * 23));
-        }, 1200);
+          setPct(Math.round(35 + t * 28));
+        }, 700);
       }
     };
 
     void (async () => {
       try {
         advance(0);
-        await bootstrapIdentity();
+        await ensureDeviceIdentity();
+        void syncProfileRemote();
         if (cancelled || runId !== runIdRef.current) return;
 
         const snap = useSessionStore.getState();
@@ -166,6 +168,23 @@ export default function PartnerPalmAnalysisScreen() {
         advance(1);
         let palm: PalmAnalysisDto = FALLBACK_PALM;
 
+        let landmarks = snap.partnerPalmCaptureLandmarks;
+        let landmarksSource = snap.partnerPalmLandmarksSource;
+        if (Platform.OS === 'web' && capture && landmarksSource !== 'mediapipe') {
+          try {
+            const detected = await detectHandLandmarksFromBase64(
+              capture,
+              snap.partnerPalmScanHand ?? 'right',
+            );
+            if (detected.landmarks && detected.source === 'mediapipe') {
+              landmarks = detected.landmarks;
+              landmarksSource = 'mediapipe';
+            }
+          } catch {
+            /* server MediaPipe still runs when geometry is missing */
+          }
+        }
+
         if (isApiConfigured()) {
           try {
             palm = await raceWithTimeout(
@@ -177,6 +196,8 @@ export default function PartnerPalmAnalysisScreen() {
                     seed: resolvedSeed,
                     imageBase64: capture,
                     dominantHand: snap.partnerPalmScanHand ?? 'right',
+                    landmarks: landmarksSource === 'mediapipe' ? landmarks : undefined,
+                    landmarksSource: landmarksSource === 'mediapipe' ? 'mediapipe' : undefined,
                   },
                   { signal: runAbort.signal, timeoutMs: PALM_ANALYZE_CLIENT_TIMEOUT_MS },
                 ),

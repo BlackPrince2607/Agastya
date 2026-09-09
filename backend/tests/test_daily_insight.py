@@ -190,3 +190,76 @@ def test_recent_chapters_archives_previous_day():
     assert recent[0]["focusTheme"] == "career"
     assert recent[0]["reflectionSummary"] == "Felt steady"
     assert bkt.daily_context["date"] == utc_today_iso()
+
+
+def test_daily_bundle_returns_cached_guidance_and_tasks(monkeypatch):
+    from app.schemas.guidance import DailyBundleBody
+    from app.schemas.tasks import Task
+    from app.services.ai_interactions import _store_tasks_cache
+    from app.services.daily_insight import generate_daily_bundle
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    get_settings.cache_clear()
+    settings = get_settings()
+    bkt = SessionBucket(palm=_palm())
+    store_daily_context(
+        bkt,
+        title="Cached Title",
+        body="Cached body from Life Blueprint.",
+        focus_theme="career",
+        source="llm",
+    )
+    tasks = [
+        Task(id="career-clarity", text="A", description="B", category="career", estimatedMinutes=10),
+        Task(id="career-signal", text="C", description="D", category="career", estimatedMinutes=10),
+        Task(id="evening-reflection", text="E", description="F", category="growth", estimatedMinutes=5),
+    ]
+    _store_tasks_cache(bkt, utc_today_iso(), "career", "focus:career", tasks, source="llm")
+
+    body = DailyBundleBody(
+        session_id="00000000-0000-4000-8000-000000000001",
+        device_install_id="device-test",
+        palm_analysis=_palm(),
+        focus_topics=["career"],
+        streak=1,
+        is_premium=True,
+    )
+
+    async def run():
+        with patch("app.services.daily_insight.llm_chat_completion", new_callable=AsyncMock) as mock_llm:
+            with patch("app.services.ai_interactions.llm_chat_completion", new_callable=AsyncMock) as mock_tasks:
+                result, changed = await generate_daily_bundle(settings, body, bkt)
+                mock_llm.assert_not_called()
+                mock_tasks.assert_not_called()
+                return result, changed
+
+    result, changed = asyncio.run(run())
+    assert changed is False
+    assert result.guidance.title == "Cached Title"
+    assert result.tasks_cached is True
+    assert len(result.tasks) >= 3
+    assert result.focus_theme == "career"
+
+
+def test_deterministic_predictions_include_beats():
+    from app.services.predictions_engine import deterministic_predictions
+
+    palm = PalmAnalysis(
+        life_line="strong",
+        heart_line="curved",
+        head_line="long",
+        personality="seeker",
+        traits=["thoughtful"],
+        fate_line="not_clearly_visible",
+        analysis_source="openrouter_vision",
+        geometry_source="vision_model",
+        line_geometry=[
+            {"name": "life_line", "points": [{"x": 0.2, "y": 0.3}, {"x": 0.3, "y": 0.6}]},
+            {"name": "heart_line", "points": [{"x": 0.2, "y": 0.25}, {"x": 0.7, "y": 0.28}]},
+            {"name": "head_line", "points": [{"x": 0.25, "y": 0.4}, {"x": 0.7, "y": 0.42}]},
+        ],
+    )
+    out = deterministic_predictions(seed="unit", period="month", palm=palm)
+    assert len(out.items) == 4
+    assert out.items[0].insight
+    assert len(out.items[0].beats) >= 2

@@ -30,6 +30,7 @@ import { isPalmHandLockedByGender, palmHandForGender, palmHandGuidanceLabel } fr
 import { pickPalmImage } from '@/utils/pickPalmImage';
 import { assessPalmCaptureQuality, confirmSoftQualityOrProceed } from '@/utils/palmCaptureQuality';
 import { AnalyticsEvent, track } from '@/services/analytics';
+import { bootstrapIdentity } from '@/services/identity';
 import { deferRouterPush } from '@/utils/routerDefer';
 
 type ScanStep = 'briefing' | 'camera';
@@ -82,6 +83,11 @@ export default function PalmScanScreen() {
     const t = setTimeout(() => setPermissionWaitTimedOut(true), CAMERA_PERMISSION_WAIT_MS);
     return () => clearTimeout(t);
   }, [permission]);
+
+  // Pre-warm API health + session so the analysis screen can start vision immediately.
+  useEffect(() => {
+    void bootstrapIdentity();
+  }, []);
 
   const chooseHand = (next: PalmScanHand) => {
     if (handLocked) return;

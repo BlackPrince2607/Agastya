@@ -11,11 +11,18 @@ PredictionPeriod = Literal["month", "3month", "year"]
 PredictionCategory = Literal["career", "love", "money", "growth"]
 
 
+class PredictionBeat(BaseModel):
+    label: str
+    text: str
+
+
 class PredictionItem(BaseModel):
     category: PredictionCategory
     headline: str
     detail: str
     score: int  # 0-100
+    insight: str | None = None
+    beats: list[PredictionBeat] = Field(default_factory=list)
 
 
 class PredictionsResponse(BaseModel):

@@ -10,15 +10,15 @@ from fastapi.responses import FileResponse
 router = APIRouter(tags=["legal"])
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
-_REPO_LEGAL = _BACKEND_ROOT.parent / "legal"
 _DOCKER_LEGAL = Path("/app/legal")
+_PACKAGED_LEGAL = _BACKEND_ROOT / "legal"
+_REPO_LEGAL = _BACKEND_ROOT.parent / "legal"
 
 
 def _legal_dir() -> Path:
-    if _DOCKER_LEGAL.is_dir():
-        return _DOCKER_LEGAL
-    if _REPO_LEGAL.is_dir():
-        return _REPO_LEGAL
+    for candidate in (_DOCKER_LEGAL, _PACKAGED_LEGAL, _REPO_LEGAL):
+        if candidate.is_dir() and (candidate / "privacy.html").is_file():
+            return candidate
     raise HTTPException(status_code=503, detail="Legal pages are not available on this host")
 
 

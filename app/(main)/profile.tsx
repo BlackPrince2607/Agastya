@@ -14,7 +14,7 @@ import { SettingsSection } from '@/components/profile/SettingsSection';
 import { StatsGrid } from '@/components/profile/StatCard';
 import { LoadingBlock } from '@/components/feedback';
 import { GlassCard, InsightCard } from '@/components/ui';
-import { LEGAL_IN_APP, LEGAL_URLS } from '@/constants/legal';
+import { LEGAL_URLS } from '@/constants/legal';
 import { MAIN_SECTION_GAP, STACK_GAP } from '@/constants/layout';
 import {
   displayNameOrDefault,
@@ -36,6 +36,7 @@ import { useSessionStore } from '@/store/sessionStore';
 import { useTaskStore } from '@/store/taskStore';
 import { withApiRetry } from '@/utils/apiRetry';
 import { replayOnboarding } from '@/utils/navigationFlow';
+import { openLegalDoc } from '@/utils/openLegal';
 import { paywallRouteParams } from '@/utils/paywallNavigation';
 import { previewReportHref } from '@/utils/premiumAccess';
 import { shareAgastya } from '@/utils/shareAgastya';
@@ -544,17 +545,17 @@ export default function ProfileScreen() {
           <SettingsRow
             icon="lock"
             title="Privacy policy"
-            onPress={() => router.push(LEGAL_IN_APP.privacy)}
+            onPress={() => openLegalDoc('privacy')}
           />
           <SettingsRow
             icon="article"
             title="Terms of use"
-            onPress={() => router.push(LEGAL_IN_APP.terms)}
+            onPress={() => openLegalDoc('terms')}
           />
           <SettingsRow
             icon="support_agent"
             title="Support"
-            onPress={() => router.push(LEGAL_IN_APP.support)}
+            onPress={() => openLegalDoc('support')}
           />
           <SettingsRow
             icon="link"

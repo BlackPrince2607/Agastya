@@ -113,9 +113,14 @@ Add to **Redirect URLs**:
 
 ### Google OAuth
 
+Agastya uses **Supabase browser OAuth** (`signInWithOAuth` + Chrome Custom Tabs → `agastya://auth/callback`). The app does **not** embed a Google client ID env var; credentials live in Google Cloud + Supabase.
+
 1. [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Credentials → Create OAuth client ID → **Web application**.
 2. Authorized redirect URI: `https://<project-ref>.supabase.co/auth/v1/callback`
-3. Copy Client ID + Secret into Supabase → Authentication → Providers → **Google** → Enable.
+3. Copy **Web** Client ID + Secret into Supabase → Authentication → Providers → **Google** → Enable (Android clients have no secret — do not invent one).
+4. Create a second OAuth client → **Android** (`com.agastya.app` + EAS/Play SHA-1). Example current EAS SHA-1: `4A:06:C5:22:3E:E8:05:13:F8:24:9D:8B:E7:98:7F:59:5A:38:98:CC`.
+5. In Supabase Google provider, add the **Android** client ID under **Authorized Client IDs** (alongside the Web client used as the primary Client ID). Rebuild is not required when only dashboard client IDs change.
+6. Redirect URLs must include `agastya://**` and `agastya://auth/callback` (see URL Configuration above).
 
 ### Apple OAuth
 
@@ -220,6 +225,25 @@ npx eas-cli submit --platform android --profile closed-testing --latest
 ```
 
 `eas.json` submit profile `closed-testing` uses track `internal` (upload AAB for Closed/Internal testing — not production). Place the Play service account JSON at `./google-play-key.json` (gitignored).
+
+### Play Console blockers (AD_ID + upgrade path)
+
+If Play Console shows **Advertising ID declared but AD_ID missing**, ship a fresh production AAB that includes:
+
+- `com.google.android.gms.permission.AD_ID` in merged manifest (this repo sets it in `app.json`)
+- Meta/Facebook app events env vars present on EAS production (`EXPO_PUBLIC_FACEBOOK_APP_ID`, `EXPO_PUBLIC_FACEBOOK_CLIENT_TOKEN`) when ads measurement is enabled
+
+If Play Console blocks rollout with **existing users cannot upgrade**, verify all of the following before upload:
+
+1. Same package name: `com.agastya.app`
+2. Strictly increasing versionCode (EAS remote app versions + `autoIncrement: true` handles this)
+3. Same upload signing key as the Play app's configured upload certificate
+
+Current EAS upload keystore SHA-1 is:
+
+- `4A:06:C5:22:3E:E8:05:13:F8:24:9D:8B:E7:98:7F:59:5A:38:98:CC`
+
+If this SHA-1 does not match Play Console → **App Integrity** → **Upload key certificate**, request an upload-key reset in Play (or update EAS credentials to the original upload key) before submitting the next AAB.
 
 ---
 

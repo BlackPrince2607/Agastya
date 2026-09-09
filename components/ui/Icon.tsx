@@ -21,6 +21,8 @@ export type IconName =
   | 'menu_book'
   | 'chevron_right'
   | 'chevron_left'
+  | 'expand_more'
+  | 'expand_less'
   | 'arrow_back'
   | 'arrow_forward'
   | 'send'

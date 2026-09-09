@@ -1,8 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams, usePathname, useSegments } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, Platform, Pressable, ScrollView, Text, View, Alert } from 'react-native';
+import { AppState, Platform, Pressable, Text, View, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { MotiView } from 'moti';
@@ -13,7 +12,6 @@ import { StickyActionBar, STICKY_ACTION_BAR_TALL } from '@/components/layout/Sti
 import { OnboardingHeader } from '@/components/onboarding/OnboardingHeader';
 import { CosmicButton } from '@/components/primitives';
 import { ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS } from '@/constants/onboarding';
-import { stitchMd3 } from '@/constants/stitchWelcome';
 import { colors, stitchSignal } from '@/constants/theme';
 import { AnalyticsEvent, track, trackOnce } from '@/services/analytics';
 import {
@@ -35,32 +33,9 @@ import { goBack, normalizeRouteParams } from '@/utils/navigationBack';
 import { hasPremiumAccess } from '@/utils/premiumAccess';
 
 const TRUST_HIGHLIGHTS = [
-  'Full Life Blueprint chapters grounded in your palm scan',
-  'Unlimited Agastya chat about your Blueprint and journey',
+  'Full Life Blueprint chapters from your palm scan',
+  'Unlimited Agastya chat about your reading',
   'Longer-range forecasts and compatibility insights',
-];
-
-const FEATURES = [
-  {
-    icon: 'sparkles' as const,
-    title: 'Your full palm report',
-    body: 'Deeper chapters across love, career, money, and growth — citing your measured lines.',
-  },
-  {
-    icon: 'heart-outline' as const,
-    title: 'Compatibility insights',
-    body: 'See how you connect with someone across emotion, trust, and values.',
-  },
-  {
-    icon: 'chatbubble-ellipses-outline' as const,
-    title: 'Unlimited Guide',
-    body: 'Ask your Guide anything. Answers are based on your reading.',
-  },
-  {
-    icon: 'checkmark-done-outline' as const,
-    title: 'Daily guidance',
-    body: 'Small daily actions to keep your momentum going.',
-  },
 ];
 
 /** Retries while Razorpay webhook / confirm API catch up after browser return. */
@@ -444,88 +419,53 @@ export default function PaywallScreen() {
 
   return (
     <CosmicScreen variant="stitch">
-      <View className="flex-1">
+      <View className="flex-1 overflow-hidden">
         <CosmicDotGrid />
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{
+        <View
+          className="flex-1 gap-4"
+          style={{
             paddingHorizontal: 24,
             paddingTop: 8,
             paddingBottom: STICKY_ACTION_BAR_TALL + insets.bottom,
-            gap: 22,
           }}>
           <OnboardingHeader step={ONBOARDING_STEPS.paywall} total={ONBOARDING_TOTAL_STEPS} />
 
           <View>
-            <Text className="font-headline text-[30px] leading-9 tracking-tight text-on-surface">
+            <Text className="font-headline text-[26px] leading-8 tracking-tight text-on-surface">
               Unlock your full Life Blueprint
             </Text>
-            <Text className="mt-4 font-body text-[15px] leading-6 text-on-surface-variant">
-              Deeper dossier chapters grounded in your palm scan, longer-range forecasts, unlimited chat, and daily
-              rituals. Today&apos;s guidance stays free.
+            <Text className="mt-2 font-body text-[14px] leading-5 text-on-surface-variant">
+              Full report chapters, unlimited chat, and daily rituals. Today&apos;s guidance stays free.
             </Text>
             {premium ? (
-              <View className="mt-4 rounded-2xl border border-cyan/35 bg-cyan/10 px-4 py-3">
-                <Text className="font-body text-[14px] text-cyan">You already have full access on this device.</Text>
+              <View className="mt-3 rounded-2xl border border-cyan/35 bg-cyan/10 px-4 py-2.5">
+                <Text className="font-body text-[13px] text-cyan">You already have full access on this device.</Text>
               </View>
             ) : null}
             {awaitingCheckoutReturn && !premium ? (
-              <View className="mt-4 rounded-2xl border border-cyan/35 bg-cyan/10 px-4 py-3">
-                <Text className="font-body text-[14px] text-cyan">
+              <View className="mt-3 rounded-2xl border border-cyan/35 bg-cyan/10 px-4 py-2.5">
+                <Text className="font-body text-[13px] text-cyan">
                   Confirming payment… you&apos;ll enter Agastya automatically once it clears.
                 </Text>
               </View>
             ) : null}
             {signedIn && authEmail ? (
-              <Text className="mt-3 font-body text-[13px] leading-5 text-on-surface-variant">
-                Paying as {authEmail}. Premium unlocks on this account after checkout.
-              </Text>
-            ) : null}
-            {billingAvailable ? (
-              <Text className="mt-3 font-body text-[13px] leading-5 text-cyan">
-                {testBypass
-                  ? 'Pay securely with Razorpay (UPI, cards, and more).'
-                  : 'Google Play will show a secure payment choice — UPI/cards via Razorpay or Google Play billing.'}
-              </Text>
-            ) : !billingAvailable && Platform.OS === 'android' ? (
-              <Text className="mt-3 font-body text-[13px] leading-5 text-on-surface-variant">
-                Premium unlock requires a production Android build with Google Play User Choice billing.
-              </Text>
-            ) : Platform.OS !== 'android' ? (
-              <Text className="mt-3 font-body text-[13px] leading-5 text-on-surface-variant">
-                Premium is available on Android (India). Continue with the free preview on this platform.
+              <Text className="mt-2 font-body text-[12px] leading-5 text-on-surface-variant">
+                Paying as {authEmail}
               </Text>
             ) : null}
           </View>
 
-          <View className="gap-2 rounded-3xl border border-white/10 bg-white/[0.04] px-4 py-4">
+          <View className="gap-1.5 rounded-2xl border border-white/10 bg-white/[0.04] px-3.5 py-3">
             {TRUST_HIGHLIGHTS.map((line) => (
-              <View key={line} className="flex-row items-start gap-3 py-1">
-                <Ionicons name="checkmark-circle" size={18} color={stitchSignal} style={{ marginTop: 2 }} />
-                <Text className="flex-1 font-body text-[14px] leading-6 text-on-surface/90">{line}</Text>
+              <View key={line} className="flex-row items-start gap-2.5 py-0.5">
+                <Ionicons name="checkmark-circle" size={16} color={stitchSignal} style={{ marginTop: 2 }} />
+                <Text className="flex-1 font-body text-[13px] leading-5 text-on-surface/90">{line}</Text>
               </View>
             ))}
           </View>
 
-          <LinearGradient
-            colors={['rgba(211,190,235,0.14)', 'rgba(20,19,21,0.92)', 'rgba(0,206,209,0.08)']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            className="gap-5 rounded-3xl border border-white/14 p-5">
-            {FEATURES.map((f) => (
-              <View key={f.title} className="flex-row gap-4">
-                <View className="h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/12 bg-black/40">
-                  <Ionicons name={f.icon} size={20} color={stitchMd3.primary} />
-                </View>
-                <View className="min-w-0 flex-1">
-                  <Text className="font-label text-[15px] font-semibold leading-6 text-on-surface">{f.title}</Text>
-                  <Text className="mt-1 shrink font-body text-[13px] leading-5 text-on-surface-variant">{f.body}</Text>
-                </View>
-              </View>
-            ))}
-          </LinearGradient>
-
-          <View className="gap-3">
+          <View className="mt-auto gap-2.5">
             <PlanRow
               label="Yearly Access"
               badge="Best value"
@@ -540,26 +480,9 @@ export default function PaywallScreen() {
               onPress={() => setPeriod('monthly')}
             />
           </View>
+        </View>
 
-          <View className="items-center gap-2 py-2">
-            <Text className="font-body text-[13px] text-on-surface-variant text-center">
-              Period access after payment via Razorpay (UPI/cards) or Google Play. Check premium status if the app was
-              closed during checkout.
-            </Text>
-          </View>
-
-          <Pressable
-            onPress={() => void handleCheckStatus()}
-            disabled={ctaBusy && !awaitingCheckoutReturn}
-            accessibilityRole="button"
-            accessibilityLabel="Check premium status"
-            accessibilityState={{ disabled: ctaBusy && !awaitingCheckoutReturn }}
-            className="items-center py-2 active:opacity-80">
-            <Text className="font-body text-[14px] font-medium text-cyan underline">Check premium status</Text>
-          </Pressable>
-        </ScrollView>
-
-        <StickyActionBar contentStyle={{ gap: 14 }}>
+        <StickyActionBar contentStyle={{ gap: 12 }}>
           {premium ? (
             <CosmicButton
               gradient="nebulaMd3"
@@ -587,12 +510,23 @@ export default function PaywallScreen() {
             </MotiView>
           )}
           <CosmicButton variant="ghost" label="Go back" onPress={backFromPaywall} />
+          {!premium ? (
+            <Pressable
+              onPress={() => void handleCheckStatus()}
+              disabled={ctaBusy && !awaitingCheckoutReturn}
+              accessibilityRole="button"
+              accessibilityLabel="Check premium status"
+              accessibilityState={{ disabled: ctaBusy && !awaitingCheckoutReturn }}
+              className="items-center py-1 active:opacity-80">
+              <Text className="font-body text-[13px] font-medium text-cyan underline">Check premium status</Text>
+            </Pressable>
+          ) : null}
           {!signedIn ? (
             <CosmicButton variant="ghost" label="Sign in to unlock" onPress={goToSignInForPaywall} />
           ) : null}
-          <View className="flex-row items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2.5">
-            <Ionicons name="shield-checkmark" size={16} color={colors.health} />
-            <Text className="font-body text-[12px] text-on-surface/85">Secure payment via Google Play or Razorpay.</Text>
+          <View className="flex-row items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2">
+            <Ionicons name="shield-checkmark" size={14} color={colors.health} />
+            <Text className="font-body text-[11px] text-on-surface/85">Secure payment via Google Play or Razorpay</Text>
           </View>
         </StickyActionBar>
       </View>

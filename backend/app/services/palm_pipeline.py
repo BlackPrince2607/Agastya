@@ -12,7 +12,8 @@ from app.config import Settings
 from app.schemas.palm import PalmAnalysis
 from app.schemas.palm_analyze import PalmAnalyzeBody
 from app.services.palm_ai import palm_analysis_from_vision
-from app.services.palm_cv import extract_line_geometry, merge_cv_into_analysis
+from app.services.palm_crease import assess_capture_quality, public_quality_warnings
+from app.services.palm_cv import merge_cv_into_analysis
 from app.services.palm_dummy import dummy_palm_analysis
 from app.services.palm_landmarks import detect_hand_landmarks_from_bytes
 from app.services.palm_storage import decode_capture_bytes
@@ -26,6 +27,22 @@ _DEFAULT_UNREADABLE_REASONS = (
     "low lighting",
     "palm partially outside the frame",
 )
+_MAJOR_LINE_NAMES = frozenset({"life_line", "heart_line", "head_line"})
+
+
+def _geometry_names(palm: PalmAnalysis | None) -> set[str]:
+    if palm is None or not palm.line_geometry:
+        return set()
+    names: set[str] = set()
+    for line in palm.line_geometry:
+        if isinstance(line, dict):
+            raw = line.get("name")
+        else:
+            raw = getattr(line, "name", None)
+        name = str(raw or "").strip().lower()
+        if name:
+            names.add(name)
+    return names
 
 
 def _unreadable_detail(
@@ -117,11 +134,12 @@ async def _landmarks_with_budget(
 
 
 def _has_usable_geometry(palm: PalmAnalysis | None) -> bool:
+    """True when the three majors locked from real creases — never knuckle heuristics."""
     if palm is None or not palm.line_geometry:
         return False
-    if palm.geometry_source not in {"opencv_creases", "vision_model", "landmark_heuristic"}:
+    if palm.geometry_source not in {"opencv_creases", "vision_model"}:
         return False
-    return len(palm.line_geometry) >= 2
+    return _MAJOR_LINE_NAMES <= _geometry_names(palm)
 
 
 def _has_usable_motifs(palm: PalmAnalysis | None) -> bool:
@@ -163,14 +181,21 @@ def _attach_cv_if_possible(
 
 
 def _finalize_success(result: PalmAnalysis) -> PalmAnalysis:
-    """Normalize quality when we have enough signal for a report."""
+    """Normalize quality only when creases actually locked; strip internal CV notes."""
     quality = result.image_quality
-    if quality in {"poor", "no_hand"} and (_has_usable_motifs(result) or _has_usable_geometry(result)):
-        quality = "acceptable"
+    locked = _has_usable_geometry(result)
+    if quality in {"poor", "no_hand"} and locked:
+        if result.geometry_source == "opencv_creases" or (result.confidence or 0) >= 0.55:
+            quality = "acceptable"
+    warnings = public_quality_warnings(
+        result.quality_warnings,
+        locked=locked and quality in {"good", "acceptable"},
+    )
     return result.model_copy(
         update={
             "geometry_source": result.geometry_source or "unavailable",
             "image_quality": quality,
+            "quality_warnings": warnings,
         }
     )
 
@@ -207,6 +232,15 @@ async def analyze_palm(settings: Settings, body: PalmAnalyzeBody) -> PalmAnalysi
             reason="vision_not_configured",
         )
 
+    # Fail fast on obviously unreadable captures before the vision round-trip.
+    if has_image and ai_mode:
+        capture_q = await asyncio.to_thread(assess_capture_quality, img)
+        if capture_q is not None and not capture_q.ok:
+            _raise_unreadable(
+                "We couldn't clearly analyze your palm.",
+                capture_q.reasons or _DEFAULT_UNREADABLE_REASONS,
+            )
+
     # Vision first — never serialize MediaPipe ahead of OpenRouter (root cause of 28% hangs).
     inferred: PalmAnalysis | None = None
     if settings.llm_enabled and has_image and ai_mode:
@@ -228,14 +262,9 @@ async def analyze_palm(settings: Settings, body: PalmAnalyzeBody) -> PalmAnalysi
             inferred = None
 
     if inferred is not None:
-        # Prefer client landmarks (free). Only run server MediaPipe when vision
-        # did not already produce usable geometry / quality.
+        # Hybrid: always try OpenCV when landmarks exist — even if vision already drew lines.
         landmarks, _lm_source = _client_landmarks(body)
-        needs_server_landmarks = landmarks is None and (
-            not _has_usable_geometry(inferred)
-            or inferred.image_quality in {"poor", "no_hand"}
-        )
-        if needs_server_landmarks:
+        if landmarks is None:
             landmarks, _lm_source = await _landmarks_with_budget(body, lm_budget, fast=True)
         if landmarks:
             inferred = await asyncio.to_thread(
@@ -244,21 +273,7 @@ async def analyze_palm(settings: Settings, body: PalmAnalyzeBody) -> PalmAnalysi
 
         result = inferred
 
-        # Optional anatomic guide for overlays — never required for success.
-        if not _has_usable_geometry(result) and landmarks:
-            guide = extract_line_geometry(landmarks)
-            if guide:
-                result = result.model_copy(
-                    update={
-                        "line_geometry": guide,
-                        "geometry_source": "landmark_heuristic",
-                        "analysis_source": "hybrid"
-                        if result.analysis_source == "openrouter_vision"
-                        else result.analysis_source,
-                    }
-                )
-
-        # True no-hand with no motifs → structured retake.
+        # True no-hand with no motifs and no live geometry → structured retake.
         if result.image_quality == "no_hand" and not _has_usable_motifs(result) and not _has_usable_geometry(
             result
         ):
@@ -269,11 +284,14 @@ async def analyze_palm(settings: Settings, body: PalmAnalyzeBody) -> PalmAnalysi
                 )
             return _finalize_success(result)
 
-        # Motifs alone are enough for the Life Blueprint.
-        if _has_usable_motifs(result) or _has_usable_geometry(result):
-            if not _has_usable_geometry(result):
-                logger.warning("vision motifs without geometry seed=%s", body.seed[:32])
+        if _has_usable_geometry(result):
             return _finalize_success(result)
+
+        # Motifs without locked creases: debug-only. Production asks for a retake.
+        if _has_usable_motifs(result) and result.image_quality in {"good", "acceptable"}:
+            logger.warning("vision motifs without live geometry seed=%s", body.seed[:32])
+            if settings.debug:
+                return _finalize_success(result)
 
         if not settings.debug:
             _raise_unreadable()
@@ -291,11 +309,9 @@ async def analyze_palm(settings: Settings, body: PalmAnalyzeBody) -> PalmAnalysi
             base,
             landmarks,
             image_base64=img,
-            allow_landmark_heuristic=True,
+            allow_landmark_heuristic=False,
         )
-        if _has_usable_geometry(merged) or _has_usable_motifs(merged):
-            # Motifs came from seed-hash dummy — never claim opencv_creases/hybrid for provenance.
-            # geometry_source still reflects real CV when present.
+        if _has_usable_geometry(merged):
             return _finalize_success(merged.model_copy(update={"analysis_source": "fallback"}))
 
     if has_image and ai_mode and settings.llm_enabled and not settings.debug:

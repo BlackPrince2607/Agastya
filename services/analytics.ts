@@ -1,6 +1,12 @@
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
 import { useSessionStore } from '@/store/sessionStore';
+
+/** RNFB / Meta native modules are not in Expo Go — APK/dev-client only. */
+function isExpoGo(): boolean {
+  return Constants.appOwnership === 'expo';
+}
 
 type Props = Record<string, unknown>;
 
@@ -124,17 +130,19 @@ async function sendMixpanel(event: string, props: Props) {
 }
 
 // Lazy-load React Native Firebase (avoids web/native mismatches).
-let firebaseAnalytics: null | (() => { logEvent: Function; setUserId?: Function }) = null;
+let firebaseAnalytics: null | (() => { logEvent: Function; setUserId?: Function }) | undefined;
 let firebaseUserId: string | null = null;
 
 function getFirebaseAnalytics() {
-  if (Platform.OS === 'web') return null;
-  if (firebaseAnalytics) return firebaseAnalytics;
+  if (Platform.OS === 'web' || isExpoGo()) return null;
+  if (firebaseAnalytics !== undefined) return firebaseAnalytics;
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     firebaseAnalytics = require('@react-native-firebase/analytics').default ?? require('@react-native-firebase/analytics');
     return firebaseAnalytics;
   } catch {
+    // Expo Go / missing native binary — never retry; RedBox if we keep re-requiring.
+    firebaseAnalytics = null;
     return null;
   }
 }
@@ -166,7 +174,7 @@ type MetaLogger = {
 let metaLogger: MetaLogger | null | undefined;
 
 function getMetaLogger(): MetaLogger | null {
-  if (Platform.OS === 'web') return null;
+  if (Platform.OS === 'web' || isExpoGo()) return null;
   if (metaLogger !== undefined) return metaLogger;
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports

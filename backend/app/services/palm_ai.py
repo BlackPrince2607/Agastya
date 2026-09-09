@@ -55,6 +55,55 @@ _HEAD_SYNONYMS = {
     "long": "long",
     "extended": "long",
 }
+_SECONDARY_STRENGTH_SYNONYMS = {
+    "strong": "strong",
+    "deep": "strong",
+    "bold": "strong",
+    "clear": "strong",
+    "moderate": "moderate",
+    "medium": "moderate",
+    "average": "moderate",
+    "balanced": "moderate",
+    "faint": "faint",
+    "subtle": "faint",
+    "weak": "faint",
+    "soft": "faint",
+    "broken": "broken",
+    "split": "broken",
+    "interrupted": "broken",
+    "absent": "absent",
+    "none": "absent",
+    "missing": "absent",
+    "present": "moderate",
+    "partial": "faint",
+    "not_clearly_visible": "not_clearly_visible",
+    "not clearly visible": "not_clearly_visible",
+    "unclear": "not_clearly_visible",
+    "unknown": "not_clearly_visible",
+}
+_MARRIAGE_SYNONYMS = {
+    "clear": "clear",
+    "strong": "clear",
+    "single": "clear",
+    "one": "clear",
+    "multiple": "multiple",
+    "many": "multiple",
+    "several": "multiple",
+    "faint": "faint",
+    "subtle": "faint",
+    "weak": "faint",
+    "absent": "absent",
+    "none": "absent",
+    "missing": "absent",
+    "not_clearly_visible": "not_clearly_visible",
+    "not clearly visible": "not_clearly_visible",
+    "unclear": "not_clearly_visible",
+    "unknown": "not_clearly_visible",
+}
+
+_MAJOR_GEOMETRY = {"life_line", "heart_line", "head_line"}
+_SECONDARY_GEOMETRY = {"fate_line", "sun_line", "marriage_line"}
+_ALLOWED_GEOMETRY = _MAJOR_GEOMETRY | _SECONDARY_GEOMETRY
 
 
 def _parse_data_url(raw: str) -> tuple[str | None, str]:
@@ -125,32 +174,45 @@ def _parse_point(raw: object) -> dict[str, float] | None:
         return None
 
 
+def _normalize_geometry_name(name: str) -> str:
+    n = name.strip().lower().replace(" ", "_").replace("-", "_")
+    aliases = {
+        "life": "life_line",
+        "heart": "heart_line",
+        "head": "head_line",
+        "fate": "fate_line",
+        "destiny": "fate_line",
+        "bhagya": "fate_line",
+        "sun": "sun_line",
+        "apollo": "sun_line",
+        "surya": "sun_line",
+        "marriage": "marriage_line",
+        "relationship": "marriage_line",
+        "vivah": "marriage_line",
+    }
+    return aliases.get(n, n)
+
+
 def parse_vision_line_geometry(raw: object) -> list[dict] | None:
     """Normalize vision-returned crease polylines (0–1 image coords)."""
     if not isinstance(raw, list):
         return None
-    allowed = {"life_line", "heart_line", "head_line"}
     cleaned: list[dict] = []
     for line in raw:
         if not isinstance(line, dict):
             continue
-        name = str(line.get("name", "")).strip().lower().replace(" ", "_")
-        # Accept casual aliases from models
-        if name in {"life", "life-line"}:
-            name = "life_line"
-        elif name in {"heart", "heart-line"}:
-            name = "heart_line"
-        elif name in {"head", "head-line"}:
-            name = "head_line"
+        name = _normalize_geometry_name(str(line.get("name", "")))
         points = line.get("points")
-        if name not in allowed or not isinstance(points, list):
+        if name not in _ALLOWED_GEOMETRY or not isinstance(points, list):
             continue
         parsed = [_parse_point(p) for p in points]
         parsed = [p for p in parsed if p is not None]
         if len(parsed) < 2:
             continue
         cleaned.append({"name": name, "points": parsed[:14]})
-    return cleaned if len(cleaned) >= 2 else None
+    major_names = {g["name"] for g in cleaned if g["name"] in _MAJOR_GEOMETRY}
+    # Life + heart + head must lock before we treat vision geometry as live.
+    return cleaned if _MAJOR_GEOMETRY <= major_names else None
 
 
 async def palm_analysis_from_vision(
@@ -209,8 +271,9 @@ async def palm_analysis_from_vision(
                 {
                     "type": "text",
                     "text": (
-                        "Read this palm photo. Trace life, heart, and head creases with normalized "
-                        "line_geometry points, and return ONLY valid JSON matching the schema. "
+                        "Read this palm photo. Trace life, heart, and head creases; also fate, sun, and "
+                        "marriage lines ONLY when clearly visible. Return normalized line_geometry and "
+                        "ONLY valid JSON matching the schema. Never invent unclear marks. "
                         f"Scanned hand (client): {hand_note}. "
                         f"Gender (client): {gender_note}.{tradition} "
                         f"Nonce (ignore unless tie-break): {seed_note!r}"
@@ -227,7 +290,7 @@ async def palm_analysis_from_vision(
             messages=messages,
             response_format={"type": "json_object"},
             temperature=0.25,
-            max_tokens=1400,
+            max_tokens=1800,
             timeout_seconds=settings.openrouter_vision_timeout_seconds,
             feature="palm_vision",
         )
@@ -273,10 +336,16 @@ async def palm_analysis_from_vision(
         warnings = [str(w).strip() for w in warnings_in if str(w).strip()][:5] if isinstance(warnings_in, list) else []
 
         geometry = parse_vision_line_geometry(data.get("line_geometry"))
-        # Clear open palms with motifs should not be rejected as poor/no_hand by a timid model.
+        # Only forgive a timid poor/no_hand label when geometry is real and confidence is high.
         if geometry and image_quality in {"poor", "no_hand"}:
-            image_quality = "acceptable"
-            warnings = [w for w in warnings if "no" not in w.lower()][:5]
+            conf = _clamp_confidence(data.get("confidence", 0.7))
+            if conf >= 0.55:
+                image_quality = "acceptable"
+                warnings = [w for w in warnings if "no" not in w.lower() and "blur" not in w.lower()][:5]
+
+        fate = _normalize_token(str(data.get("fate_line", "")), _SECONDARY_STRENGTH_SYNONYMS)
+        sun = _normalize_token(str(data.get("sun_line", "")), _SECONDARY_STRENGTH_SYNONYMS)
+        marriage = _normalize_token(str(data.get("marriage_line", "")), _MARRIAGE_SYNONYMS)
 
         return PalmAnalysis(
             life_line=life,
@@ -292,7 +361,9 @@ async def palm_analysis_from_vision(
             quality_warnings=warnings,
             line_details=data.get("line_details") if isinstance(data.get("line_details"), dict) else None,
             mounts=data.get("mounts") if isinstance(data.get("mounts"), dict) else None,
-            fate_line=str(data.get("fate_line", "")).strip() or None,
+            fate_line=fate or "not_clearly_visible",
+            sun_line=sun or "not_clearly_visible",
+            marriage_line=marriage or "not_clearly_visible",
             line_geometry=geometry,
             geometry_source="vision_model" if geometry else None,
         )

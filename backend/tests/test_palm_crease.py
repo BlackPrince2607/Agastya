@@ -177,3 +177,44 @@ def test_merge_does_not_invent_overlay_when_creases_fail_with_image():
     merged = merge_cv_into_analysis(palm, landmarks, image_base64=b64, allow_landmark_heuristic=False)
     assert merged.geometry_source == "unavailable"
     assert merged.line_geometry is None
+
+
+def test_assess_capture_quality_accepts_synthetic_palm():
+    from app.services.palm_crease import assess_capture_quality
+
+    b64, _ = _synthetic_palm_jpeg_and_landmarks()
+    q = assess_capture_quality(b64)
+    assert q is not None
+    assert q.ok is True
+    assert q.sharpness >= 12
+
+
+def test_assess_capture_quality_rejects_heavy_blur():
+    from app.services.palm_crease import assess_capture_quality
+
+    h, w = 480, 360
+    img = np.full((h, w, 3), (180, 140, 120), dtype=np.uint8)
+    img = cv2.GaussianBlur(img, (51, 51), 0)
+    ok, buf = cv2.imencode(".jpg", img, [int(cv2.IMWRITE_JPEG_QUALITY), 40])
+    assert ok
+    b64 = base64.b64encode(buf.tobytes()).decode("ascii")
+    q = assess_capture_quality(b64)
+    assert q is not None
+    assert q.ok is False
+    assert "blurry image" in q.reasons
+
+
+def test_public_quality_warnings_strips_internal_and_clears_when_locked():
+    from app.services.palm_crease import public_quality_warnings
+
+    raw = [
+        "Hand landmarks required for crease scan",
+        "life_line too faint to lock",
+        "blurry image",
+        "low lighting",
+    ]
+    public = public_quality_warnings(raw, locked=False)
+    assert "blurry image" in public
+    assert "low lighting" in public
+    assert all("landmarks" not in w.lower() for w in public)
+    assert public_quality_warnings(raw, locked=True) == []

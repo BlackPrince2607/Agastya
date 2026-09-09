@@ -44,7 +44,7 @@ export function OnboardingHeader({
   };
 
   return (
-    <View className="mb-5 px-1">
+    <View className="mb-3 px-1">
       <View className="flex-row items-center justify-between">
         {showBack ? (
           <Pressable
@@ -66,8 +66,8 @@ export function OnboardingHeader({
       </View>
 
       {step ? (
-        <View className="mt-5">
-          <View className="mb-2 flex-row items-end justify-between px-0.5">
+        <View className="mt-3">
+          <View className="mb-1.5 flex-row items-end justify-between px-0.5">
             <Text className="font-label text-[12px] uppercase leading-4 tracking-[0.12em] text-on-surface-variant">
               Progress
             </Text>

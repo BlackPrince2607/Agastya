@@ -35,6 +35,8 @@ type SessionStore = {
   palmScanHand: PalmScanHand | null;
 
   palmCaptureBase64: string | null;
+  /** Downscaled data-URI kept for the Lines map after analysis. */
+  palmCapturePreview: string | null;
   palmCaptureLandmarks: Array<[number, number]> | null;
   palmLandmarksSource: 'mediapipe' | 'roi_estimate' | null;
   palmAnalysis: PalmAnalysisDto | null;
@@ -69,6 +71,7 @@ type SessionStore = {
   setPalmScanHand: (hand: PalmScanHand | null) => void;
 
   setPalmCaptureBase64: (payload: string | null) => void;
+  setPalmCapturePreview: (payload: string | null) => void;
   setPalmCaptureLandmarks: (
     landmarks: Array<[number, number]> | null,
     source?: 'mediapipe' | 'roi_estimate' | null,
@@ -95,6 +98,7 @@ type SessionStore = {
 
 const emptyReadingState = {
   palmCaptureBase64: null as string | null,
+  palmCapturePreview: null as string | null,
   palmCaptureLandmarks: null as Array<[number, number]> | null,
   palmLandmarksSource: null as 'mediapipe' | 'roi_estimate' | null,
   palmAnalysis: null as PalmAnalysisDto | null,
@@ -152,6 +156,7 @@ export const useSessionStore = create<SessionStore>()(
       setPalmScanHand: (palmScanHand) => set({ palmScanHand }),
 
       setPalmCaptureBase64: (payload) => set({ palmCaptureBase64: payload }),
+      setPalmCapturePreview: (payload) => set({ palmCapturePreview: payload }),
       setPalmCaptureLandmarks: (landmarks, source = null) =>
         set({ palmCaptureLandmarks: landmarks, palmLandmarksSource: source }),
       setPalmAnalysis: (payload) => set({ palmAnalysis: payload }),
@@ -235,6 +240,10 @@ export const useSessionStore = create<SessionStore>()(
         billingPeriod: state.billingPeriod,
         palmScanHand: state.palmScanHand,
         palmAnalysis: state.palmAnalysis,
+        palmCapturePreview:
+          state.palmCapturePreview && state.palmCapturePreview.length < 400_000
+            ? state.palmCapturePreview
+            : null,
         partnerPalmAnalysis: state.partnerPalmAnalysis,
         partnerPalmScanHand: state.partnerPalmScanHand,
         partnerDisplayName: state.partnerDisplayName,

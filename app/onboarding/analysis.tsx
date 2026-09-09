@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Text, View } from 'react-native';
+import { Platform, Text, View } from 'react-native';
 import { runOnJS, useAnimatedReaction, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { MotiView } from '@/components/moti/MotiView';
@@ -23,7 +23,7 @@ import {
 import { PAGE_PADDING } from '@/constants/layout';
 import { ApiHttpError, parsePalmUnreadable } from '@/services/apiErrors';
 import { analyzePalm, generateReport } from '@/services/agastyaApi';
-import { bootstrapIdentity, syncProfileRemote } from '@/services/identity';
+import { ensureDeviceIdentity, syncProfileRemote } from '@/services/identity';
 import { normalizeFullReport } from '@/services/normalizeReport';
 import { scheduleReadyNotification, getExpoPushToken } from '@/services/notifications';
 import { AnalyticsEvent, track } from '@/services/analytics';
@@ -43,6 +43,8 @@ import {
 } from '@/utils/analysisTiming';
 import { withApiRetry } from '@/utils/apiRetry';
 import { palmHandForGender } from '@/utils/palmHand';
+import { detectHandLandmarksFromBase64 } from '@/utils/handLandmarks';
+import { palmCaptureDataUri } from '@/utils/palmCaptureUri';
 import { trimBase64Payload } from '@/utils/palmLandmarks';
 
 const FALLBACK_PALM: PalmAnalysisDto = {
@@ -96,6 +98,7 @@ export default function AnalysisScreen() {
     setRetryReasons(reasons?.length ? reasons : [...PALM_RETRY_REASONS_DEFAULT]);
     setFlowPhase('retry');
     useSessionStore.getState().setPalmCaptureBase64(null);
+    useSessionStore.getState().setPalmCapturePreview(null);
     useSessionStore.getState().setPalmCaptureLandmarks(null, null);
   }, []);
 
@@ -137,15 +140,15 @@ export default function AnalysisScreen() {
       if (cancelled || runId !== runIdRef.current) return;
       setStage(next);
       const target = stagePct(next);
-      // Soft creep during analyze (28%→48%) so a long OpenRouter call does not look frozen.
+      // Soft creep during analyze (28%→58%) so a long OpenRouter call does not look frozen.
       if (next === 1) {
         animatedPct.value = target;
-        animatedPct.value = withTiming(48, { duration: ANALYSIS_ANALYZE_CREEP_MS });
+        animatedPct.value = withTiming(58, { duration: ANALYSIS_ANALYZE_CREEP_MS });
         return;
       }
       if (next === 3) {
         animatedPct.value = target;
-        animatedPct.value = withTiming(90, { duration: 55_000 });
+        animatedPct.value = withTiming(94, { duration: 2_500 });
         return;
       }
       animatedPct.value = withTiming(target, { duration: 900 });
@@ -154,8 +157,8 @@ export default function AnalysisScreen() {
     void (async () => {
       try {
         advance(0);
-        await bootstrapIdentity();
-        await syncProfileRemote();
+        await ensureDeviceIdentity();
+        void syncProfileRemote();
         if (cancelled || runId !== runIdRef.current) return;
 
         const snap = useSessionStore.getState();
@@ -174,6 +177,20 @@ export default function AnalysisScreen() {
 
         const handSnapshot = snap.palmScanHand ?? palmHandForGender(snap.userGender);
 
+        let landmarks = snap.palmCaptureLandmarks;
+        let landmarksSource = snap.palmLandmarksSource;
+        if (Platform.OS === 'web' && capture && landmarksSource !== 'mediapipe') {
+          try {
+            const detected = await detectHandLandmarksFromBase64(capture, handSnapshot);
+            if (detected.landmarks && detected.source === 'mediapipe') {
+              landmarks = detected.landmarks;
+              landmarksSource = 'mediapipe';
+            }
+          } catch {
+            /* server MediaPipe still runs when geometry is missing */
+          }
+        }
+
         advance(1);
         let palm: PalmAnalysisDto = FALLBACK_PALM;
 
@@ -190,6 +207,8 @@ export default function AnalysisScreen() {
                     imageBase64: capture,
                     dominantHand: handSnapshot,
                     gender: snap.userGender,
+                    landmarks: landmarksSource === 'mediapipe' ? landmarks : undefined,
+                    landmarksSource: landmarksSource === 'mediapipe' ? 'mediapipe' : undefined,
                   },
                   { signal: runAbort.signal, timeoutMs: PALM_ANALYZE_CLIENT_TIMEOUT_MS },
                 ),
@@ -229,17 +248,20 @@ export default function AnalysisScreen() {
 
         if (cancelled || runId !== runIdRef.current) return;
         setPalmAnalysis(palm);
+        if (capture) {
+          useSessionStore.getState().setPalmCapturePreview(palmCaptureDataUri(capture));
+        }
         advance(2);
-        await delay(400);
-        if (cancelled || runId !== runIdRef.current) return;
 
-        advance(3);
         const snap2 = useSessionStore.getState();
-        let expoPushToken: string | null = null;
-        try {
-          if (isApiConfigured()) {
-            expoPushToken = await getExpoPushToken();
-            const runGenerate = () =>
+        setPreviewReading(buildSimulatedReading(resolvedSeed, snap2.focusTopics, palm));
+
+        // Hydrate the AI preview off the critical path — palm vision is already the long pole.
+        void (async () => {
+          if (!isApiConfigured()) return;
+          try {
+            const expoPushToken = await getExpoPushToken();
+            const previewPayload = await raceWithTimeout(
               withApiRetry(() =>
                 generateReport(
                   {
@@ -254,39 +276,28 @@ export default function AnalysisScreen() {
                   },
                   { signal: runAbort.signal },
                 ),
-              );
-            const previewPayload = await raceWithTimeout(
-              runGenerate(),
+              ),
               78_000,
               '/v1/reports/generate',
               runAbort.signal,
             );
+            if (cancelled || runId !== runIdRef.current) return;
             setPreviewReading(normalizeFullReport(previewPayload));
-          } else {
-            setPreviewReading(buildSimulatedReading(resolvedSeed, snap2.focusTopics, palm));
+            track(AnalyticsEvent.REPORT_GENERATED, { mode: 'preview' });
+            if (!expoPushToken) {
+              void scheduleReadyNotification();
+            }
+          } catch {
+            // Simulated preview is already on screen — no blocking retry here.
           }
-        } catch (err) {
-          if (cancelled || runId !== runIdRef.current) return;
-          if (isApiConfigured()) {
-            showRetry(
-              "Your palm was read, but we couldn't build the Life Blueprint. Please try again.",
-              ['report generation failed', 'check your connection'],
-            );
-            return;
-          }
-          setPreviewReading(buildSimulatedReading(resolvedSeed, snap2.focusTopics, palm));
-        }
+        })();
 
         if (cancelled || runId !== runIdRef.current) return;
+        advance(3);
         advance(4);
-        animatedPct.value = withTiming(100, { duration: 600 });
-        track(AnalyticsEvent.REPORT_GENERATED, { mode: 'preview' });
+        animatedPct.value = withTiming(100, { duration: 400 });
         track(AnalyticsEvent.ANALYSIS_COMPLETED);
         useSessionStore.getState().setSkipCloudRestore(false);
-        // Remote push handles ready notify when Expo token is available.
-        if (!expoPushToken) {
-          void scheduleReadyNotification();
-        }
         useSessionStore.getState().setPalmCaptureLandmarks(null, null);
         await delay(ANALYSIS_SETTLE_MS);
         if (cancelled || runId !== runIdRef.current) return;

@@ -2,11 +2,9 @@
   "expo": {
     "name": "Agastya",
     "slug": "agastya",
-    "owner": "anish26s-team",
+    "owner": "anish2607s-team",
     "version": "1.0.0",
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
+    "runtimeVersion": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "agastya",
@@ -28,12 +26,14 @@
       "infoPlist": {
         "NSCameraUsageDescription": "Allow Agastya to use your camera to scan your palm for a personalized reading.",
         "NSPhotoLibraryUsageDescription": "Allow Agastya to access your photos so you can upload a palm image.",
-        "UIBackgroundModes": ["remote-notification"]
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
       }
     },
     "android": {
       "package": "com.agastya.app",
-      "versionCode": 1,
+      "versionCode": 13,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
@@ -53,10 +53,17 @@
               "pathPrefix": "/"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ],
-      "permissions": ["RECEIVE_BOOT_COMPLETED", "VIBRATE"]
+      "permissions": [
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE",
+        "com.google.android.gms.permission.AD_ID"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -109,12 +116,12 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "e734e717-48c7-49ec-8e5a-8810cfed0fa4"
+        "projectId": "d70934dd-a047-426a-95a6-a68e2166c811"
       },
       "agastyaApiUrl": "https://agastya-production-b395.up.railway.app"
     },
     "updates": {
-      "url": "https://u.expo.dev/e734e717-48c7-49ec-8e5a-8810cfed0fa4"
+      "url": "https://u.expo.dev/d70934dd-a047-426a-95a6-a68e2166c811"
     },
     "experiments": {
       "typedRoutes": true

@@ -1,6 +1,5 @@
 ﻿import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { MotiPressable } from 'moti/interactions';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import {
@@ -90,8 +89,8 @@ export default function WelcomeScreen() {
         contentContainerStyle={[
           styles.scrollInner,
           {
-            paddingTop: insets.top + 28,
-            paddingBottom: insets.bottom + 238,
+            paddingTop: insets.top + 36,
+            paddingBottom: insets.bottom + 210,
           },
         ]}>
         <View style={styles.stack}>
@@ -108,7 +107,7 @@ export default function WelcomeScreen() {
 
       <StickyActionBar bottomPadding={32} contentStyle={styles.welcomeDock}>
         <View style={styles.ctaStack}>
-          <MotiPressable
+          <Pressable
             accessibilityRole="button"
             accessibilityLabel="Get started"
             onPress={() => {
@@ -116,8 +115,7 @@ export default function WelcomeScreen() {
               trackOnce('onboarding_started', AnalyticsEvent.ONBOARDING_STARTED);
               deferRouterReplace(resolveOnboardingHref());
             }}
-            animate={({ pressed }) => ({ scale: pressed ? 0.97 : 1 })}
-            transition={{ type: 'timing', duration: 160 }}>
+            style={({ pressed }) => [{ transform: [{ scale: pressed ? 0.97 : 1 }] }]}>
             <LinearGradient
               colors={['#7c3aed', '#e879f9', '#22d3ee']}
               start={{ x: 0, y: 0 }}
@@ -130,7 +128,7 @@ export default function WelcomeScreen() {
                 </View>
               </View>
             </LinearGradient>
-          </MotiPressable>
+          </Pressable>
 
           <Pressable
             accessibilityRole="button"
@@ -169,21 +167,21 @@ const styles = StyleSheet.create({
     width: '100%',
     alignSelf: 'center',
     alignItems: 'center',
-    gap: 22,
+    gap: 18,
   },
   iconWrap: {
-    marginBottom: 4,
+    marginBottom: 2,
   },
   iconShell: {
-    width: 64,
-    height: 64,
+    width: 72,
+    height: 72,
     borderRadius: 999,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: 'rgba(255,255,255,0.12)',
     shadowColor: stitchMd3.primary,
-    shadowOpacity: 0.22,
-    shadowRadius: 22,
+    shadowOpacity: 0.28,
+    shadowRadius: 24,
     shadowOffset: { width: 0, height: 0 },
     elevation: 10,
   },
@@ -191,39 +189,39 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.03)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
   },
   iconFallback: {
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: 'rgba(255,255,255,0.07)',
   },
   headBlock: {
     alignItems: 'center',
-    gap: 14,
+    gap: 12,
   },
   kicker: {
     fontFamily: 'SpaceGrotesk_600SemiBold',
-    fontSize: 12,
-    letterSpacing: 3.6,
-    lineHeight: 15,
+    fontSize: 13,
+    letterSpacing: 4,
+    lineHeight: 16,
     color: stitchMd3.onPrimaryContainer,
     textTransform: 'uppercase',
     textAlign: 'center',
   },
   headline: {
     fontFamily: 'NotoSerif_700Bold',
-    fontSize: 36,
-    lineHeight: 42,
-    letterSpacing: -0.75,
+    fontSize: 40,
+    lineHeight: 46,
+    letterSpacing: -0.9,
     color: '#ffffff',
     textAlign: 'center',
   },
   body: {
     fontFamily: 'Inter_400Regular',
-    fontSize: 15,
-    lineHeight: 23,
+    fontSize: 16,
+    lineHeight: 24,
     color: stitchMd3.onSurfaceVariant,
     textAlign: 'center',
-    maxWidth: 320,
+    maxWidth: 300,
     alignSelf: 'center',
     paddingHorizontal: 4,
   },
@@ -273,9 +271,9 @@ const styles = StyleSheet.create({
   secondaryBtn: {
     borderRadius: 999,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.16)',
-    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.42)',
+    backgroundColor: 'rgba(255,255,255,0.10)',
   },
   secondaryBlur: {
     borderRadius: 999,
@@ -283,17 +281,17 @@ const styles = StyleSheet.create({
     paddingVertical: 17,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
     overflow: 'hidden',
   },
   secondaryFallback: {
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
   },
   secondaryLabel: {
     fontFamily: 'SpaceGrotesk_600SemiBold',
     fontSize: 12,
     letterSpacing: 2.8,
-    color: stitchMd3.onBackground,
+    color: '#ffffff',
     textTransform: 'uppercase',
   },
   welcomeDock: {

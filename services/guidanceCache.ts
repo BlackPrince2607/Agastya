@@ -144,6 +144,12 @@ export type BootstrapContextSlice = {
     title?: string;
     body?: string;
     focusTheme?: string | null;
+    tasksCache?: {
+      focusTheme?: string | null;
+      variant?: string | null;
+      source?: string | null;
+      tasks?: unknown[];
+    } | null;
   } | null;
   weeklyContext?: {
     weekKey?: string;
@@ -168,6 +174,18 @@ export async function applyBootstrapContext(data: BootstrapContextSlice): Promis
       continueHint: existing?.continueHint ?? null,
       consistencyNote: existing?.consistencyNote ?? null,
     });
+    const cache = daily.tasksCache;
+    if (cache?.tasks && Array.isArray(cache.tasks) && cache.tasks.length >= 3) {
+      const { ensureEveningReflection, normalizeTask } = await import('@/utils/localTasks');
+      const { useTaskStore } = await import('@/store/taskStore');
+      const normalized = ensureEveningReflection(cache.tasks.map((t, i) => normalizeTask(t, i)));
+      useTaskStore.getState().setTasks(
+        normalized,
+        cache.variant ?? null,
+        daily.date,
+        cache.focusTheme ?? daily.focusTheme ?? null,
+      );
+    }
   }
 
   const weekly = data.weeklyContext;

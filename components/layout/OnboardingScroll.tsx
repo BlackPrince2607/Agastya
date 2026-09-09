@@ -12,7 +12,10 @@ type OnboardingScrollProps = PropsWithChildren<
   bottomInset?: number;
 };
 
-/** Consistent onboarding / auth scroll container with page padding. */
+/**
+ * Compact onboarding body — grows to fill the screen so short steps feel like
+ * one composition, but still scrolls when content overflows (small phones / keyboard).
+ */
 export function OnboardingScroll({
   children,
   bottomInset = 32,
@@ -25,14 +28,20 @@ export function OnboardingScroll({
 
   return (
     <ScrollView
-      showsVerticalScrollIndicator={showsVerticalScrollIndicator}
+      style={{ flex: 1 }}
+      bounces={false}
       keyboardShouldPersistTaps={keyboardShouldPersistTaps}
+      showsVerticalScrollIndicator={showsVerticalScrollIndicator}
       contentContainerStyle={{
+        flexGrow: 1,
         paddingHorizontal: pad,
-        paddingTop: 8,
+        paddingTop: 12,
         paddingBottom: insets.bottom + bottomInset,
+        gap: SECTION_GAP,
       }}>
-      <ScreenBody style={{ gap: SECTION_GAP }}>{children}</ScreenBody>
+      <ScreenBody style={{ flexGrow: 1, gap: SECTION_GAP, justifyContent: 'flex-start' }}>
+        {children}
+      </ScreenBody>
     </ScrollView>
   );
 }

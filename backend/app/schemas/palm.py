@@ -13,7 +13,11 @@ AnalysisSource = Literal["openrouter_vision", "hybrid", "dummy", "fallback", "op
 GeometrySource = Literal["opencv_creases", "vision_model", "landmark_heuristic", "unavailable"]
 DominantHand = Literal["left", "right", "unknown"]
 MountLevel = Literal["prominent", "moderate", "flat"]
-FateLine = Literal["present", "absent", "partial"]
+# Secondary lines: richer motifs + honest unclear marker
+SecondaryLineStrength = Literal[
+    "strong", "moderate", "faint", "broken", "absent", "not_clearly_visible", "present", "partial"
+]
+MarriageLine = Literal["clear", "multiple", "faint", "absent", "not_clearly_visible"]
 
 
 class LineDetail(BaseModel):
@@ -42,9 +46,9 @@ class MountsDetail(BaseModel):
 
 
 class PalmAnalysis(BaseModel):
-    life_line: LifeStrength | str = Field(description="Major arc motif")
-    heart_line: LineCurve | str = Field(description="Attachment motif")
-    head_line: HeadLength | str = Field(description="Intellect motif")
+    life_line: LifeStrength | str = Field(description="Major arc motif — Jeevan Rekha")
+    heart_line: LineCurve | str = Field(description="Attachment motif — Hridaya Rekha")
+    head_line: HeadLength | str = Field(description="Intellect motif — Mastishka Rekha")
     personality: str = Field(description="Primary archetype label")
     traits: list[str] = Field(default_factory=list, min_length=1)
     dominant_hand: DominantHand | str = "unknown"
@@ -55,7 +59,9 @@ class PalmAnalysis(BaseModel):
     quality_warnings: list[str] = Field(default_factory=list)
     line_details: dict[str, Any] | None = None
     mounts: dict[str, Any] | None = None
-    fate_line: FateLine | str | None = None
+    fate_line: SecondaryLineStrength | str | None = None
+    sun_line: SecondaryLineStrength | str | None = None
+    marriage_line: MarriageLine | str | None = None
     line_geometry: list[dict[str, Any]] | None = None
     line_features: dict[str, Any] | None = None
     geometry_source: GeometrySource | str | None = None

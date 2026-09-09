@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { OnboardingScroll } from '@/components/layout/OnboardingScroll';
@@ -36,18 +36,28 @@ export default function ProfileOnboardingScreen() {
 
   return (
     <CosmicScreen variant="stitch">
-      <View className="flex-1">
+      <View className="flex-1 overflow-hidden">
         <OnboardingScroll bottomInset={STICKY_ACTION_BAR_SINGLE}>
           <OnboardingHeader step={ONBOARDING_STEPS.profile} total={ONBOARDING_TOTAL_STEPS} />
 
-          <ProfileBasicsForm
-            showIntro
-            name={name}
-            onNameChange={setName}
-            gender={gender}
-            onGenderChange={setGender}
-          />
+          <View>
+            <Text className="font-headline text-[26px] leading-8 tracking-tight text-on-surface">
+              Tell us a little about you
+            </Text>
+            <Text className="mt-2 font-body text-[15px] leading-6 text-on-surface-variant">
+              We use this to shape your palm reading.
+            </Text>
+          </View>
 
+          <View className="flex-1 justify-center">
+            <ProfileBasicsForm
+              bare
+              name={name}
+              onNameChange={setName}
+              gender={gender}
+              onGenderChange={setGender}
+            />
+          </View>
         </OnboardingScroll>
 
         <StickyActionBar>

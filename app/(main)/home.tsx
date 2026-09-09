@@ -34,7 +34,7 @@ import {
   PROFILE_DEFAULT_NAME,
   type HomeShortcutAction,
 } from '@/constants/userCopy';
-import { fetchDailyGuidance, fetchWeeklySummary } from '@/services/agastyaApi';
+import { fetchDailyBundle, fetchWeeklySummary } from '@/services/agastyaApi';
 import { ApiHttpError } from '@/services/apiErrors';
 import { AnalyticsEvent, trackOnce, trackOncePerDay } from '@/services/analytics';
 import {
@@ -134,6 +134,32 @@ export default function HomeDashboardScreen() {
         if (local.continueHint) setContinueHint(local.continueHint);
         if (local.consistencyNote) setConsistencyNote(local.consistencyNote);
         setGuidanceLoading(false);
+        const taskSnap = useTaskStore.getState();
+        if (sessionId && palmAnalysis && (taskSnap.tasks.length === 0 || taskSnap.taskDate !== today)) {
+          void withApiRetry(() =>
+            fetchDailyBundle({
+              sessionId,
+              palmAnalysis,
+              focusTopics: useSessionStore.getState().focusTopics ?? [],
+              streak: taskSnap.streak > 0 ? taskSnap.streak : undefined,
+            }),
+          )
+            .then((result) => {
+              if (!result.tasks?.length) return;
+              void import('@/utils/localTasks').then(({ ensureEveningReflection, normalizeTask }) => {
+                const normalized = ensureEveningReflection(result.tasks.map((t, i) => normalizeTask(t, i)));
+                useTaskStore.getState().setTasks(
+                  normalized,
+                  result.variant ?? null,
+                  today,
+                  result.focusTheme ?? local.focusTheme ?? null,
+                );
+              });
+            })
+            .catch(() => {
+              /* Tasks tab still has its own fetch + local fallback. */
+            });
+        }
         return;
       }
 
@@ -143,50 +169,96 @@ export default function HomeDashboardScreen() {
         return;
       }
 
+      // Stale-while-revalidate: show palm fallback immediately, then swap the bundle in.
+      setGuidance(fallbackInsight);
       setGuidanceLoading(true);
       setGuidanceError(false);
       try {
         const session = useSessionStore.getState();
         const result = await withApiRetry(() =>
-          fetchDailyGuidance({
+          fetchDailyBundle({
             sessionId,
             palmAnalysis,
             focusTopics: session.focusTopics ?? [],
             streak: useTaskStore.getState().streak > 0 ? useTaskStore.getState().streak : undefined,
           }),
         );
-        if (!active || !result.title || !result.body) return;
-        setGuidance({ title: result.title, body: result.body });
+        const g = result.guidance;
+        if (!active || !g?.title || !g?.body) return;
+        setGuidance({ title: g.title, body: g.body });
         setGuidanceError(false);
-        if (result.continueHint) setContinueHint(result.continueHint);
-        if (result.consistencyNote) setConsistencyNote(result.consistencyNote);
+        if (g.continueHint) setContinueHint(g.continueHint);
+        if (g.consistencyNote) setConsistencyNote(g.consistencyNote);
         hasLocalGuidance.current = true;
         trackOncePerDay(AnalyticsEvent.TODAYS_GUIDANCE_VIEWED, {
-          source: result.cached ? 'remote_cache' : 'generated',
+          source: g.cached ? 'remote_cache' : 'generated',
         });
-        if (!result.cached) {
-          trackOnce(`guidance_refreshed:${result.date || today}`, AnalyticsEvent.GUIDANCE_REFRESHED, {
-            date: result.date || today,
+        if (!g.cached) {
+          trackOnce(`guidance_refreshed:${g.date || today}`, AnalyticsEvent.GUIDANCE_REFRESHED, {
+            date: g.date || today,
           });
         }
         await writeLocalGuidance({
-          date: result.date || today,
-          title: result.title,
-          body: result.body,
-          focusTheme: result.focusTheme ?? null,
-          continueHint: result.continueHint ?? null,
-          consistencyNote: result.consistencyNote ?? null,
+          date: g.date || today,
+          title: g.title,
+          body: g.body,
+          focusTheme: result.focusTheme ?? g.focusTheme ?? null,
+          continueHint: g.continueHint ?? null,
+          consistencyNote: g.consistencyNote ?? null,
         });
-        if (result.focusTheme) setFocusTheme(result.focusTheme);
+        if (result.focusTheme || g.focusTheme) {
+          setFocusTheme(result.focusTheme ?? g.focusTheme ?? null);
+        }
+        if (result.tasks?.length) {
+          const { ensureEveningReflection, normalizeTask } = await import('@/utils/localTasks');
+          const normalized = ensureEveningReflection(result.tasks.map((t, i) => normalizeTask(t, i)));
+          useTaskStore.getState().setTasks(
+            normalized,
+            result.variant ?? null,
+            g.date || today,
+            result.focusTheme ?? g.focusTheme ?? null,
+          );
+        }
       } catch (err) {
         if (__DEV__) {
           console.warn('[Agastya] daily guidance refresh failed', err);
         }
-        // Production may lag behind app: missing /insights/daily → soft palm fallback, no banner.
         const missingRoute =
           err instanceof ApiHttpError &&
           (err.status === 404 || /"detail"\s*:\s*"not found"/i.test(err.rawDetail));
-        if (active && !missingRoute) setGuidanceError(true);
+        if (missingRoute) {
+          try {
+            const { fetchDailyGuidance } = await import('@/services/agastyaApi');
+            const session = useSessionStore.getState();
+            const result = await withApiRetry(() =>
+              fetchDailyGuidance({
+                sessionId,
+                palmAnalysis,
+                focusTopics: session.focusTopics ?? [],
+                streak: useTaskStore.getState().streak > 0 ? useTaskStore.getState().streak : undefined,
+              }),
+            );
+            if (active && result.title && result.body) {
+              setGuidance({ title: result.title, body: result.body });
+              await writeLocalGuidance({
+                date: result.date || today,
+                title: result.title,
+                body: result.body,
+                focusTheme: result.focusTheme ?? null,
+                continueHint: result.continueHint ?? null,
+                consistencyNote: result.consistencyNote ?? null,
+              });
+            }
+          } catch {
+            if (active) setGuidanceError(true);
+          }
+        } else if (active) {
+          setGuidanceError(true);
+        }
+        if (active && fallbackInsight) {
+          setGuidance((cur) => cur ?? fallbackInsight);
+          hasLocalGuidance.current = true;
+        }
       } finally {
         if (active) setGuidanceLoading(false);
       }

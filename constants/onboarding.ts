@@ -27,4 +27,4 @@ export const ANALYSIS_MIN_DURATION_MS = 5500;
 export const ANALYSIS_PHRASE_MS = 1600;
 
 /** Brief pause at 100% so the bar does not cut away abruptly. */
-export const ANALYSIS_SETTLE_MS = 700;
+export const ANALYSIS_SETTLE_MS = 350;

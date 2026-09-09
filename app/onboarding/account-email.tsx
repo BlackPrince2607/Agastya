@@ -1,4 +1,3 @@
-import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
@@ -12,7 +11,6 @@ import {
 
 import { CosmicScreen } from '@/components/layout/CosmicScreen';
 import { OnboardingScroll } from '@/components/layout/OnboardingScroll';
-import { DecorativePalmArt } from '@/components/onboarding/DecorativePalmArt';
 import { OnboardingHeader } from '@/components/onboarding/OnboardingHeader';
 import { CosmicTextField, GlassCard, PrimaryButton } from '@/components/ui';
 import { ONBOARDING_STEPS, ONBOARDING_TOTAL_STEPS } from '@/constants/onboarding';
@@ -239,131 +237,115 @@ export default function AccountEmailScreen() {
   return (
     <CosmicScreen variant="stitch">
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="flex-1">
-        <OnboardingScroll>
-          <OnboardingHeader
-            step={ONBOARDING_STEPS.account}
-            total={ONBOARDING_TOTAL_STEPS}
-            showBack
-            useClose
-          />
-
-          <View className="overflow-hidden rounded-glass border border-white/10 shadow-aura" style={{ aspectRatio: 4 / 3 }}>
-            <DecorativePalmArt opacity={0.82} resizeMode="cover" style={{ width: '100%', height: '100%' }} />
-            <LinearGradient
-              colors={['transparent', 'rgba(20,19,21,0.2)', '#141315']}
-              style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '55%' }}
-            />
-          </View>
-
-          <View className="gap-3">
-            <Text className="text-center font-headline text-[28px] leading-9 text-on-surface">
-              {mode === 'signin' ? 'Welcome back' : 'Create your account'}
-            </Text>
-            <Text className="text-center font-body text-[15px] leading-6 text-on-surface-variant">{email}</Text>
-          </View>
-
-          {lastError ? (
-            <GlassCard className="w-full px-4 py-3" style={{ borderColor: colors.errorBorder }}>
-              <Text className="font-body text-[14px] leading-6 text-error">{lastError}</Text>
-            </GlassCard>
-          ) : null}
-
-          {inlineMessage ? (
-            <GlassCard className="w-full px-4 py-3" style={{ borderColor: colors.successBorder }}>
-              <Text className="font-body text-[14px] leading-6 text-success">{inlineMessage}</Text>
-            </GlassCard>
-          ) : null}
-
-          <View className="gap-4">
-            <CosmicTextField
-              label="Password"
-              secureTextEntry
-              showPasswordToggle
-              autoCapitalize="none"
-              autoCorrect={false}
-              textContentType={mode === 'signin' ? 'password' : 'newPassword'}
-              autoComplete={mode === 'signin' ? 'password' : 'password-new'}
-              placeholder={mode === 'signin' ? 'Your password' : 'Choose a password'}
-              value={password}
-              onChangeText={setPassword}
-              editable={!busy}
+        <View className="flex-1 overflow-hidden">
+          <OnboardingScroll bottomInset={16}>
+            <OnboardingHeader
+              step={ONBOARDING_STEPS.account}
+              total={ONBOARDING_TOTAL_STEPS}
+              showBack
+              useClose
             />
 
-            {mode === 'signup' ? (
+            <View className="gap-1">
+              <Text className="text-center font-headline text-[24px] leading-8 text-on-surface">
+                {mode === 'signin' ? 'Welcome back' : 'Create your account'}
+              </Text>
+              <Text className="text-center font-body text-[14px] leading-5 text-on-surface-variant">{email}</Text>
+            </View>
+
+            {lastError ? (
+              <GlassCard className="w-full px-4 py-2.5" style={{ borderColor: colors.errorBorder }}>
+                <Text className="font-body text-[13px] leading-5 text-error">{lastError}</Text>
+              </GlassCard>
+            ) : null}
+
+            {inlineMessage ? (
+              <GlassCard className="w-full px-4 py-2.5" style={{ borderColor: colors.successBorder }}>
+                <Text className="font-body text-[13px] leading-5 text-success">{inlineMessage}</Text>
+              </GlassCard>
+            ) : null}
+
+            <View className="flex-1 justify-center gap-3">
               <CosmicTextField
-                label="Confirm password"
+                label="Password"
                 secureTextEntry
                 showPasswordToggle
                 autoCapitalize="none"
                 autoCorrect={false}
-                textContentType="newPassword"
-                autoComplete="password-new"
-                placeholder="Repeat password"
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
+                textContentType={mode === 'signin' ? 'password' : 'newPassword'}
+                autoComplete={mode === 'signin' ? 'password' : 'password-new'}
+                placeholder={mode === 'signin' ? 'Your password' : 'Choose a password'}
+                value={password}
+                onChangeText={setPassword}
                 editable={!busy}
               />
-            ) : null}
 
-            <PrimaryButton
-              label={busy ? 'Please wait...' : mode === 'signin' ? 'Sign in' : 'Create account'}
-              onPress={() => void passwordSubmit()}
-              disabled={busy}
-            />
+              {mode === 'signup' ? (
+                <CosmicTextField
+                  label="Confirm password"
+                  secureTextEntry
+                  showPasswordToggle
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  textContentType="newPassword"
+                  autoComplete="password-new"
+                  placeholder="Repeat password"
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  editable={!busy}
+                />
+              ) : null}
 
-            {awaitingEmailConfirm ? (
               <PrimaryButton
-                variant="ghost"
-                label={busy ? 'Sending...' : 'Resend confirmation email'}
-                onPress={() => void resendConfirmation()}
+                label={busy ? 'Please wait...' : mode === 'signin' ? 'Sign in' : 'Create account'}
+                onPress={() => void passwordSubmit()}
                 disabled={busy}
               />
-            ) : null}
 
-            {mode === 'signin' ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Forgot password?"
-                onPress={forgotPassword}
-                disabled={busy}
-                className="items-center py-2">
-                <Text className="font-body text-[13px] text-primary">Forgot password?</Text>
-              </Pressable>
-            ) : null}
+              {awaitingEmailConfirm ? (
+                <PrimaryButton
+                  variant="ghost"
+                  label={busy ? 'Sending...' : 'Resend confirmation email'}
+                  onPress={() => void resendConfirmation()}
+                  disabled={busy}
+                />
+              ) : null}
 
-            {isMagicLinkEnabled ? (
-              <>
-                <View className="flex-row items-center gap-4">
-                  <View className="h-px flex-1 bg-white/10" />
-                  <Text className="font-label text-[10px] uppercase leading-4 tracking-[0.1em] text-on-surface-variant">
-                    Or
-                  </Text>
-                  <View className="h-px flex-1 bg-white/10" />
-                </View>
+              {mode === 'signin' ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Forgot password?"
+                  onPress={forgotPassword}
+                  disabled={busy}
+                  className="items-center py-1">
+                  <Text className="font-body text-[13px] text-primary">Forgot password?</Text>
+                </Pressable>
+              ) : null}
 
+              {isMagicLinkEnabled ? (
                 <PrimaryButton
                   variant="ghost"
                   label={busy ? 'Sending...' : 'Email me a sign-in link'}
                   onPress={() => void magicLink()}
                   disabled={busy}
                 />
-              </>
-            ) : null}
+              ) : null}
 
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={
-                mode === 'signin' ? 'New here? Create an account' : 'Already have an account? Sign in'
-              }
-              onPress={() => setMode(mode === 'signin' ? 'signup' : 'signin')}
-              disabled={busy}
-              className="items-center py-2">
-              <Text className="font-body text-[13px] text-on-surface-variant">
-                {mode === 'signin' ? 'New here? Create an account' : 'Already have an account? Sign in'}
-              </Text>
-            </Pressable>
-          </View>
-        </OnboardingScroll>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={
+                  mode === 'signin' ? 'New here? Create an account' : 'Already have an account? Sign in'
+                }
+                onPress={() => setMode(mode === 'signin' ? 'signup' : 'signin')}
+                disabled={busy}
+                className="items-center py-1">
+                <Text className="font-body text-[13px] text-on-surface-variant">
+                  {mode === 'signin' ? 'New here? Create an account' : 'Already have an account? Sign in'}
+                </Text>
+              </Pressable>
+            </View>
+          </OnboardingScroll>
+        </View>
       </KeyboardAvoidingView>
     </CosmicScreen>
   );

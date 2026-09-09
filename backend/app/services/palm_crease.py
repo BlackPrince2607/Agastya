@@ -42,6 +42,98 @@ class CreaseExtractionResult:
     image_quality: str = "acceptable"
 
 
+@dataclass
+class CaptureQuality:
+    """Cheap sharpness / exposure check before vision."""
+
+    ok: bool
+    reasons: list[str] = field(default_factory=list)
+    sharpness: float = 0.0
+    brightness: float = 0.0
+
+
+# Internal CV strings must never reach the Lines-tab banner.
+_INTERNAL_WARNING_MARKERS = (
+    "opencv",
+    "hand landmarks required",
+    "landmarks required",
+    "could not decode",
+    "could not align",
+    "too faint to lock",
+    "palm image required",
+    "unavailable on server",
+    "crease not clearly visible",
+    "major palm creases not detected",
+)
+
+
+def public_quality_warnings(
+    warnings: list[str] | None,
+    *,
+    locked: bool = False,
+) -> list[str]:
+    """Keep only user-facing lighting/blur notes; drop after a real crease lock."""
+    if locked or not warnings:
+        return []
+    out: list[str] = []
+    for raw in warnings:
+        text = str(raw).strip()
+        if not text:
+            continue
+        lower = text.lower()
+        if any(marker in lower for marker in _INTERNAL_WARNING_MARKERS):
+            continue
+        if text not in out:
+            out.append(text)
+        if len(out) >= 4:
+            break
+    return out
+
+
+def assess_capture_quality(image_base64: str | None) -> CaptureQuality | None:
+    """Laplacian variance + brightness. None = could not decode (skip the gate)."""
+    if not image_base64:
+        return None
+    bgr = _decode_bgr(image_base64)
+    if bgr is None:
+        return None
+    try:
+        import cv2
+    except ImportError:
+        return None
+
+    h, w = bgr.shape[:2]
+    if min(h, w) < 48:
+        return CaptureQuality(ok=False, reasons=["photo looks too small"], sharpness=0.0, brightness=0.0)
+
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+    # Bound cost on large phone captures.
+    long_side = max(h, w)
+    if long_side > 720:
+        scale = 720 / float(long_side)
+        gray = cv2.resize(
+            gray,
+            (max(1, int(w * scale)), max(1, int(h * scale))),
+            interpolation=cv2.INTER_AREA,
+        )
+    sharpness = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+    brightness = float(gray.mean())
+    reasons: list[str] = []
+    # Synthetic test palms with drawn creases typically land well above 20.
+    if sharpness < 12.0:
+        reasons.append("blurry image")
+    if brightness < 28:
+        reasons.append("low lighting")
+    elif brightness > 238:
+        reasons.append("photo is overexposed")
+    return CaptureQuality(
+        ok=len(reasons) == 0,
+        reasons=reasons,
+        sharpness=round(sharpness, 2),
+        brightness=round(brightness, 2),
+    )
+
+
 def _pt(landmarks: list[list[float]], idx: int) -> tuple[float, float] | None:
     if idx >= len(landmarks):
         return None
@@ -542,7 +634,7 @@ def _trace_named_creases(
         y_hi=heart_c["y_hi"],
         x_start=heart_c["x_start"],
         x_end=heart_c["x_end"],
-        steps=42,
+        steps=64,
     )
     head_pts = _trace_horizontal_corridor(
         score,
@@ -550,7 +642,7 @@ def _trace_named_creases(
         y_hi=head_c["y_hi"],
         x_start=head_c["x_start"],
         x_end=head_c["x_end"],
-        steps=42,
+        steps=64,
     )
     life_pts = _trace_arc_corridor(
         score,
@@ -558,12 +650,32 @@ def _trace_named_creases(
         x_hi=life_c["x_hi"],
         y_start=life_c["y_start"],
         y_end=life_c["y_end"],
-        steps=36,
+        steps=56,
+    )
+    # Fate (Bhagya): vertical crease rising through mid-palm when contrast allows.
+    fate_pts = _trace_arc_corridor(
+        score,
+        x_lo=0.38,
+        x_hi=0.62,
+        y_start=0.88,
+        y_end=0.18,
+        steps=48,
+    )
+    # Sun (Surya): vertical toward ring finger side.
+    sun_pts = _trace_arc_corridor(
+        score,
+        x_lo=0.55,
+        x_hi=0.78,
+        y_start=0.72,
+        y_end=0.16,
+        steps=40,
     )
     return {
-        "heart_line": _downsample(heart_pts),
-        "head_line": _downsample(head_pts),
-        "life_line": _downsample(life_pts),
+        "heart_line": _downsample(heart_pts, max_pts=28),
+        "head_line": _downsample(head_pts, max_pts=28),
+        "life_line": _downsample(life_pts, max_pts=28),
+        "fate_line": _downsample(fate_pts, max_pts=20),
+        "sun_line": _downsample(sun_pts, max_pts=18),
     }
 
 
@@ -577,17 +689,23 @@ def _lock_geometry(
     geometry: list[dict[str, Any]] = []
     features: dict[str, Any] = {}
     warnings: list[str] = []
+    majors = {"life_line", "heart_line", "head_line"}
 
     for name, pts in named.items():
-        if len(pts) < 3:
-            warnings.append(f"{name} crease not clearly visible")
+        min_pts = 3 if name in majors else 4
+        if len(pts) < min_pts:
+            if name in majors:
+                warnings.append(f"{name} crease not clearly visible")
             continue
         feat = _features_for(name, pts, score)
-        # Soft floors — real phone photos are often lower-contrast than synthetic tests.
-        if feat["depth_score"] < 2.8 or feat["length"] < 0.08:
-            warnings.append(f"{name} too faint to lock")
+        # Soft floors — secondary lines need a bit more contrast to avoid inventing marks.
+        depth_floor = 2.8 if name in majors else 6.0
+        length_floor = 0.08 if name in majors else 0.12
+        if feat["depth_score"] < depth_floor or feat["length"] < length_floor:
+            if name in majors:
+                warnings.append(f"{name} too faint to lock")
             continue
-        full_pts = _roi_to_full(_downsample(pts, max_pts=14), M_inv, img_w, img_h)
+        full_pts = _roi_to_full(_downsample(pts, max_pts=24), M_inv, img_w, img_h)
         if len(full_pts) < 2:
             continue
         geometry.append({"name": name, "points": full_pts})
@@ -636,13 +754,16 @@ def extract_creases_from_image(
     geometry: list[dict[str, Any]] = []
     features: dict[str, Any] = {}
     warnings: list[str] = []
+    majors = {"life_line", "heart_line", "head_line"}
     for corridors in _corridor_candidates(landmarks, M, img_w, img_h):
         named = _trace_named_creases(score, corridors)
         geometry, features, warnings = _lock_geometry(named, score, M_inv, img_w, img_h)
-        if len(geometry) >= 2:
+        major_count = sum(1 for g in geometry if g["name"] in majors)
+        if major_count >= 2:
             break
 
-    if len(geometry) < 2:
+    major_count = sum(1 for g in geometry if g["name"] in majors)
+    if major_count < 2:
         result.quality_warnings = warnings or ["Major palm creases not detected — retake with open palm and even light"]
         result.image_quality = "poor"
         result.geometry_source = "unavailable"

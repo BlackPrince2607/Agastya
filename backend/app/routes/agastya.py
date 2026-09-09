@@ -25,6 +25,8 @@ from app.schemas.session import (
     SessionRegisterResponse,
 )
 from app.schemas.guidance import (
+    DailyBundleBody,
+    DailyBundleResponse,
     DailyGuidanceBody,
     DailyGuidanceResponse,
     DailyReflectBody,
@@ -36,7 +38,7 @@ from app.schemas.guidance import (
 )
 from app.schemas.tasks import DailyTasksBody, DailyTasksResponse
 from app.services.ai_interactions import GuideLlmUnavailableError, generate_chat_reply, generate_daily_tasks
-from app.services.daily_insight import generate_daily_guidance
+from app.services.daily_insight import generate_daily_bundle, generate_daily_guidance
 from app.services.day_context import is_complete_daily_context, utc_today_iso
 from app.services.journey_timeline import build_journey_timeline
 from app.services.user_memory import maybe_extract_and_merge_memory, stamp_reflection_completed
@@ -280,12 +282,21 @@ def _slim_daily_context(bkt: SessionBucket) -> dict[str, Any] | None:
         return None
     assert isinstance(ctx, dict)
     guidance = ctx.get("guidance") or {}
-    return {
+    slim: dict[str, Any] = {
         "date": ctx.get("date"),
         "title": guidance.get("title"),
         "body": guidance.get("body"),
         "focusTheme": ctx.get("focusTheme"),
     }
+    cache = ctx.get("tasksCache")
+    if isinstance(cache, dict) and isinstance(cache.get("tasks"), list) and cache["tasks"]:
+        slim["tasksCache"] = {
+            "focusTheme": cache.get("focusTheme"),
+            "variant": cache.get("variant"),
+            "source": cache.get("source"),
+            "tasks": cache.get("tasks")[:3],
+        }
+    return slim
 
 
 def _slim_weekly_context(bkt: SessionBucket) -> dict[str, Any] | None:
@@ -715,6 +726,27 @@ async def daily_guidance(
     return result
 
 
+@router.post("/insights/daily-bundle", response_model=DailyBundleResponse, response_model_by_alias=True)
+async def daily_bundle(
+    body: DailyBundleBody, settings: Annotated[Settings, Depends(get_settings)]
+) -> DailyBundleResponse:
+    """Today's guidance + rituals in one hydrate. Parallel generation on cache miss."""
+    await _hydrate(body.session_id, settings)
+    bkt = bucket(body.session_id)
+    _bind_device(bkt, body.session_id, body.device_install_id)
+    bkt = await _sync_premium(body.session_id, settings)
+    body = body.model_copy(update={"is_premium": bkt.effectively_premium()})
+    try:
+        result, changed = await generate_daily_bundle(settings, body, bkt)
+    except ValueError as exc:
+        if str(exc) == "palm_required":
+            raise HTTPException(status_code=400, detail="Run palm analysis before requesting guidance.") from exc
+        raise
+    if changed:
+        await _persist(body.session_id, settings)
+    return result
+
+
 @router.post("/insights/reflect", response_model=DailyReflectResponse, response_model_by_alias=True)
 async def daily_reflect(
     body: DailyReflectBody, settings: Annotated[Settings, Depends(get_settings)]
@@ -770,7 +802,12 @@ async def daily_tasks(body: DailyTasksBody, settings: Annotated[Settings, Depend
     _bind_device(bkt, body.session_id, body.device_install_id)
     bkt = await _sync_premium(body.session_id, settings)
     body = body.model_copy(update={"is_premium": bkt.effectively_premium()})
-    tasks, variant, focus_theme, changed, source = await generate_daily_tasks(settings, body, bkt)
+    try:
+        tasks, variant, focus_theme, changed, source = await generate_daily_tasks(settings, body, bkt)
+    except ValueError as exc:
+        if str(exc) == "palm_required":
+            raise HTTPException(status_code=400, detail="Run palm analysis before requesting tasks.") from exc
+        raise
     # tasksCache lives under daily_context but never overwrites Today's Focus / guidance.
     if changed:
         await _persist(body.session_id, settings)

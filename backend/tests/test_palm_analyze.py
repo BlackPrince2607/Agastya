@@ -433,8 +433,10 @@ def test_palm_analyze_503_when_vision_fails_in_production(mock_vision, monkeypat
 
 @patch("app.services.palm_pipeline.palm_analysis_from_vision", new_callable=AsyncMock)
 @patch("app.services.palm_pipeline.detect_hand_landmarks_from_bytes")
-def test_palm_analyze_skips_landmarks_when_vision_has_geometry(mock_landmarks, mock_vision, vision_client):
-    """Happy path: vision motifs+geometry must not wait on MediaPipe."""
+def test_palm_analyze_tries_landmarks_for_opencv_even_with_vision_geometry(
+    mock_landmarks, mock_vision, vision_client
+):
+    """Hybrid: after vision, still try MediaPipe so OpenCV can lock real creases."""
     mock_landmarks.return_value = (None, "not_found")
     mock_vision.return_value = PalmAnalysis(
         life_line="strong",
@@ -467,8 +469,8 @@ def test_palm_analyze_skips_landmarks_when_vision_has_geometry(mock_landmarks, m
         },
     )
     assert res.status_code == 200
-    assert res.json()["analysis_source"] == "openrouter_vision"
-    mock_landmarks.assert_not_called()
+    mock_landmarks.assert_called()
+    assert res.json()["geometry_source"] in {"opencv_creases", "vision_model"}
 
 
 @patch("app.services.palm_pipeline.palm_analysis_from_vision", new_callable=AsyncMock)
@@ -537,3 +539,145 @@ def test_downscale_for_vision_bounds_edge():
     assert media == "jpeg"
     with Image.open(io.BytesIO(base64.b64decode(out_b64))) as img:
         assert max(img.size) <= 1024
+
+
+@patch("app.services.palm_pipeline.palm_analysis_from_vision", new_callable=AsyncMock)
+@patch("app.services.palm_pipeline.detect_hand_landmarks_from_bytes")
+def test_palm_analyze_rejects_blurry_capture(mock_landmarks, mock_vision, vision_client):
+    mock_landmarks.return_value = (None, "not_found")
+    mock_vision.return_value = PalmAnalysis(
+        life_line="strong",
+        heart_line="curved",
+        head_line="long",
+        personality="quiet visionary",
+        traits=["thoughtful"],
+        analysis_source="openrouter_vision",
+        image_quality="good",
+    )
+    import cv2
+    import numpy as np
+    import base64 as b64mod
+
+    img = np.full((480, 360, 3), (180, 140, 120), dtype=np.uint8)
+    img = cv2.GaussianBlur(img, (51, 51), 0)
+    ok, buf = cv2.imencode(".jpg", img, [int(cv2.IMWRITE_JPEG_QUALITY), 40])
+    assert ok
+    session_id = str(uuid.uuid4())
+    vision_client.post(
+        "/v1/sessions/register",
+        json={"sessionId": session_id, "deviceInstallId": "device-test-1"},
+    )
+    res = vision_client.post(
+        "/v1/palm/analyze",
+        json={
+            "sessionId": session_id,
+            "deviceInstallId": "device-test-1",
+            "seed": "unit-test",
+            "imageBase64": b64mod.b64encode(buf.tobytes()).decode("ascii"),
+        },
+    )
+    assert res.status_code == 422
+    mock_vision.assert_not_called()
+    detail = res.json()["detail"]
+    assert detail["code"] == "palm_unreadable"
+    assert "blurry image" in detail["reasons"]
+
+
+def test_finalize_success_does_not_upgrade_poor_without_geometry():
+    from app.services.palm_pipeline import _finalize_success
+
+    palm = PalmAnalysis(
+        life_line="strong",
+        heart_line="curved",
+        head_line="long",
+        personality="quiet visionary",
+        traits=["thoughtful"],
+        analysis_source="openrouter_vision",
+        image_quality="poor",
+        quality_warnings=["Hand landmarks required for crease scan", "blurry image"],
+        geometry_source=None,
+        line_geometry=None,
+    )
+    out = _finalize_success(palm)
+    assert out.image_quality == "poor"
+    assert "Hand landmarks required for crease scan" not in out.quality_warnings
+
+
+def _geom(name: str) -> dict:
+    return {"name": name, "points": [{"x": 0.2, "y": 0.3}, {"x": 0.4, "y": 0.5}]}
+
+
+def test_has_usable_geometry_requires_three_live_majors():
+    from app.services.palm_pipeline import _has_usable_geometry
+
+    two = PalmAnalysis(
+        life_line="strong",
+        heart_line="curved",
+        head_line="long",
+        personality="seeker",
+        traits=["thoughtful"],
+        geometry_source="vision_model",
+        line_geometry=[_geom("life_line"), _geom("heart_line")],
+    )
+    assert _has_usable_geometry(two) is False
+
+    heuristic = PalmAnalysis(
+        life_line="strong",
+        heart_line="curved",
+        head_line="long",
+        personality="seeker",
+        traits=["thoughtful"],
+        geometry_source="landmark_heuristic",
+        line_geometry=[_geom("life_line"), _geom("heart_line"), _geom("head_line")],
+    )
+    assert _has_usable_geometry(heuristic) is False
+
+    live = PalmAnalysis(
+        life_line="strong",
+        heart_line="curved",
+        head_line="long",
+        personality="seeker",
+        traits=["thoughtful"],
+        geometry_source="opencv_creases",
+        line_geometry=[_geom("life_line"), _geom("heart_line"), _geom("head_line")],
+    )
+    assert _has_usable_geometry(live) is True
+
+
+@patch("app.services.palm_pipeline.palm_analysis_from_vision", new_callable=AsyncMock)
+@patch("app.services.palm_pipeline.detect_hand_landmarks_from_bytes")
+def test_palm_analyze_production_retakes_motifs_without_geometry(mock_landmarks, mock_vision, monkeypatch):
+    mock_landmarks.return_value = (None, "not_found")
+    mock_vision.return_value = PalmAnalysis(
+        life_line="moderate",
+        heart_line="curved",
+        head_line="medium",
+        personality="steady navigator",
+        traits=["grounded", "curious"],
+        analysis_source="openrouter_vision",
+        image_quality="acceptable",
+        geometry_source=None,
+        line_geometry=None,
+    )
+    monkeypatch.setenv("PALM_ANALYSIS_MODE", "vision")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test-key")
+    monkeypatch.setenv("DEBUG", "false")
+    get_settings.cache_clear()
+    client = TestClient(create_app())
+    b64, _ = _synthetic_palm_jpeg_and_landmarks()
+    session_id = str(uuid.uuid4())
+    client.post(
+        "/v1/sessions/register",
+        json={"sessionId": session_id, "deviceInstallId": "device-test-1"},
+    )
+    res = client.post(
+        "/v1/palm/analyze",
+        json={
+            "sessionId": session_id,
+            "deviceInstallId": "device-test-1",
+            "seed": "unit-test",
+            "imageBase64": b64,
+        },
+    )
+    assert res.status_code == 422
+    assert res.json()["detail"]["code"] == "palm_unreadable"

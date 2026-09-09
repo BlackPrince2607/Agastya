@@ -486,7 +486,7 @@ export async function chatWithGuide(body: {
 export async function fetchDailyGuidance(body: {
   sessionId: string;
   deviceInstallId?: string;
-  palmAnalysis: PalmAnalysisDto;
+  palmAnalysis?: PalmAnalysisDto | null;
   focusTopics?: string[];
   streak?: number;
 }) {
@@ -597,7 +597,7 @@ export async function fetchJourneyTimeline(body: {
 export async function fetchDailyTasks(body: {
   sessionId: string;
   deviceInstallId?: string;
-  palmAnalysis: PalmAnalysisDto;
+  palmAnalysis?: PalmAnalysisDto | null;
   focusTopics?: string[];
   streak?: number;
 }) {
@@ -608,8 +608,52 @@ export async function fetchDailyTasks(body: {
   return postJson<{ tasks: unknown[]; variant: string; focusTheme?: string | null; source?: 'llm' | 'fallback' }>(
     '/v1/tasks/daily',
     {
-      ...body,
+      sessionId: body.sessionId,
       deviceInstallId,
+      palmAnalysis: body.palmAnalysis,
+      focusTopics: body.focusTopics ?? [],
+      streak: body.streak,
+    },
+    false,
+    { timeoutMs: 45_000 },
+  );
+}
+
+export async function fetchDailyBundle(body: {
+  sessionId: string;
+  deviceInstallId?: string;
+  palmAnalysis?: PalmAnalysisDto | null;
+  focusTopics?: string[];
+  streak?: number;
+}) {
+  const deviceInstallId = body.deviceInstallId ?? useSessionStore.getState().deviceInstallId;
+  if (!deviceInstallId) {
+    throw new Error('Device identity is not ready yet. Please try again.');
+  }
+  return postJson<{
+    guidance: {
+      title: string;
+      body: string;
+      focusTheme?: string | null;
+      cached?: boolean;
+      date?: string | null;
+      continueHint?: string | null;
+      consistencyNote?: string | null;
+      source?: 'llm' | 'fallback';
+    };
+    tasks: unknown[];
+    variant?: string | null;
+    focusTheme?: string | null;
+    tasksSource?: 'llm' | 'fallback';
+    tasksCached?: boolean;
+  }>(
+    '/v1/insights/daily-bundle',
+    {
+      sessionId: body.sessionId,
+      deviceInstallId,
+      palmAnalysis: body.palmAnalysis,
+      focusTopics: body.focusTopics ?? [],
+      streak: body.streak,
     },
     false,
     { timeoutMs: 45_000 },

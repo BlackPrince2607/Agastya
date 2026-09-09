@@ -5,9 +5,13 @@ from __future__ import annotations
 import logging
 
 from app.schemas.palm import LineGeometry, LineGeometryPoint, PalmAnalysis
-from app.services.palm_crease import CreaseExtractionResult, extract_creases_from_image
+from app.services.palm_crease import CreaseExtractionResult, extract_creases_from_image, public_quality_warnings
 
 logger = logging.getLogger(__name__)
+
+_MAJOR_GEOMETRY = {"life_line", "heart_line", "head_line"}
+_SECONDARY_GEOMETRY = {"fate_line", "sun_line", "marriage_line"}
+_ALLOWED_GEOMETRY = _MAJOR_GEOMETRY | _SECONDARY_GEOMETRY
 
 
 def _pt(landmarks: list[list[float]], idx: int) -> tuple[float, float] | None:
@@ -43,13 +47,13 @@ def _parse_point(raw: object) -> dict[str, float] | None:
         return None
 
 
-def _sanitize_geometry(geometry: list[dict] | None) -> list[dict]:
+def _sanitize_geometry(geometry: list[dict] | None, *, majors_only: bool = False) -> list[dict]:
     if not geometry:
         return []
-    allowed = {"life_line", "heart_line", "head_line"}
+    allowed = _MAJOR_GEOMETRY if majors_only else _ALLOWED_GEOMETRY
     cleaned: list[dict] = []
     for line in geometry:
-        name = str(line.get("name", "")).strip()
+        name = str(line.get("name", "")).strip().lower().replace(" ", "_").replace("-", "_")
         points = line.get("points")
         if name not in allowed or not isinstance(points, list):
             continue
@@ -59,6 +63,35 @@ def _sanitize_geometry(geometry: list[dict] | None) -> list[dict]:
             continue
         cleaned.append({"name": name, "points": parsed})
     return cleaned
+
+
+def _secondary_geometry_from(prior: list[dict] | None) -> list[dict]:
+    """Keep vision fate/sun/marriage overlays when OpenCV only locks major 3."""
+    if not prior:
+        return []
+    return [g for g in _sanitize_geometry(prior) if g["name"] in _SECONDARY_GEOMETRY]
+
+
+def _merge_geometry(cv_geom: list[dict], prior: list[dict] | None) -> list[dict]:
+    """Merge CV overlays with vision; prefer denser vision majors; keep secondary from either."""
+    cv = _sanitize_geometry(cv_geom)
+    prior_clean = _sanitize_geometry(prior)
+    by_name: dict[str, dict] = {g["name"]: g for g in cv}
+
+    for g in prior_clean:
+        name = g["name"]
+        pts = g.get("points") or []
+        if name in _SECONDARY_GEOMETRY:
+            by_name.setdefault(name, g)
+            continue
+        if name in _MAJOR_GEOMETRY:
+            existing = by_name.get(name)
+            # Prefer vision when it traces the crease with more detail.
+            if existing is None or (len(pts) >= 5 and len(pts) >= len(existing.get("points") or []) + 2):
+                by_name[name] = g
+
+    order = ["life_line", "heart_line", "head_line", "fate_line", "sun_line", "marriage_line"]
+    return [by_name[n] for n in order if n in by_name]
 
 
 def extract_line_geometry(landmarks: list[list[float]] | None) -> list[dict]:
@@ -140,9 +173,16 @@ def apply_crease_result(
     *,
     prefer_cv_motifs: bool = True,
 ) -> PalmAnalysis:
-    """Attach CV geometry/features; override motifs from measured creases when requested."""
+    """Attach CV geometry/features; override major motifs from measured creases when requested.
+
+    Preserves vision secondary line motifs (fate/sun/marriage) and their geometry.
+    """
+    prior_geometry = analysis.line_geometry
     data = analysis.model_dump()
-    geom = _sanitize_geometry(crease.line_geometry)
+    geom = _merge_geometry(crease.line_geometry, prior_geometry)
+    major_names = {g["name"] for g in geom if g["name"] in _MAJOR_GEOMETRY}
+    if len(major_names) < 2:
+        geom = []
     if geom:
         data["line_geometry"] = geom
         data["geometry_source"] = crease.geometry_source or "opencv_creases"
@@ -155,9 +195,10 @@ def apply_crease_result(
             data["life_line"] = crease.life_line
             data["heart_line"] = crease.heart_line
             data["head_line"] = crease.head_line
+            # Do NOT overwrite fate_line / sun_line / marriage_line from CV (vision-only).
         if crease.line_features:
             data["line_features"] = crease.line_features
-            # Mirror into line_details for report consumers
+            # Mirror into line_details for report consumers; keep secondary details from vision.
             details = dict(data.get("line_details") or {})
             for name, feat in crease.line_features.items():
                 details[name] = {
@@ -170,12 +211,10 @@ def apply_crease_result(
         # Confidence: blend CV and prior
         prior = float(data.get("confidence") or 0.5)
         data["confidence"] = round(min(1.0, 0.45 * prior + 0.55 * crease.confidence), 3)
-        if crease.quality_warnings:
-            existing = list(data.get("quality_warnings") or [])
-            for w in crease.quality_warnings:
-                if w not in existing:
-                    existing.append(w)
-            data["quality_warnings"] = existing[:8]
+        data["quality_warnings"] = public_quality_warnings(
+            list(data.get("quality_warnings") or []) + list(crease.quality_warnings or []),
+            locked=True,
+        )
         if analysis.analysis_source in {"openrouter_vision", "dummy", "fallback"}:
             data["analysis_source"] = "hybrid"
         elif not analysis.analysis_source or analysis.analysis_source == "opencv_creases":
@@ -183,8 +222,10 @@ def apply_crease_result(
     else:
         data["line_geometry"] = None
         data["geometry_source"] = "unavailable"
-        if crease.quality_warnings:
-            data["quality_warnings"] = list(crease.quality_warnings)[:8]
+        data["quality_warnings"] = public_quality_warnings(
+            list(crease.quality_warnings or []) or list(data.get("quality_warnings") or []),
+            locked=False,
+        )
         if crease.image_quality in {"poor", "no_hand"}:
             # Only downgrade if we have no better visual quality from LLM
             current_q = str(data.get("image_quality") or "acceptable")
@@ -215,30 +256,33 @@ def merge_cv_into_analysis(
     """
     Attach line geometry from OpenCV crease extraction.
 
-    LLM/vision geometry is ignored. When crease scan fails, landmark-derived
-    overlays are used only if allow_landmark_heuristic=True — never invent
-    creases from a photo by default.
+    Vision major-line geometry may be replaced by CV; secondary vision lines
+    (fate/sun/marriage) are preserved. Landmark-derived overlays are used only
+    if allow_landmark_heuristic=True.
     """
     try:
-        # Never keep model-invented geometry
+        # Strip prior geometry for CV attempt; secondary lines reattached in apply_crease_result.
         stripped = analysis.model_copy(update={"line_geometry": None, "geometry_source": None})
 
         if image_base64:
             crease = run_crease_extraction(image_base64, landmarks)
             if crease.geometry_source == "opencv_creases" and crease.line_geometry:
-                return apply_crease_result(stripped, crease, prefer_cv_motifs=True)
+                # Pass original analysis so secondary geometry/motifs survive.
+                return apply_crease_result(analysis, crease, prefer_cv_motifs=True)
 
         # Anatomy overlays only when explicitly enabled — never invent creases from a photo.
         geometry = extract_line_geometry(landmarks)
         if geometry and allow_landmark_heuristic:
             data = stripped.model_dump()
-            data["line_geometry"] = geometry
+            data["line_geometry"] = _merge_geometry(geometry, analysis.line_geometry)
             data["geometry_source"] = "landmark_heuristic"
             if analysis.analysis_source in {"openrouter_vision", "dummy"}:
                 data["analysis_source"] = "hybrid"
             return PalmAnalysis.model_validate(data)
 
-        # Failed crease scan — no overlay invention
+        # Failed crease scan — keep prior vision geometry when available
+        if analysis.line_geometry and analysis.geometry_source == "vision_model":
+            return analysis
         data = stripped.model_dump()
         data["line_geometry"] = None
         data["geometry_source"] = "unavailable"

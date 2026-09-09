@@ -3,18 +3,24 @@ import { View } from 'react-native';
 
 import { colors } from '@/constants/theme';
 
-type LineKind = 'life' | 'heart' | 'head';
+type LineKind = 'life' | 'heart' | 'head' | 'fate' | 'sun' | 'marriage';
 
 const LINE_COLORS: Record<LineKind, string> = {
   life: colors.purple,
   heart: colors.love,
   head: colors.cyan,
+  fate: colors.primary,
+  sun: '#e8b84a',
+  marriage: '#f472b6',
 };
 
 const LINE_PATHS: Record<LineKind, string> = {
   life: 'M 52 28 C 48 50, 44 72, 46 96',
   heart: 'M 28 52 C 38 46, 52 44, 68 48 C 78 50, 82 56, 80 62',
   head: 'M 30 38 C 48 34, 62 36, 76 42',
+  fate: 'M 50 78 C 50 62, 52 48, 54 28',
+  sun: 'M 58 72 C 60 58, 62 44, 64 30',
+  marriage: 'M 78 42 C 82 42, 86 43, 88 44',
 };
 
 type PalmLineVisualProps = {
@@ -26,6 +32,7 @@ type PalmLineVisualProps = {
 export function PalmLineVisual({ line, size = 88 }: PalmLineVisualProps) {
   const color = LINE_COLORS[line];
   const highlight = LINE_PATHS[line];
+  const dimKeys = (Object.keys(LINE_PATHS) as LineKind[]).filter((k) => k !== line).slice(0, 3);
 
   return (
     <View
@@ -44,16 +51,9 @@ export function PalmLineVisual({ line, size = 88 }: PalmLineVisualProps) {
         <Path d="M 44 22 C 42 8, 46 4, 50 6 C 54 8, 52 18, 48 26" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={1} />
         <Path d="M 56 22 C 54 8, 58 4, 62 6 C 66 8, 64 18, 60 26" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={1} />
         <Path d="M 68 28 C 66 14, 70 8, 74 10 C 78 12, 76 24, 72 32" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={1} />
-        {/* Dim other lines */}
-        {line !== 'life' ? (
-          <Path d={LINE_PATHS.life} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={1} />
-        ) : null}
-        {line !== 'heart' ? (
-          <Path d={LINE_PATHS.heart} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={1} />
-        ) : null}
-        {line !== 'head' ? (
-          <Path d={LINE_PATHS.head} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={1} />
-        ) : null}
+        {dimKeys.map((k) => (
+          <Path key={k} d={LINE_PATHS[k]} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={1} />
+        ))}
         {/* Highlighted line with glow */}
         <Path d={highlight} fill="none" stroke={color} strokeWidth={3} strokeOpacity={0.35} />
         <Path d={highlight} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" />
@@ -64,7 +64,10 @@ export function PalmLineVisual({ line, size = 88 }: PalmLineVisualProps) {
 
 export function lineKindFromName(lineName: string): LineKind {
   const lower = lineName.toLowerCase();
-  if (lower.includes('heart')) return 'heart';
-  if (lower.includes('head')) return 'head';
+  if (lower.includes('heart') || lower.includes('hridaya')) return 'heart';
+  if (lower.includes('head') || lower.includes('mastishka')) return 'head';
+  if (lower.includes('fate') || lower.includes('bhagya')) return 'fate';
+  if (lower.includes('sun') || lower.includes('surya') || lower.includes('apollo')) return 'sun';
+  if (lower.includes('marriage') || lower.includes('vivah')) return 'marriage';
   return 'life';
 }

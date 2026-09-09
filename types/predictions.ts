@@ -2,12 +2,19 @@ export type PredictionPeriod = 'month' | '3month' | 'year';
 
 export type PredictionCategory = 'career' | 'love' | 'money' | 'growth';
 
+export type PredictionBeat = {
+  label: string;
+  text: string;
+};
+
 export type PredictionItem = {
   category: PredictionCategory;
   headline: string;
   detail: string;
   /** 0–100 confidence/intensity */
   score: number;
+  insight?: string | null;
+  beats?: PredictionBeat[];
 };
 
 export type PredictionsResponse = {

@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Delete Account — Agastya</title>
+  <style>
+    :root { --bg: #05020a; --text: #e8e4ff; --muted: #a09ab0; --accent: #d3beeb; --danger: #f2b8b5; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Inter", sans-serif; line-height: 1.7; padding: 24px; }
+    .container { max-width: 760px; margin: 0 auto; padding: 48px 0 80px; }
+    h1 { font-size: 2rem; font-weight: 700; color: var(--accent); margin-bottom: 8px; }
+    .meta { color: var(--muted); font-size: 0.875rem; margin-bottom: 40px; }
+    h2 { font-size: 1.125rem; font-weight: 600; margin-top: 36px; margin-bottom: 12px; color: var(--accent); }
+    p, li { margin-bottom: 14px; color: #cbc4d1; }
+    ul { margin: 0 0 14px 20px; color: #cbc4d1; }
+    a { color: var(--accent); }
+    .back { display: inline-block; margin-bottom: 32px; font-size: 0.875rem; color: var(--muted); text-decoration: none; }
+    label { display: block; margin: 16px 0 6px; color: var(--muted); font-size: 0.875rem; }
+    input, textarea { width: 100%; background: #141315; border: 1px solid rgba(211,190,235,0.25); border-radius: 10px; color: var(--text); padding: 12px 14px; font: inherit; }
+    button { margin-top: 20px; background: var(--accent); color: #1a1220; border: none; border-radius: 999px; padding: 12px 22px; font-weight: 600; cursor: pointer; }
+    .note { margin-top: 24px; padding: 14px 16px; border-radius: 12px; border: 1px solid rgba(242,184,181,0.35); color: var(--danger); }
+  </style>
+</head>
+<body>
+<div class="container">
+  <a class="back" href="https://sharvo.online">← sharvo.online</a>
+  <h1>Delete your Agastya account</h1>
+  <p class="meta">Google Play account deletion request · Last updated August 1, 2026</p>
+
+  <p>You can delete your Agastya account and associated cloud data in either of these ways:</p>
+  <ul>
+    <li><strong>In the app (fastest):</strong> Profile → Delete account (you must be signed in).</li>
+    <li><strong>By web request:</strong> submit the form below. We will verify ownership of the email and delete your account, palm images, sessions, and reading history within <strong>14 days</strong> (usually sooner).</li>
+  </ul>
+
+  <div class="note">
+    Deletion is permanent. Premium unlocks tied to the deleted account cannot be restored to that account.
+  </div>
+
+  <h2>Request deletion by email</h2>
+  <form action="mailto:privacy@sharvo.online" method="get" enctype="text/plain">
+    <input type="hidden" name="subject" value="Agastya account deletion request" />
+    <label for="email">Account email</label>
+    <input id="email" name="body" type="email" required placeholder="you@example.com" />
+    <label for="details">Additional details (optional)</label>
+    <textarea id="details" rows="4" placeholder="Device, approximate sign-up date, or other details to help us locate your account."></textarea>
+    <p style="margin-top:12px;font-size:0.875rem;color:var(--muted)">
+      Tapping submit opens your email app with a prefilled message to <strong>privacy@sharvo.online</strong>. Include the email you used to sign in to Agastya and the phrase <em>Please delete my Agastya account</em>.
+    </p>
+    <button type="submit">Open deletion email</button>
+  </form>
+
+  <h2>What we delete</h2>
+  <ul>
+    <li>Supabase auth user</li>
+    <li>Session and reading data</li>
+    <li>Palm capture files in private storage</li>
+  </ul>
+
+  <p>Questions: <a href="mailto:privacy@sharvo.online">privacy@sharvo.online</a> · <a href="https://sharvo.online/privacy">Privacy Policy</a></p>
+</div>
+</body>
+</html>

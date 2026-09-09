@@ -83,7 +83,7 @@ class Settings(BaseSettings):
     # MediaPipe is optional enrichment — hard budget so it cannot starve OpenRouter vision.
     palm_landmarks_timeout_seconds: float = 8.0
     # Downscale captures before OpenRouter (phone JPEGs are often multi‑MB).
-    palm_vision_max_edge: int = 1024
+    palm_vision_max_edge: int = 1280
 
     # --- Rate limiting (optional Redis / Upstash for multi-worker deploys) ---
     redis_url: str | None = None
@@ -126,8 +126,8 @@ class Settings(BaseSettings):
     billing_razorpay_enabled: bool = False
     billing_razorpay_android_enabled: bool = False
     # Skip Play User Choice token/area requirements — Razorpay opens directly (no Google choice sheet).
-    # Temporary/prod-test mode until User Choice Billing is enrolled. Set false when Play path is live.
-    billing_razorpay_test_bypass: bool = False
+    # Temporarily default true until User Choice Billing is enrolled. Set env false when Play path is live.
+    billing_razorpay_test_bypass: bool = True
     billing_razorpay_countries: str = "IN"
     billing_force_country: str | None = None
     play_package_name: str = "com.agastya.app"

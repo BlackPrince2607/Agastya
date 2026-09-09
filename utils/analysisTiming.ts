@@ -4,8 +4,8 @@ import type { PalmAnalysisDto } from '@/types/palmAnalysis';
 /** Matches client fetch budget for /v1/palm/analyze (vision ~75s + buffer). */
 export const PALM_ANALYZE_CLIENT_TIMEOUT_MS = 100_000;
 
-/** Soft creep while frozen on the "Analyzing palm…" stage (28% / 35%). */
-export const ANALYSIS_ANALYZE_CREEP_MS = 90_000;
+/** Soft creep while waiting on vision — keep the bar moving without overstating progress. */
+export const ANALYSIS_ANALYZE_CREEP_MS = 42_000;
 
 /**
  * Hard ceiling for the whole analysis screen.

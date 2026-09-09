@@ -9,7 +9,7 @@ import {
 import { requiresSupabaseSignIn } from '@/services/authConfig';
 import { ensureSessionMerged } from '@/services/authMerge';
 import { restoreSessionFromServer } from '@/services/sessionRestore';
-import { bootstrapIdentity } from '@/services/identity';
+import { bootstrapIdentity, ensureDeviceIdentity } from '@/services/identity';
 import { requestNotificationPermission, registerPushTokenWithServer } from '@/services/notifications';
 import { isApiConfigured } from '@/services/env';
 import { getSupabase } from '@/services/supabase';
@@ -301,18 +301,28 @@ export function replayOnboarding() {
 
 /** Bootstrap + route from local store; cloud restore awaited when it affects the gate. */
 export async function prepareReturningUser(forceRestore = false): Promise<Href> {
-  await bootstrapIdentity();
+  // Local IDs only — do not await API health here (DNS hangs can block the gate forever).
+  await ensureDeviceIdentity();
   const isSignedIn = await syncAuthFromSupabase();
 
   const snap = useSessionStore.getState();
+  // Fresh installs have a new sessionId but no ritual — awaiting cloud here used to block the
+  // gate on a dark "Restoring…" screen when Railway DNS/network hung past AbortSignal.
+  // Only wait for cloud when we already have local progress or a signed-in user to restore.
   const shouldAwaitCloud =
     isApiConfigured() &&
     Boolean(snap.sessionId) &&
     !snap.skipCloudRestore &&
-    (forceRestore || snap.hasEnteredMain || isSignedIn || !hasRitualReading());
+    (forceRestore || snap.hasEnteredMain || isSignedIn);
 
   if (shouldAwaitCloud) {
+    await bootstrapIdentity();
     await ensureCloudStateSynced(forceRestore || snap.hasEnteredMain || isSignedIn);
+  } else {
+    void bootstrapIdentity();
+    if (isApiConfigured() && !snap.skipCloudRestore) {
+      syncCloudSessionInBackground();
+    }
   }
 
   if (isSignedIn && requiresSupabaseSignIn()) {

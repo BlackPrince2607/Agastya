@@ -28,6 +28,13 @@ stitch_ai_palmistry_ux_design/
 *.key
 *.mobileprovision
 
+# Local signing + key backups (never commit)
+credentials.json
+credentials/
+@anish2607s-team__agastya.jks
+_backup_keys.py
+_finish_backup.py
+
 # Metro
 .metro-health-check*
 
@@ -64,3 +71,11 @@ tsc-check-out.txt
 # generated native folders
 /ios
 /android
+
+# Local APK / Android SDK (sideload builds)
+agastya-b395.apk
+agastya-b395-*.apk
+tmp_prototype.keystore
+.android-sdk/
+*.apk
+*.aab

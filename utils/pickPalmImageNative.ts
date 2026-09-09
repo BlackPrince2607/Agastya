@@ -30,7 +30,7 @@ export async function pickPalmImageNative(): Promise<string | null> {
     mediaTypes: ['images'],
     allowsEditing: true,
     aspect: [3, 4],
-    quality: Platform.OS === 'ios' ? 0.78 : 0.72,
+    quality: Platform.OS === 'ios' ? 0.88 : 0.86,
     base64: true,
     exif: false,
   });

@@ -14,6 +14,7 @@ from app.prompts.templates import CHAT_SYSTEM, TASK_SYSTEM
 from app.schemas.chat import ChatRequest
 from app.schemas.palm import PalmAnalysis
 from app.schemas.tasks import DailyTasksBody, Task
+from app.services.palm_vedic import build_palm_dossier
 from app.services.bucket_store import SessionBucket, normalize_user_memory
 from app.services.day_context import resolve_today_focus_theme
 from app.services.reflection_task import EVENING_REFLECTION, ensure_reflection_task
@@ -240,6 +241,41 @@ def _deterministic_tasks(
     return ensure_reflection_task(tasks), variant, focus_theme
 
 
+def _store_tasks_cache(
+    bkt: SessionBucket,
+    today: str,
+    focus_theme: str,
+    variant: str,
+    tasks_out: list[Task],
+    *,
+    source: str,
+) -> None:
+    from app.services.day_context import (
+        chapter_entry_from_context,
+        get_recent_chapters,
+        merge_recent_chapters,
+    )
+
+    prev = bkt.daily_context if isinstance(bkt.daily_context, dict) else {}
+    base = dict(prev) if prev.get("date") == today else {"date": today}
+    base["date"] = today
+    recent = get_recent_chapters(prev)
+    prev_day = str(prev.get("date") or "")
+    if prev_day and prev_day != today:
+        archived = chapter_entry_from_context(prev)
+        if archived:
+            recent = merge_recent_chapters(recent, [archived])
+    if recent:
+        base["recentChapters"] = recent
+    base["tasksCache"] = {
+        "focusTheme": focus_theme,
+        "variant": variant,
+        "source": source,
+        "tasks": [t.model_dump(by_alias=True) for t in tasks_out],
+    }
+    bkt.daily_context = base
+
+
 async def generate_daily_tasks(
     settings: Settings,
     body: DailyTasksBody,
@@ -248,7 +284,9 @@ async def generate_daily_tasks(
     """Return tasks, variant, focusTheme, whether daily_context mutated, and source."""
     from app.services.day_context import utc_today_iso
 
-    palm = body.palm_analysis
+    palm = body.palm_analysis or (bkt.palm if bkt is not None else None)
+    if palm is None:
+        raise ValueError("palm_required")
     premium = body.is_premium
     focus_topics = list(body.focus_topics)
     temporary: list[dict] = []
@@ -294,6 +332,10 @@ async def generate_daily_tasks(
         "life_line": palm.life_line,
         "heart_line": palm.heart_line,
         "head_line": palm.head_line,
+        "fate_line": palm.fate_line,
+        "sun_line": palm.sun_line,
+        "marriage_line": palm.marriage_line,
+        "palmDossier": build_palm_dossier(palm),
         "premium": premium,
         "focusTopics": focus_topics,
         "lifeJourney": journey,
@@ -311,55 +353,49 @@ async def generate_daily_tasks(
         ],
         temperature=0.65,
         max_tokens=600,
+        timeout_seconds=15.0,
         feature="daily_tasks",
     )
     if completion is None:
         log_ai_fallback("daily_tasks", "no_completion", llm_enabled=settings.llm_enabled)
-        return fallback[0], fallback[1], fallback[2], False, "fallback"
+        tasks_out, variant, theme = fallback
+        if bkt is not None:
+            _store_tasks_cache(bkt, today, theme, variant, tasks_out, source="fallback")
+            return tasks_out, variant, theme, True, "fallback"
+        return tasks_out, variant, theme, False, "fallback"
     try:
         raw = completion.choices[0].message.content or "{}"
         data = loads_llm_json(raw, feature="daily_tasks")
         raw_tasks = data.get("tasks") or []
         if len(raw_tasks) < 3:
             log_ai_fallback("daily_tasks", "insufficient_count")
-            return fallback[0], fallback[1], fallback[2], False, "fallback"
+            tasks_out, variant, theme = fallback
+            if bkt is not None:
+                _store_tasks_cache(bkt, today, theme, variant, tasks_out, source="fallback")
+                return tasks_out, variant, theme, True, "fallback"
+            return tasks_out, variant, theme, False, "fallback"
         try:
             tasks = [Task.model_validate(t) for t in raw_tasks[:3]]
         except Exception:
             log_ai_fallback("daily_tasks", "validation")
-            return fallback[0], fallback[1], fallback[2], False, "fallback"
+            tasks_out, variant, theme = fallback
+            if bkt is not None:
+                _store_tasks_cache(bkt, today, theme, variant, tasks_out, source="fallback")
+                return tasks_out, variant, theme, True, "fallback"
+            return tasks_out, variant, theme, False, "fallback"
         # focusTheme is locked via resolve_today_focus_theme — ignore LLM overrides.
         variant = f"focus:{suggested}"
         tasks_out = ensure_reflection_task(tasks)
         if bkt is not None:
-            from app.services.day_context import (
-                chapter_entry_from_context,
-                get_recent_chapters,
-                merge_recent_chapters,
-            )
-
-            prev = bkt.daily_context if isinstance(bkt.daily_context, dict) else {}
-            base = dict(prev) if prev.get("date") == today else {"date": today}
-            base["date"] = today
-            recent = get_recent_chapters(prev)
-            prev_day = str(prev.get("date") or "")
-            if prev_day and prev_day != today:
-                archived = chapter_entry_from_context(prev)
-                if archived:
-                    recent = merge_recent_chapters(recent, [archived])
-            if recent:
-                base["recentChapters"] = recent
-            base["tasksCache"] = {
-                "focusTheme": suggested,
-                "variant": variant,
-                "source": "llm",
-                "tasks": [t.model_dump(by_alias=True) for t in tasks_out],
-            }
-            bkt.daily_context = base
+            _store_tasks_cache(bkt, today, suggested, variant, tasks_out, source="llm")
             return tasks_out, variant, suggested, True, "llm"
         return tasks_out, variant, suggested, False, "llm"
     except Exception as exc:
         logger.exception("Daily tasks generation failed: %s", exc)
         sentry_sdk.capture_exception(exc)
         log_ai_fallback("daily_tasks", "parse_error", error_type=type(exc).__name__)
-        return fallback[0], fallback[1], fallback[2], False, "fallback"
+        tasks_out, variant, theme = fallback
+        if bkt is not None:
+            _store_tasks_cache(bkt, today, theme, variant, tasks_out, source="fallback")
+            return tasks_out, variant, theme, True, "fallback"
+        return tasks_out, variant, theme, False, "fallback"

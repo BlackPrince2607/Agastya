@@ -36,17 +36,27 @@ import {
   requestNotificationPermission,
 } from '@/services/notifications';
 
-// Initialise Sentry before any other code runs
-initSentry();
-
-// Configure how foreground notifications are shown
-configureNotificationHandler();
+// Best-effort bootstrapping — never throw during module evaluation (blank APK).
+try {
+  initSentry();
+} catch {
+  /* ignore */
+}
+try {
+  configureNotificationHandler();
+} catch {
+  /* ignore */
+}
 
 export {
   ErrorBoundary,
 } from 'expo-router';
 
-SplashScreen.preventAutoHideAsync().catch(() => {});
+try {
+  SplashScreen.preventAutoHideAsync().catch(() => {});
+} catch {
+  /* ignore */
+}
 
 const AgastyaTheme = {
   ...DarkTheme,
@@ -153,7 +163,7 @@ export default function RootLayout() {
           <Stack.Screen name="(main)" />
           <Stack.Screen name="report" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="task/[id]" options={{ animation: 'slide_from_right' }} />
-          <Stack.Screen name="legal/[doc]" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="legal" options={{ animation: 'slide_from_right' }} />
         </Stack>
       </ThemeProvider>
     </SafeAreaProvider>

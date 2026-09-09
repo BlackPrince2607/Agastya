@@ -18,6 +18,8 @@ export type PalmAnalysisDto = {
   line_details?: Record<string, { length?: string; depth?: string; breaks?: number; notes?: string }>;
   mounts?: Record<string, string>;
   fate_line?: string | null;
+  sun_line?: string | null;
+  marriage_line?: string | null;
   line_geometry?: PalmLineGeometry[];
   line_features?: Record<
     string,
@@ -35,13 +37,21 @@ export type PalmAnalysisDto = {
   geometry_source?: 'opencv_creases' | 'vision_model' | 'landmark_heuristic' | 'unavailable' | null;
 };
 
-const LIVE_GEOMETRY = new Set(['opencv_creases', 'vision_model', 'landmark_heuristic']);
+const LIVE_GEOMETRY = new Set(['opencv_creases', 'vision_model']);
+const MAJOR_LINE_NAMES = ['life_line', 'heart_line', 'head_line'] as const;
 
 /** True when we have drawable major-line overlays from vision or CV. */
 export function hasPalmLineOverlay(palm: PalmAnalysisDto | null | undefined): boolean {
-  if (!palm?.line_geometry || palm.line_geometry.length < 2) return false;
-  if (!palm.geometry_source || !LIVE_GEOMETRY.has(palm.geometry_source)) return false;
-  return true;
+  if (!palm?.line_geometry?.length) return false;
+  // Skip knuckle heuristics — those are not real crease traces.
+  if (palm.geometry_source === 'landmark_heuristic') return false;
+  if (palm.geometry_source && !LIVE_GEOMETRY.has(palm.geometry_source) && palm.geometry_source !== 'unavailable') {
+    return false;
+  }
+  const names = new Set(palm.line_geometry.map((g) => g.name));
+  // Prefer all three majors; still allow overlay when at least two are present.
+  const majorCount = MAJOR_LINE_NAMES.filter((key) => names.has(key)).length;
+  return majorCount >= 2;
 }
 
 export function isLivePalmAnalysis(palm: PalmAnalysisDto | null | undefined): boolean {
@@ -55,9 +65,7 @@ export function isLivePalmAnalysis(palm: PalmAnalysisDto | null | undefined): bo
 
 export function palmNeedsRetake(palm: PalmAnalysisDto | null | undefined): boolean {
   if (!palm) return false;
-  // Motifs are enough for a Life Blueprint — never force retake for missing overlays.
-  if (palm.life_line && palm.heart_line && palm.head_line) return false;
-  if (hasPalmLineOverlay(palm)) return false;
-  if (isLivePalmAnalysis(palm) && palm.image_quality !== 'no_hand') return false;
-  return palm.image_quality === 'no_hand';
+  if (palm.image_quality === 'no_hand' || palm.image_quality === 'poor') return true;
+  if ((palm.confidence ?? 1) < 0.35 && !hasPalmLineOverlay(palm)) return true;
+  return !hasPalmLineOverlay(palm);
 }

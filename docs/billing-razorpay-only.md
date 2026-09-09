@@ -4,10 +4,10 @@
 
 | Mode | App flag | Backend flag | Behavior |
 |------|----------|--------------|----------|
-| **Play User Choice (production)** | `EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS=false` | `BILLING_RAZORPAY_TEST_BYPASS=false` | Google choice sheet → Play Billing **or** Razorpay |
-| **Razorpay-direct (sideloaded APK)** | `…_TEST_BYPASS=true` | `…_TEST_BYPASS=true` | Payment Link only (no Play sheet) |
+| **Razorpay-direct (current)** | `EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS=true` | `BILLING_RAZORPAY_TEST_BYPASS=true` | Payment Link only (no Play sheet) |
+| **Play User Choice (when enrolled)** | `…_TEST_BYPASS=false` | `…_TEST_BYPASS=false` | Google choice sheet → Play Billing **or** Razorpay |
 
-`eas.json` **production** uses bypass `false`. **prototype** / **preview** keep bypass `true` so sideloaded APKs can still charge via Razorpay.
+All EAS profiles currently bake bypass `true`. Set both flags to `false` after User Choice Billing is enrolled.
 
 ## Prices (INR)
 
@@ -27,12 +27,12 @@ Play Console base-plan prices for those SKUs should match.
 
 ## Env checklist — production Play billing
 
-**Frontend (EAS production):** product IDs + `EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS=false` (already in `eas.json`).
+**Frontend (EAS):** product IDs + `EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS=true` (Razorpay-direct until User Choice enrolled).
 
 **Backend (Railway):**
 
 - `BILLING_RAZORPAY_ENABLED=true`, `BILLING_RAZORPAY_ANDROID_ENABLED=true`
-- `BILLING_RAZORPAY_TEST_BYPASS=false` (require User Choice token for Razorpay)
+- `BILLING_RAZORPAY_TEST_BYPASS=true` (Razorpay-direct; set `false` when User Choice is live)
 - `RAZORPAY_*` + monthly/annual paise amounts
 - `PLAY_PACKAGE_NAME=com.agastya.app`
 - `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` (Android Publisher API)
