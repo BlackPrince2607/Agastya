@@ -454,16 +454,9 @@ async def verify_google_play_purchase(
         allow_rebind=False,
     )
 
-    recorded = await play_purchase_verify.record_play_purchase(
-        settings,
-        purchase_token=body.purchase_token,
-        session_id=body.session_id,
-        product_id=body.product_id,
-    )
-    if not recorded:
-        if bkt.effectively_premium():
-            return GooglePlayVerifyResponse(is_premium=True, source="google_play")
-        raise HTTPException(status_code=409, detail="Purchase token already processed")
+    if not settings.google_play_service_account_json:
+        logger.error("verify-purchase called but GOOGLE_PLAY_SERVICE_ACCOUNT_JSON is unset")
+        raise HTTPException(status_code=503, detail="Google Play verification not configured")
 
     sub = await play_purchase_verify.verify_subscription_purchase(
         settings,
@@ -479,6 +472,18 @@ async def verify_google_play_purchase(
         )
     if sub is None and product is None:
         raise HTTPException(status_code=402, detail="Purchase verification failed")
+
+    # Record only after Google confirms the token, so a failed verify can be retried.
+    recorded = await play_purchase_verify.record_play_purchase(
+        settings,
+        purchase_token=body.purchase_token,
+        session_id=body.session_id,
+        product_id=body.product_id,
+    )
+    if not recorded:
+        if bkt.effectively_premium():
+            return GooglePlayVerifyResponse(is_premium=True, source="google_play")
+        raise HTTPException(status_code=409, detail="Purchase token already processed")
 
     supabase_user_id = bkt.meta.get("supabaseUserId")
     expires: datetime | None = None
