@@ -60,6 +60,14 @@
         "EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS": "true",
         "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       }
+    },
+    "production-apk": {
+      "extends": "production",
+      "autoIncrement": false,
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
     }
   },
   "submit": {
