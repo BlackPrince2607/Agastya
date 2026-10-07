@@ -21,6 +21,8 @@ export type UnlockResult =
   | {
       ok: false;
       reason: 'cancelled' | 'unavailable' | 'not_entitled' | 'report_failed' | 'failed' | 'need_sign_in';
+      /** Diagnostic code shown to the user / sent to analytics (e.g. `setup_failed:3`). */
+      detail?: string;
     };
 
 /** Major-unit price for Meta/Firebase purchase events (INR display prices as fallback). */
@@ -138,7 +140,7 @@ function promptAdministrativeArea(): Promise<string | null> {
 }
 
 /** Razorpay-only: skip Play User Choice and open Payment Link directly. */
-function isRazorpayDirectCheckoutEnabled(): boolean {
+export function isRazorpayDirectCheckoutEnabled(): boolean {
   return (process.env.EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS || '').trim() === 'true';
 }
 
@@ -165,7 +167,7 @@ export async function unlockPremium(options: { seed?: string }): Promise<UnlockR
   const { seed } = options;
 
   if (Platform.OS !== 'android' || !isAndroidBillingAvailable()) {
-    return { ok: false, reason: 'unavailable' };
+    return { ok: false, reason: 'unavailable', detail: 'api_not_configured' };
   }
 
   if (!useSessionStore.getState().supabaseUserId) {
@@ -178,7 +180,7 @@ export async function unlockPremium(options: { seed?: string }): Promise<UnlockR
   }
 
   if (!isPlayUserChoiceAvailable()) {
-    return { ok: false, reason: 'unavailable' };
+    return { ok: false, reason: 'unavailable', detail: 'native_module_missing' };
   }
 
   const period = useSessionStore.getState().billingPeriod;
@@ -193,7 +195,14 @@ export async function unlockPremium(options: { seed?: string }): Promise<UnlockR
     return { ok: false, reason: 'cancelled' };
   }
   if (choice.outcome === 'unavailable') {
-    return { ok: false, reason: 'unavailable' };
+    const detail = choice.code != null ? `${choice.reason}:${choice.code}` : choice.reason;
+    track('play_billing_unavailable', {
+      reason: choice.reason,
+      code: choice.code ?? null,
+      debug_message: choice.debugMessage ?? null,
+      product_id: productId,
+    });
+    return { ok: false, reason: 'unavailable', detail };
   }
 
   if (choice.outcome === 'alternative_billing') {
@@ -223,7 +232,9 @@ export async function unlockPremium(options: { seed?: string }): Promise<UnlockR
       if (serverPremium) {
         return finalizeAfterEntitlement(seed, 'google_play', true);
       }
-      return { ok: false, reason: verified.reason === 'unavailable' ? 'unavailable' : 'failed' };
+      return verified.reason === 'unavailable'
+        ? { ok: false, reason: 'unavailable', detail: 'server_verify_unavailable' }
+        : { ok: false, reason: 'failed' };
     }
     return finalizeAfterEntitlement(seed, 'google_play', true);
   }

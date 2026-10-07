@@ -319,14 +319,17 @@ export default function PaywallScreen() {
     };
   }, [checkout, mergedSeed, finishUnlockAttempt]);
 
-  const unlockFailureMessage = (reason: string) => {
+  const unlockFailureMessage = (reason: string, detail?: string) => {
     switch (reason) {
       case 'cancelled':
         return 'Purchase was cancelled.';
       case 'need_sign_in':
         return 'Sign in with your email first so we can unlock Premium on your account.';
       case 'unavailable':
-        return 'Billing is not available on this device. Use a production Android build enrolled in Google Play User Choice.';
+        if (testBypass) {
+          return 'Payments are temporarily unavailable. Please check your connection and try again.';
+        }
+        return `Google Play billing could not start. Make sure the app is installed from the Play Store and you are signed in to Google Play, then try again.${detail ? `\n\n(Code: ${detail})` : ''}`;
       case 'not_entitled':
         return 'No Premium purchase was found for this account.';
       case 'report_failed':
@@ -355,7 +358,10 @@ export default function PaywallScreen() {
           return;
         }
         if (result.reason !== 'cancelled') {
-          Alert.alert('Could not unlock Premium', unlockFailureMessage(result.reason));
+          Alert.alert(
+            'Could not unlock Premium',
+            unlockFailureMessage(result.reason, result.detail),
+          );
         }
         setBusy(false);
         setBusyLabel(null);
@@ -526,7 +532,9 @@ export default function PaywallScreen() {
           ) : null}
           <View className="flex-row items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2">
             <Ionicons name="shield-checkmark" size={14} color={colors.health} />
-            <Text className="font-body text-[11px] text-on-surface/85">Secure payment via Google Play or Razorpay</Text>
+            <Text className="font-body text-[11px] text-on-surface/85">
+              {testBypass ? 'Secure payment via Razorpay (UPI / Cards)' : 'Secure payment via Google Play or Razorpay'}
+            </Text>
           </View>
         </StickyActionBar>
       </View>

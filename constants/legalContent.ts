@@ -59,7 +59,7 @@ export const LEGAL_DOCUMENTS: Record<LegalDocId, LegalDocument> = {
       { type: 'h3', text: 'c. Payment Information' },
       {
         type: 'p',
-        text: 'If you purchase an Agastya app Plus subscription, payments are processed securely through Google Play Billing or Apple App Store.',
+        text: 'If you purchase an Agastya app Plus subscription, payments are processed securely by Razorpay (UPI, cards, and other supported methods), Google Play Billing, or the Apple App Store. We do not store your card or UPI details.',
       },
       {
         type: 'p',

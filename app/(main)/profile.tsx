@@ -29,7 +29,7 @@ import { signInFromProfile, signOutAndReturnToWelcome, resetLocalAndSignOut, del
 import { fetchJourneyTimeline, fetchWeeklySummary } from '@/services/agastyaApi';
 import { readThisWeeksLocalSummary, writeLocalWeekly } from '@/services/guidanceCache';
 import { AnalyticsEvent, trackOnce } from '@/services/analytics';
-import { checkPremiumStatus } from '@/services/premiumUnlock';
+import { checkPremiumStatus, isRazorpayDirectCheckoutEnabled } from '@/services/premiumUnlock';
 import { isSupabaseEnabled } from '@/services/supabase';
 import { useChatStore } from '@/store/chatStore';
 import { useSessionStore } from '@/store/sessionStore';
@@ -57,6 +57,7 @@ function appVersionLabel(): string {
 }
 
 function storePurchasesUrl(): string | null {
+  if (isRazorpayDirectCheckoutEnabled()) return null;
   if (Platform.OS === 'android') {
     return 'https://play.google.com/store/account/orderhistory';
   }

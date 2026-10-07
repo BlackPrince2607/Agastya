@@ -208,10 +208,12 @@ export default function ChatScreen() {
   const hasUserMessages = messages.some((m) => m.role === 'you');
   const showSuggestions = suggestions.length > 0 && !replyBusy && !isTyping;
   const keyboardOpen = keyboardHeight > 0;
+  // Android edge-to-edge does not resize the window for the IME, and RN reports the
+  // keyboard height minus the system nav bar — so add the bottom inset back.
   const composerBottom = keyboardOpen
-    ? Platform.OS === 'ios'
-      ? keyboardHeight + 8
-      : 8
+    ? Platform.OS === 'android'
+      ? keyboardHeight + insets.bottom + 8
+      : keyboardHeight + 8
     : dockBottom;
 
   if (!premium) {
@@ -251,7 +253,7 @@ export default function ChatScreen() {
                 gap: 0,
                 paddingHorizontal: 8,
                 paddingTop: 12,
-                paddingBottom: composerHeight + 16,
+                paddingBottom: 16,
               }}>
               {messages.map((m, i) => {
                 const prev = messages[i - 1];

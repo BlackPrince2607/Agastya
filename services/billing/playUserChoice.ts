@@ -15,7 +15,7 @@ export type UserChoiceResult =
   | { outcome: 'play_billing'; purchaseToken: string; productId: string }
   | { outcome: 'alternative_billing'; externalTransactionToken: string }
   | { outcome: 'cancelled' }
-  | { outcome: 'unavailable'; reason: string };
+  | { outcome: 'unavailable'; reason: string; code?: number; debugMessage?: string };
 
 type NativeModule = {
   isAvailable?: () => boolean;
@@ -27,6 +27,9 @@ type NativeModule = {
     externalTransactionToken?: string;
     purchaseToken?: string;
     productId?: string;
+    reason?: string;
+    code?: number;
+    debugMessage?: string;
   }>;
 };
 
@@ -81,7 +84,12 @@ export async function launchPlayUserChoiceBilling(options?: {
       return { outcome: 'cancelled' };
     }
     if (result.outcome === 'unavailable') {
-      return { outcome: 'unavailable', reason: 'billing_client' };
+      return {
+        outcome: 'unavailable',
+        reason: result.reason || 'billing_client',
+        code: result.code,
+        debugMessage: result.debugMessage,
+      };
     }
     if (result.outcome === 'play_billing' && result.purchaseToken) {
       return {

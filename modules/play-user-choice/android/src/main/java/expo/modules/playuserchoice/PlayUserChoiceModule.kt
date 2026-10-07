@@ -36,7 +36,7 @@ class PlayUserChoiceModule : Module() {
     AsyncFunction("launchUserChoiceBilling") { productId: String, offerToken: String?, promise: Promise ->
       val activity = appContext.currentActivity
       if (activity == null) {
-        promise.resolve(mapOf("outcome" to "unavailable"))
+        promise.resolve(mapOf("outcome" to "unavailable", "reason" to "no_activity"))
         return@AsyncFunction
       }
 
@@ -71,14 +71,16 @@ class PlayUserChoiceModule : Module() {
                 )
               )
             } else {
-              p.resolve(mapOf("outcome" to "unavailable"))
+              p.resolve(mapOf("outcome" to "unavailable", "reason" to "purchase_not_completed"))
             }
           }
           else -> {
             p.resolve(
               mapOf(
                 "outcome" to "unavailable",
-                "code" to result.responseCode
+                "reason" to "purchase_error",
+                "code" to result.responseCode,
+                "debugMessage" to result.debugMessage
               )
             )
           }
@@ -108,7 +110,14 @@ class PlayUserChoiceModule : Module() {
       client.startConnection(object : BillingClientStateListener {
         override fun onBillingSetupFinished(billingResult: BillingResult) {
           if (billingResult.responseCode != BillingClient.BillingResponseCode.OK) {
-            pendingPromise.getAndSet(null)?.resolve(mapOf("outcome" to "unavailable"))
+            pendingPromise.getAndSet(null)?.resolve(
+              mapOf(
+                "outcome" to "unavailable",
+                "reason" to "setup_failed",
+                "code" to billingResult.responseCode,
+                "debugMessage" to billingResult.debugMessage
+              )
+            )
             return
           }
 
@@ -123,10 +132,21 @@ class PlayUserChoiceModule : Module() {
           // PBL 8+: callback returns QueryProductDetailsResult (fetched + unfetched lists).
           client.queryProductDetailsAsync(params) { detailsResult, queryProductDetailsResult ->
             val productDetailsList = queryProductDetailsResult.productDetailsList
-            if (detailsResult.responseCode != BillingClient.BillingResponseCode.OK ||
-              productDetailsList.isEmpty()
-            ) {
-              pendingPromise.getAndSet(null)?.resolve(mapOf("outcome" to "unavailable"))
+            if (detailsResult.responseCode != BillingClient.BillingResponseCode.OK) {
+              pendingPromise.getAndSet(null)?.resolve(
+                mapOf(
+                  "outcome" to "unavailable",
+                  "reason" to "product_query_failed",
+                  "code" to detailsResult.responseCode,
+                  "debugMessage" to detailsResult.debugMessage
+                )
+              )
+              return@queryProductDetailsAsync
+            }
+            if (productDetailsList.isEmpty()) {
+              pendingPromise.getAndSet(null)?.resolve(
+                mapOf("outcome" to "unavailable", "reason" to "product_not_found:$productId")
+              )
               return@queryProductDetailsAsync
             }
 
@@ -135,7 +155,9 @@ class PlayUserChoiceModule : Module() {
             val token = offerToken
               ?: offerDetails?.firstOrNull()?.offerToken
             if (token == null) {
-              pendingPromise.getAndSet(null)?.resolve(mapOf("outcome" to "unavailable"))
+              pendingPromise.getAndSet(null)?.resolve(
+                mapOf("outcome" to "unavailable", "reason" to "no_active_offer:$productId")
+              )
               return@queryProductDetailsAsync
             }
 
@@ -149,8 +171,17 @@ class PlayUserChoiceModule : Module() {
               .build()
 
             val launchResult = client.launchBillingFlow(activity, flowParams)
-            if (launchResult.responseCode != BillingClient.BillingResponseCode.OK) {
+            if (launchResult.responseCode == BillingClient.BillingResponseCode.USER_CANCELED) {
               pendingPromise.getAndSet(null)?.resolve(mapOf("outcome" to "cancelled"))
+            } else if (launchResult.responseCode != BillingClient.BillingResponseCode.OK) {
+              pendingPromise.getAndSet(null)?.resolve(
+                mapOf(
+                  "outcome" to "unavailable",
+                  "reason" to "launch_failed",
+                  "code" to launchResult.responseCode,
+                  "debugMessage" to launchResult.debugMessage
+                )
+              )
             }
           }
         }

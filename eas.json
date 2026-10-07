@@ -47,6 +47,7 @@
     },
     "production": {
       "autoIncrement": true,
+      "channel": "production",
       "environment": "production",
       "android": {
         "buildType": "app-bundle"
@@ -56,7 +57,7 @@
         "EXPO_PUBLIC_PLAY_PRODUCT_MONTHLY": "premium_monthly",
         "EXPO_PUBLIC_PLAY_PRODUCT_ANNUAL": "premium_annual",
         "EXPO_PUBLIC_BILLING_DEFAULT_ADMIN_AREA": "KA",
-        "EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS": "false",
+        "EXPO_PUBLIC_BILLING_RAZORPAY_TEST_BYPASS": "true",
         "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       }
     }
