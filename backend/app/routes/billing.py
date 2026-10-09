@@ -597,7 +597,7 @@ small{{display:block;margin-top:18px;color:#8f86a8;max-width:320px}}</style></he
 <script>
 var cancelUrl = {cancel_js};
 var options = {options_js};
-options.modal = {{ ondismiss: function () {{}} }};
+options.modal = {{ ondismiss: function () {{ window.location.replace(cancelUrl); }} }};
 function openCheckout() {{ new Razorpay(options).open(); }}
 document.getElementById("pay").onclick = openCheckout;
 document.getElementById("back").onclick = function (e) {{ e.preventDefault(); window.location.replace(cancelUrl); }};

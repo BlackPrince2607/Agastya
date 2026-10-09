@@ -277,7 +277,9 @@ export default function PaywallScreen() {
       setBusy(true);
       try {
         const deepLinkOpts = checkout === 'success' ? confirmOptsRef.current : undefined;
-        const result = await finalizeRazorpayCheckout(mergedSeed, deepLinkOpts);
+        const result = await finalizeRazorpayCheckout(mergedSeed, deepLinkOpts, {
+          abandonIfUnpaid: checkout !== 'success',
+        });
         // Always navigate if premium was granted — even if this effect later cleans up.
         const unlocked = finishUnlockAttempt(result, {
           alertOnFail:

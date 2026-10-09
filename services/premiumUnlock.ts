@@ -271,6 +271,10 @@ export async function checkPremiumStatus(options: { seed?: string }): Promise<Un
 export async function finalizeRazorpayCheckout(
   seed?: string,
   confirmOptions?: ConfirmRazorpayOptions,
+  opts?: {
+    /** User came back without a success redirect: an unpaid checkout means they backed out. */
+    abandonIfUnpaid?: boolean;
+  },
 ): Promise<UnlockResult> {
   const setPremium = useSessionStore.getState().setPremium;
 
@@ -296,6 +300,11 @@ export async function finalizeRazorpayCheckout(
   if (confirmed.status === 'not_found') {
     if (await syncPremiumFromServer()) return grantPremium();
     return { ok: false, reason: 'not_entitled' };
+  }
+  if (opts?.abandonIfUnpaid && confirmed.status === 'created') {
+    if (await syncPremiumFromServer()) return grantPremium();
+    clearLastCheckoutIntentId();
+    return { ok: false, reason: 'cancelled', detail: 'checkout_not_paid' };
   }
 
   // Fallback: webhook may still be catching up — retry confirm + bootstrap.
