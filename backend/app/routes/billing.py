@@ -1,14 +1,17 @@
-"""Razorpay Payment Links and Google Play purchase verification."""
+"""Razorpay Subscriptions / Payment Links and Google Play purchase verification."""
 
 from __future__ import annotations
 
+import html
+import json
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 from urllib.parse import parse_qsl, quote, urlencode, urlparse, urlunparse
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app.config import Settings, get_settings
 from app.middleware.rate_limit import check_rate_limit
@@ -16,6 +19,8 @@ from app.schemas.billing import (
     BillingConfigResponse,
     GooglePlayVerifyBody,
     GooglePlayVerifyResponse,
+    RazorpayCancelSubscriptionBody,
+    RazorpayCancelSubscriptionResponse,
     RazorpayConfirmPaymentBody,
     RazorpayConfirmPaymentResponse,
     RazorpayPaymentLinkBody,
@@ -109,7 +114,21 @@ async def billing_config(
     platform: Annotated[Literal["android", "ios", "web"], Query()] = "android",
 ) -> BillingConfigResponse:
     country = detect_country(request, settings)
-    raw = build_billing_config(platform=platform, country=country, settings=settings)
+    subscription_amounts: dict[str, int] = {}
+    if settings.razorpay_configured:
+        for period, plan_id in settings.razorpay_subscription_plans.items():
+            try:
+                subscription_amounts[period] = await razorpay_client.plan_amount_paise(
+                    settings, plan_id
+                )
+            except Exception as exc:
+                logger.warning("Razorpay plan %s lookup failed: %s", plan_id, exc)
+    raw = build_billing_config(
+        platform=platform,
+        country=country,
+        settings=settings,
+        subscription_amounts=subscription_amounts or None,
+    )
     return BillingConfigResponse.model_validate(raw)
 
 
@@ -180,8 +199,16 @@ async def create_razorpay_payment_link(
             status_code=401,
             detail="Sign in required before starting checkout",
         )
-    amount = razorpay_client.amount_for_period(settings, body.billing_period)
     billing_period = "annual" if body.billing_period == "lifetime" else body.billing_period
+    plan_id = settings.razorpay_plan_for_period(billing_period)
+    try:
+        if plan_id:
+            amount = await razorpay_client.plan_amount_paise(settings, plan_id)
+        else:
+            amount = razorpay_client.amount_for_period(settings, billing_period)
+    except Exception as exc:
+        logger.warning("Razorpay amount lookup failed period=%s: %s", billing_period, exc)
+        raise HTTPException(status_code=502, detail="Could not load Razorpay plan") from exc
 
     intent = await billing_intents.create_checkout_intent(
         settings,
@@ -213,6 +240,26 @@ async def create_razorpay_payment_link(
     if body.external_transaction_token:
         notes["external_transaction_token"] = body.external_transaction_token
 
+    if plan_id:
+        try:
+            sub = await razorpay_client.create_subscription(
+                settings,
+                plan_id=plan_id,
+                total_count=razorpay_client.SUBSCRIPTION_TOTAL_COUNT.get(billing_period, 120),
+                notes=notes,
+            )
+        except Exception as exc:
+            logger.warning("Razorpay subscription create failed: %s", exc)
+            raise HTTPException(status_code=502, detail="Could not create Razorpay subscription") from exc
+        subscription_id = str(sub.get("id") or "")
+        if not subscription_id:
+            raise HTTPException(status_code=502, detail="Razorpay subscription missing")
+        if not await billing_intents.attach_subscription(settings, intent_id, subscription_id):
+            raise HTTPException(status_code=502, detail="Could not save Razorpay subscription")
+        origin = _public_api_origin(request, settings)
+        checkout_url = f"{origin}{settings.api_v1_prefix}/billing/razorpay/subscribe/{intent_id}"
+        return RazorpayPaymentLinkResponse(checkout_url=checkout_url, checkout_intent_id=intent_id)
+
     callback_url = _razorpay_callback_url(body.success_url, request, settings)
     try:
         link = await razorpay_client.create_payment_link(
@@ -242,14 +289,18 @@ async def _grant_razorpay_premium_from_intent(
     *,
     bkt,
     payment_id: str | None = None,
+    expires: datetime | None = None,
 ) -> RazorpayConfirmPaymentResponse:
     session_id = str(intent.get("session_id") or "")
     supabase_user_id = intent.get("supabase_user_id")
     billing_period = str(intent.get("billing_period") or "monthly")
     if billing_period == "lifetime":
         billing_period = "annual"
-    days = razorpay_client.premium_expiry_days(billing_period)
-    expires = datetime.now(timezone.utc) + timedelta(days=days)
+    if expires is None:
+        days = razorpay_client.premium_expiry_days(billing_period)
+        expires = datetime.now(timezone.utc) + timedelta(days=days)
+        if intent.get("razorpay_subscription_id"):
+            expires += razorpay_client.SUBSCRIPTION_GRACE
 
     await billing_intents.mark_intent_paid(
         settings,
@@ -362,6 +413,27 @@ async def confirm_razorpay_payment(
 
     payment_id = str(body.payment_id).strip() if body.payment_id else None
 
+    subscription_id = intent.get("razorpay_subscription_id")
+    if subscription_id:
+        try:
+            sub = await razorpay_client.fetch_subscription(settings, str(subscription_id))
+        except Exception as exc:
+            logger.warning("Razorpay subscription fetch failed: %s", exc)
+            raise HTTPException(status_code=502, detail="Could not verify Razorpay subscription") from exc
+        if not razorpay_client.subscription_is_paid(sub) and intent.get("status") != "paid":
+            return RazorpayConfirmPaymentResponse(
+                is_premium=False, status=str(sub.get("status") or "unknown")
+            )
+        if str(sub.get("status")) in razorpay_client.SUBSCRIPTION_ENDED_STATUSES:
+            return RazorpayConfirmPaymentResponse(is_premium=False, status=str(sub["status"]))
+        return await _grant_razorpay_premium_from_intent(
+            settings,
+            intent,
+            bkt=bkt,
+            payment_id=payment_id or intent.get("razorpay_payment_id"),
+            expires=razorpay_client.subscription_access_until(sub),
+        )
+
     if intent.get("status") == "paid":
         if payment_id and not intent.get("razorpay_payment_id"):
             await billing_intents.attach_payment_id(settings, str(intent["id"]), payment_id)
@@ -432,6 +504,213 @@ async def confirm_razorpay_payment(
 
     return await _grant_razorpay_premium_from_intent(
         settings, intent, bkt=bkt, payment_id=payment_id
+    )
+
+
+def _with_query(url: str, params: dict[str, str]) -> str:
+    """Append query params; works for custom schemes (agastya://…) too."""
+    if not params:
+        return url
+    sep = "&" if "?" in url else "?"
+    return f"{url}{sep}{urlencode(params)}"
+
+
+def _redirect_page(target: str, *, title: str, message: str) -> HTMLResponse:
+    """HTML redirect into the app; a button covers browsers that block scheme auto-redirects."""
+    target_attr = html.escape(target, quote=True)
+    target_js = json.dumps(target).replace("</", "<\\/")
+    page = f"""<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{html.escape(title)}</title>
+<style>body{{font-family:system-ui,sans-serif;background:#0d0b1a;color:#f3eefc;display:flex;
+min-height:100vh;align-items:center;justify-content:center;margin:0;text-align:center}}
+a{{display:inline-block;margin-top:20px;padding:14px 28px;border-radius:12px;background:#c9a24d;
+color:#1a1424;text-decoration:none;font-weight:600}}</style></head>
+<body><div><h2>{html.escape(title)}</h2><p>{html.escape(message)}</p>
+<a href="{target_attr}">Return to Agastya</a></div>
+<script>window.location.replace({target_js});</script></body></html>"""
+    return HTMLResponse(page, headers={"Cache-Control": "no-store"})
+
+
+async def _load_subscription_intent(settings: Settings, intent_id: str) -> dict[str, Any]:
+    try:
+        validate_session_id(intent_id)
+    except Exception as exc:
+        raise HTTPException(status_code=404, detail="Checkout not found") from exc
+    intent = await billing_intents.get_intent_by_id(settings, intent_id)
+    if not intent or not intent.get("razorpay_subscription_id"):
+        raise HTTPException(status_code=404, detail="Checkout not found")
+    return intent
+
+
+@router.get("/billing/razorpay/subscribe/{intent_id}", response_class=HTMLResponse)
+async def razorpay_subscription_checkout_page(
+    intent_id: str,
+    request: Request,
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> HTMLResponse:
+    """Hosted Razorpay Checkout for a subscription (opened in the browser by the app)."""
+    if not settings.razorpay_configured:
+        raise HTTPException(status_code=503, detail="Razorpay is not configured")
+    intent = await _load_subscription_intent(settings, intent_id)
+    success_url = _with_query(
+        str(intent.get("success_url") or ""), {"checkoutIntentId": intent_id}
+    )
+    cancel_url = str(intent.get("cancel_url") or success_url)
+    if intent.get("status") == "paid":
+        return _redirect_page(success_url, title="Premium is active", message="Returning to Agastya…")
+
+    origin = _public_api_origin(request, settings)
+    callback_url = (
+        f"{origin}{settings.api_v1_prefix}/billing/razorpay/subscription-callback"
+        f"?{urlencode({'intent': intent_id})}"
+    )
+    period = str(intent.get("billing_period") or "monthly")
+    label = "Yearly" if period == "annual" else period.capitalize()
+    options = {
+        "key": settings.razorpay_key_id,
+        "subscription_id": str(intent["razorpay_subscription_id"]),
+        "name": "Agastya",
+        "description": f"Agastya Premium — {label} (auto-renews)",
+        "callback_url": callback_url,
+        "redirect": True,
+        "theme": {"color": "#c9a24d"},
+    }
+    options_js = json.dumps(options).replace("</", "<\\/")
+    cancel_js = json.dumps(cancel_url).replace("</", "<\\/")
+    amount = int(intent.get("amount") or 0)
+    price = f"₹{amount // 100}" if amount else ""
+    page = f"""<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Agastya Premium</title>
+<style>body{{font-family:system-ui,sans-serif;background:#0d0b1a;color:#f3eefc;display:flex;
+min-height:100vh;align-items:center;justify-content:center;margin:0;text-align:center;padding:24px}}
+button{{margin-top:20px;padding:14px 28px;border:0;border-radius:12px;background:#c9a24d;
+color:#1a1424;font-weight:600;font-size:16px}}a{{display:block;margin-top:16px;color:#b9aed6}}
+small{{display:block;margin-top:18px;color:#8f86a8;max-width:320px}}</style></head>
+<body><div><h2>Agastya Premium — {html.escape(label)}</h2>
+<p>{html.escape(price)} / {"year" if period == "annual" else "month"}</p>
+<button id="pay">Continue to payment</button>
+<a id="back" href="#">Cancel and return to app</a>
+<small>Renews automatically until cancelled. Cancel anytime from Profile in the app.</small></div>
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<script>
+var cancelUrl = {cancel_js};
+var options = {options_js};
+options.modal = {{ ondismiss: function () {{}} }};
+function openCheckout() {{ new Razorpay(options).open(); }}
+document.getElementById("pay").onclick = openCheckout;
+document.getElementById("back").onclick = function (e) {{ e.preventDefault(); window.location.replace(cancelUrl); }};
+window.addEventListener("load", openCheckout);
+</script></body></html>"""
+    return HTMLResponse(page, headers={"Cache-Control": "no-store"})
+
+
+@router.post("/billing/razorpay/subscription-callback", response_class=HTMLResponse)
+async def razorpay_subscription_callback(
+    request: Request,
+    settings: Annotated[Settings, Depends(get_settings)],
+    intent: Annotated[str, Query(alias="intent", min_length=1, max_length=64)],
+) -> HTMLResponse:
+    """Razorpay Checkout POSTs here after the subscription's first payment."""
+    intent_row = await _load_subscription_intent(settings, intent)
+    success_url = _with_query(str(intent_row.get("success_url") or ""), {"checkoutIntentId": intent})
+    cancel_url = str(intent_row.get("cancel_url") or success_url)
+
+    form = dict(parse_qsl((await request.body()).decode("utf-8", errors="ignore")))
+    payment_id = (form.get("razorpay_payment_id") or "").strip()
+    signature = form.get("razorpay_signature")
+    subscription_id = str(intent_row["razorpay_subscription_id"])
+
+    if not payment_id:
+        logger.info(
+            "Razorpay subscription checkout not completed intent=%s error=%s",
+            intent,
+            form.get("error[description]") or form.get("error[code]"),
+        )
+        return _redirect_page(cancel_url, title="Payment not completed", message="Returning to Agastya…")
+
+    if not razorpay_client.verify_subscription_signature(
+        key_secret=settings.razorpay_key_secret or "",
+        payment_id=payment_id,
+        subscription_id=subscription_id,
+        signature=signature,
+    ):
+        logger.warning("Razorpay subscription callback signature invalid intent=%s", intent)
+        return _redirect_page(cancel_url, title="Payment could not be verified", message="Returning to Agastya…")
+
+    # Grant here so premium is live before the app reopens; the app's confirm call
+    # and the subscription webhooks are idempotent backups.
+    try:
+        session_id = str(intent_row.get("session_id") or "")
+        await _hydrate(session_id, settings)
+        expires = None
+        try:
+            sub = await razorpay_client.fetch_subscription(settings, subscription_id)
+            expires = razorpay_client.subscription_access_until(sub)
+        except Exception as exc:
+            logger.warning("Razorpay subscription fetch after callback failed: %s", exc)
+        await _grant_razorpay_premium_from_intent(
+            settings, intent_row, bkt=bucket(session_id), payment_id=payment_id, expires=expires
+        )
+    except Exception:
+        logger.exception("Razorpay subscription grant on callback failed intent=%s", intent)
+
+    return _redirect_page(success_url, title="Payment successful", message="Returning to Agastya…")
+
+
+@router.post(
+    "/billing/razorpay/cancel-subscription",
+    response_model=RazorpayCancelSubscriptionResponse,
+    response_model_by_alias=True,
+)
+async def cancel_razorpay_subscription(
+    body: RazorpayCancelSubscriptionBody,
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> RazorpayCancelSubscriptionResponse:
+    """Stop auto-renewal; premium stays active until the paid cycle ends."""
+    if not settings.razorpay_configured:
+        raise HTTPException(status_code=503, detail="Razorpay is not configured")
+    await _hydrate(body.session_id, settings)
+    bkt = bucket(body.session_id)
+    assert_device_binding(
+        session_id=body.session_id,
+        device_install_id=body.device_install_id,
+        stored_device_id=bkt.meta.get("deviceInstallId"),
+        allow_rebind=False,
+    )
+    supabase_user_id = bkt.meta.get("supabaseUserId")
+    intent = await billing_intents.get_latest_paid_subscription_intent(
+        settings,
+        supabase_user_id=str(supabase_user_id) if supabase_user_id else None,
+        session_id=body.session_id,
+    )
+    if not intent:
+        raise HTTPException(status_code=404, detail="No active subscription found")
+
+    subscription_id = str(intent["razorpay_subscription_id"])
+    try:
+        sub = await razorpay_client.fetch_subscription(settings, subscription_id)
+        status = str(sub.get("status") or "")
+        if status not in razorpay_client.SUBSCRIPTION_ENDED_STATUSES:
+            try:
+                sub = await razorpay_client.cancel_subscription(
+                    settings, subscription_id, at_cycle_end=status != "created"
+                )
+            except httpx.HTTPStatusError as exc:
+                # 400 when cancellation is already scheduled for the cycle end.
+                if exc.response.status_code != 400:
+                    raise
+                logger.info("Razorpay cancel returned 400 (likely already scheduled): %s", exc)
+    except Exception as exc:
+        logger.warning("Razorpay cancel subscription failed: %s", exc)
+        raise HTTPException(status_code=502, detail="Could not cancel subscription") from exc
+
+    access_until = razorpay_client.subscription_access_until(sub)
+    return RazorpayCancelSubscriptionResponse(
+        cancelled=True,
+        status=str(sub.get("status") or "unknown"),
+        access_until=access_until.isoformat() if access_until else None,
     )
 
 

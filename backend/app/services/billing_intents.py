@@ -66,6 +66,45 @@ async def attach_payment_link(settings: Settings, intent_id: str, payment_link_i
     )
 
 
+async def attach_subscription(settings: Settings, intent_id: str, subscription_id: str) -> bool:
+    client = rest_client(settings)
+    if client is None:
+        return False
+    return await client.patch(
+        TABLE,
+        filters={"id": intent_id},
+        values={"razorpay_subscription_id": subscription_id},
+    )
+
+
+async def get_intent_by_subscription(
+    settings: Settings, subscription_id: str
+) -> dict[str, Any] | None:
+    client = rest_client(settings)
+    if client is None:
+        return None
+    return await client.select_one(TABLE, filters={"razorpay_subscription_id": subscription_id})
+
+
+async def get_latest_paid_subscription_intent(
+    settings: Settings, *, supabase_user_id: str | None, session_id: str
+) -> dict[str, Any] | None:
+    """Most recent paid Razorpay subscription for the account (falls back to session)."""
+    client = rest_client(settings)
+    if client is None:
+        return None
+    filters_list: list[dict[str, str]] = []
+    if supabase_user_id:
+        filters_list.append({"supabase_user_id": str(supabase_user_id), "status": "paid"})
+    filters_list.append({"session_id": session_id, "status": "paid"})
+    for filters in filters_list:
+        rows = await client.select_many(TABLE, filters=filters, limit=10, order="created_at.desc")
+        for row in rows:
+            if row.get("razorpay_subscription_id"):
+                return row
+    return None
+
+
 async def get_intent_by_id(settings: Settings, intent_id: str) -> dict[str, Any] | None:
     client = rest_client(settings)
     if client is None:

@@ -30,12 +30,17 @@ def detect_country(request: Request, settings: Settings) -> str | None:
     return None
 
 
+_INTERVALS = {"weekly": "week", "monthly": "month", "annual": "year"}
+
+
 def build_billing_config(
     *,
     platform: BillingPlatform,
     country: str | None,
     settings: Settings,
+    subscription_amounts: dict[str, int] | None = None,
 ) -> dict[str, Any]:
+    """`subscription_amounts` maps period → paise for Razorpay subscription plans."""
     country_code = (country or "").upper() or None
     providers: list[dict[str, Any]] = []
 
@@ -68,16 +73,29 @@ def build_billing_config(
     currency = "INR" if country_code == "IN" else "USD"
     plans: dict[str, Any] = {}
     if settings.razorpay_configured and currency == "INR":
-        plans = {
-            "monthly": {
-                "amount": settings.razorpay_amount_monthly_paise,
-                "currency": "INR",
-            },
-            "annual": {
-                "amount": settings.razorpay_amount_annual_paise,
-                "currency": "INR",
-            },
-        }
+        if subscription_amounts:
+            plans = {
+                period: {
+                    "amount": amount,
+                    "currency": "INR",
+                    "interval": _INTERVALS[period],
+                    "autoRenew": True,
+                }
+                for period, amount in subscription_amounts.items()
+            }
+        elif settings.razorpay_amount_monthly_paise and settings.razorpay_amount_annual_paise:
+            plans = {
+                "monthly": {
+                    "amount": settings.razorpay_amount_monthly_paise,
+                    "currency": "INR",
+                    "interval": "month",
+                },
+                "annual": {
+                    "amount": settings.razorpay_amount_annual_paise,
+                    "currency": "INR",
+                    "interval": "year",
+                },
+            }
 
     return {
         "country": country_code,

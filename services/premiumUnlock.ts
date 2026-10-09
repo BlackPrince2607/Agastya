@@ -28,7 +28,7 @@ export type UnlockResult =
 /** Major-unit price for Meta/Firebase purchase events (INR display prices as fallback). */
 const FALLBACK_PLAN_MAJOR: Record<BillingPeriod, number> = {
   monthly: 149,
-  annual: 349,
+  annual: 699,
 };
 
 async function purchaseValueProps(billingPeriod: BillingPeriod): Promise<{
@@ -46,7 +46,7 @@ async function purchaseValueProps(billingPeriod: BillingPeriod): Promise<{
     };
   }
   return {
-    value: FALLBACK_PLAN_MAJOR[billingPeriod] ?? 349,
+    value: FALLBACK_PLAN_MAJOR[billingPeriod] ?? 699,
     currency: config?.currency || 'INR',
     billing_period: billingPeriod,
   };

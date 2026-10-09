@@ -29,6 +29,7 @@ import { signInFromProfile, signOutAndReturnToWelcome, resetLocalAndSignOut, del
 import { fetchJourneyTimeline, fetchWeeklySummary } from '@/services/agastyaApi';
 import { readThisWeeksLocalSummary, writeLocalWeekly } from '@/services/guidanceCache';
 import { AnalyticsEvent, trackOnce } from '@/services/analytics';
+import { cancelRazorpaySubscriptionForSession } from '@/services/billing/billingService';
 import { checkPremiumStatus, isRazorpayDirectCheckoutEnabled } from '@/services/premiumUnlock';
 import { isSupabaseEnabled } from '@/services/supabase';
 import { useChatStore } from '@/store/chatStore';
@@ -112,6 +113,7 @@ export default function ProfileScreen() {
   const messageCount = useChatStore((s) => s.messageCount);
 
   const [restoreBusy, setRestoreBusy] = useState(false);
+  const [cancelBusy, setCancelBusy] = useState(false);
   const [signOutBusy, setSignOutBusy] = useState(false);
   const [startFreshBusy, setStartFreshBusy] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
@@ -225,6 +227,51 @@ export default function ProfileScreen() {
 
   const reportsGenerated = (palmAnalysis ? 1 : 0) + (partnerPalmAnalysis ? 1 : 0);
   const managePurchasesUrl = storePurchasesUrl();
+  const razorpaySubscriptions = isRazorpayDirectCheckoutEnabled();
+
+  const confirmCancelSubscription = () => {
+    if (cancelBusy) return;
+    Alert.alert(
+      'Cancel subscription?',
+      'Auto-renewal will stop. You keep Premium until the end of the period you already paid for.',
+      [
+        { text: 'Keep subscription', style: 'cancel' },
+        {
+          text: 'Cancel subscription',
+          style: 'destructive',
+          onPress: () => {
+            setCancelBusy(true);
+            void cancelRazorpaySubscriptionForSession()
+              .then((result) => {
+                if (result.ok) {
+                  const until = result.accessUntil
+                    ? new Date(result.accessUntil).toLocaleDateString(undefined, {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                      })
+                    : null;
+                  Alert.alert(
+                    'Subscription cancelled',
+                    until
+                      ? `You won't be charged again. Premium stays active until ${until}.`
+                      : "You won't be charged again.",
+                  );
+                } else if (result.reason === 'not_found') {
+                  Alert.alert(
+                    'No active subscription',
+                    'We could not find an auto-renewing subscription on this account.',
+                  );
+                } else {
+                  Alert.alert('Could not cancel', 'Please try again in a moment, or contact support.');
+                }
+              })
+              .finally(() => setCancelBusy(false));
+          },
+        },
+      ],
+    );
+  };
 
   const handleRestorePurchases = async () => {
     if (restoreBusy) return;
@@ -453,15 +500,25 @@ export default function ProfileScreen() {
           />
         </SettingsSection>
 
-        <SettingsSection index={2} title="Premium" subtitle="One-time unlock and billing">
+        <SettingsSection index={2} title="Premium" subtitle="Subscription and billing">
           <SettingsRow
             icon="refresh"
             title={restoreBusy ? 'Checking…' : 'Check premium status'}
             subtitle="Sync Premium from your account"
             onPress={() => void handleRestorePurchases()}
             disabled={restoreBusy}
-            last={!managePurchasesUrl || !premium}
+            last={!premium || (!managePurchasesUrl && !razorpaySubscriptions)}
           />
+          {premium && razorpaySubscriptions ? (
+            <SettingsRow
+              icon="payments"
+              title={cancelBusy ? 'Cancelling…' : 'Cancel subscription'}
+              subtitle="Stop auto-renewal; Premium stays until the paid period ends"
+              onPress={confirmCancelSubscription}
+              disabled={cancelBusy}
+              last={!managePurchasesUrl}
+            />
+          ) : null}
           {premium && managePurchasesUrl ? (
             <SettingsRow
               icon="settings"

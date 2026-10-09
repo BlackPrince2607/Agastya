@@ -59,7 +59,7 @@ export const LEGAL_DOCUMENTS: Record<LegalDocId, LegalDocument> = {
       { type: 'h3', text: 'c. Payment Information' },
       {
         type: 'p',
-        text: 'If you purchase an Agastya app Plus subscription, payments are processed securely by Razorpay (UPI, cards, and other supported methods), Google Play Billing, or the Apple App Store. We do not store your card or UPI details.',
+        text: 'If you purchase an Agastya app Plus subscription, payments are processed securely by Razorpay (UPI, cards, and other supported methods), Google Play Billing, or the Apple App Store. We do not store your card or UPI details. Monthly and yearly plans renew automatically at the end of each period until cancelled; you can cancel anytime from Profile and keep access until the paid period ends.',
       },
       {
         type: 'p',

@@ -38,6 +38,7 @@ async def _apply_premium_to_ids(
     premium_source: str | None = None,
     premium_expires_at: datetime | None = None,
     clear_expires: bool = False,
+    notify: bool = True,
 ) -> bool:
     """Apply premium change. Returns True if at least one write succeeded (or nothing to write)."""
     kwargs = {
@@ -71,7 +72,7 @@ async def _apply_premium_to_ids(
     if not attempted:
         return False
     wrote_ok = wrote or not settings.supabase_enabled
-    if wrote_ok and is_premium:
+    if wrote_ok and is_premium and notify:
         try:
             from app.services import expo_push, push_token_repository
 
@@ -128,6 +129,18 @@ async def razorpay_webhook(
     payment_id = str(payment_entity.get("id") or "").strip() or None
     payment_link_id = str(link_entity.get("id") or "").strip() or None
 
+    if event_type.startswith("subscription."):
+        sub_entity: dict[str, Any] = (pl.get("subscription") or {}).get("entity") or {}
+        return await _handle_razorpay_subscription(
+            settings, event_type=event_type, sub_entity=sub_entity, payment_id=payment_id
+        )
+
+    if event_type == "payment.captured" and payment_entity.get("invoice_id"):
+        # Subscription charges carry an invoice; access is driven by subscription.* events.
+        logger.info("Razorpay payment.captured for invoice %s — handled via subscription events",
+                    payment_entity.get("invoice_id"))
+        return {"status": "ignored"}
+
     if event_type == "payment_link.expired":
         return await _handle_payment_link_expired(
             settings, link_entity=link_entity, payment_link_id=payment_link_id
@@ -155,6 +168,107 @@ async def razorpay_webhook(
 
     logger.info("Razorpay webhook event %s — ignored", event_type)
     return {"status": "ignored"}
+
+
+_SUB_GRANT_EVENTS = {"subscription.activated", "subscription.charged", "subscription.resumed"}
+_SUB_END_EVENTS = {
+    "subscription.cancelled",
+    "subscription.completed",
+    "subscription.halted",
+    "subscription.paused",
+}
+
+
+async def _handle_razorpay_subscription(
+    settings: Settings,
+    *,
+    event_type: str,
+    sub_entity: dict[str, Any],
+    payment_id: str | None,
+) -> dict[str, str]:
+    subscription_id = str(sub_entity.get("id") or "").strip()
+    if not subscription_id or event_type not in _SUB_GRANT_EVENTS | _SUB_END_EVENTS:
+        logger.info("Razorpay %s sub=%s — ignored", event_type, subscription_id or "?")
+        return {"status": "ignored"}
+
+    event_key = f"sub:{subscription_id}:{event_type}:{payment_id or sub_entity.get('current_end') or ''}"
+    claim, claimed = await billing_idempotency.begin_webhook_events(
+        "razorpay", [event_key], settings
+    )
+    if claim == "duplicate":
+        return {"status": "duplicate"}
+    if claim == "unavailable":
+        raise HTTPException(status_code=503, detail="Webhook idempotency unavailable")
+
+    try:
+        notes = sub_entity.get("notes") if isinstance(sub_entity.get("notes"), dict) else {}
+        intent = await billing_intents.get_intent_by_subscription(settings, subscription_id)
+        session_id = (intent or {}).get("session_id") or notes.get("session_id")
+        supabase_user_id = (intent or {}).get("supabase_user_id") or notes.get("supabase_user_id")
+        if not session_id and not supabase_user_id:
+            logger.warning("Razorpay %s sub=%s has no session/user", event_type, subscription_id)
+            await billing_idempotency.complete_webhook_events("razorpay", claimed, settings)
+            return {"status": "ignored"}
+
+        if event_type in _SUB_GRANT_EVENTS:
+            expires = razorpay_client.subscription_access_until(sub_entity)
+            if expires is None:
+                period = str((intent or {}).get("billing_period") or notes.get("billing_period") or "monthly")
+                expires = (
+                    datetime.now(timezone.utc)
+                    + timedelta(days=razorpay_client.premium_expiry_days(period))
+                    + razorpay_client.SUBSCRIPTION_GRACE
+                )
+            if intent and intent.get("status") != "paid":
+                await billing_intents.mark_intent_paid(
+                    settings, str(intent["id"]), razorpay_payment_id=payment_id
+                )
+            ok = await _apply_premium_to_ids(
+                settings,
+                str(session_id) if session_id else None,
+                str(supabase_user_id) if supabase_user_id else None,
+                True,
+                f"Razorpay {event_type}",
+                premium_source="razorpay",
+                premium_expires_at=expires,
+                notify=event_type == "subscription.activated",
+            )
+        else:
+            access_until = razorpay_client.subscription_access_until(sub_entity)
+            now = datetime.now(timezone.utc)
+            if event_type == "subscription.cancelled" and access_until and access_until > now:
+                # Cancelled mid-cycle: keep what was paid for, then let it lapse.
+                ok = await _apply_premium_to_ids(
+                    settings,
+                    str(session_id) if session_id else None,
+                    str(supabase_user_id) if supabase_user_id else None,
+                    True,
+                    f"Razorpay {event_type}",
+                    premium_source="razorpay",
+                    premium_expires_at=access_until,
+                    notify=False,
+                )
+            else:
+                ok = await _apply_premium_to_ids(
+                    settings,
+                    str(session_id) if session_id else None,
+                    str(supabase_user_id) if supabase_user_id else None,
+                    False,
+                    f"Razorpay {event_type}",
+                    clear_expires=True,
+                )
+
+        if not ok and settings.supabase_enabled and not settings.debug:
+            await billing_idempotency.fail_webhook_events("razorpay", claimed, settings)
+            raise HTTPException(status_code=500, detail="Failed to update premium")
+
+        await billing_idempotency.complete_webhook_events("razorpay", claimed, settings)
+        return {"status": "ok"}
+    except HTTPException:
+        raise
+    except Exception:
+        await billing_idempotency.fail_webhook_events("razorpay", claimed, settings)
+        raise
 
 
 async def _handle_payment_link_expired(

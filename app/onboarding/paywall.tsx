@@ -475,7 +475,7 @@ export default function PaywallScreen() {
             <PlanRow
               label="Yearly Access"
               badge="Best value"
-              price={`${formatPlanPrice('annual', '₹349')}/year`}
+              price={`${formatPlanPrice('annual', '₹699')}/year`}
               active={period === 'annual'}
               onPress={() => setPeriod('annual')}
             />
@@ -485,6 +485,12 @@ export default function PaywallScreen() {
               active={period === 'monthly'}
               onPress={() => setPeriod('monthly')}
             />
+            {testBypass ? (
+              <Text className="px-1 text-center font-body text-[11px] leading-4 text-on-surface-variant">
+                Auto-renews every {period === 'annual' ? 'year' : 'month'} until cancelled. Cancel anytime
+                from Profile — you keep Premium until the end of the paid period.
+              </Text>
+            ) : null}
           </View>
         </View>
 

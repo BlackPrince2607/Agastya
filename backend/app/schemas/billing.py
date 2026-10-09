@@ -10,9 +10,10 @@ from app.utils.validators import _parse_uuid, validate_device_install_id
 class RazorpayPaymentLinkBody(BaseModel):
     session_id: str = Field(alias="sessionId")
     device_install_id: str = Field(alias="deviceInstallId")
-    # monthly | annual (lifetime accepted and treated as annual for grants)
+    # Periods with a configured Razorpay plan id are sold as auto-renewing Subscriptions;
+    # otherwise a one-time Payment Link. Legacy "lifetime" is treated as annual.
     billing_period: Literal["monthly", "annual", "lifetime"] = Field(
-        default="annual",
+        default="monthly",
         alias="billingPeriod",
     )
     success_url: str = Field(alias="successUrl", max_length=2048)
@@ -80,6 +81,34 @@ class RazorpayConfirmPaymentResponse(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class RazorpayCancelSubscriptionBody(BaseModel):
+    session_id: str = Field(alias="sessionId")
+    device_install_id: str = Field(alias="deviceInstallId")
+
+    model_config = {"populate_by_name": True}
+
+    @field_validator("session_id")
+    @classmethod
+    def _session_uuid(cls, v: str) -> str:
+        return _parse_uuid(v)
+
+    @field_validator("device_install_id")
+    @classmethod
+    def _device_id(cls, v: str) -> str:
+        out = validate_device_install_id(v)
+        if out is None:
+            raise ValueError("deviceInstallId required")
+        return out
+
+
+class RazorpayCancelSubscriptionResponse(BaseModel):
+    cancelled: bool
+    status: str
+    access_until: str | None = Field(default=None, alias="accessUntil")
+
+    model_config = {"populate_by_name": True}
+
+
 class GooglePlayVerifyBody(BaseModel):
     session_id: str = Field(alias="sessionId")
     device_install_id: str = Field(alias="deviceInstallId")
@@ -121,6 +150,10 @@ class BillingProviderInfo(BaseModel):
 class BillingPlanInfo(BaseModel):
     amount: int
     currency: str
+    interval: Literal["week", "month", "year"] | None = None
+    auto_renew: bool = Field(default=False, alias="autoRenew")
+
+    model_config = {"populate_by_name": True}
 
 
 class BillingConfigResponse(BaseModel):

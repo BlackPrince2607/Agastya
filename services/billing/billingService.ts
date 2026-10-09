@@ -2,6 +2,7 @@ import * as Linking from 'expo-linking';
 import { Platform } from 'react-native';
 
 import {
+  cancelRazorpaySubscription,
   createRazorpayPaymentLink,
   confirmRazorpayPayment,
   fetchBillingConfig,
@@ -15,6 +16,8 @@ import { useSessionStore } from '@/store/sessionStore';
 export type BillingPlanInfo = {
   amount: number;
   currency: string;
+  interval?: 'week' | 'month' | 'year' | null;
+  autoRenew?: boolean;
 };
 
 export type BillingConfig = {
@@ -185,6 +188,32 @@ export async function confirmRazorpayCheckout(
     return { ok: false, status: result.status };
   } catch {
     return { ok: false };
+  }
+}
+
+export type CancelSubscriptionResult =
+  | { ok: true; accessUntil: string | null }
+  | { ok: false; reason: 'not_found' | 'unavailable' | 'failed' };
+
+/** Stop Razorpay auto-renewal; Premium stays active until the paid period ends. */
+export async function cancelRazorpaySubscriptionForSession(): Promise<CancelSubscriptionResult> {
+  if (!isApiConfigured()) {
+    return { ok: false, reason: 'unavailable' };
+  }
+  const snap = useSessionStore.getState();
+  if (!snap.sessionId || !snap.deviceInstallId) {
+    return { ok: false, reason: 'unavailable' };
+  }
+  try {
+    const result = await cancelRazorpaySubscription({
+      sessionId: snap.sessionId,
+      deviceInstallId: snap.deviceInstallId,
+    });
+    return { ok: true, accessUntil: result.accessUntil ?? null };
+  } catch (err) {
+    const status = (err as { status?: number } | null)?.status;
+    if (status === 404) return { ok: false, reason: 'not_found' };
+    return { ok: false, reason: 'failed' };
   }
 }
 

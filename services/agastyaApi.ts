@@ -344,6 +344,19 @@ export async function confirmRazorpayPayment(body: {
   );
 }
 
+export async function cancelRazorpaySubscription(body: {
+  sessionId: string;
+  deviceInstallId: string;
+}) {
+  return postJson<{ cancelled: boolean; status: string; accessUntil?: string | null }>(
+    '/v1/billing/razorpay/cancel-subscription',
+    {
+      sessionId: body.sessionId,
+      deviceInstallId: body.deviceInstallId,
+    },
+  );
+}
+
 export async function verifyGooglePlayPurchase(body: {
   sessionId: string;
   deviceInstallId: string;

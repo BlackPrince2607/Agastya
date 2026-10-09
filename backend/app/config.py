@@ -123,6 +123,10 @@ class Settings(BaseSettings):
     razorpay_amount_premium_paise: int | None = None
     razorpay_amount_monthly_paise: int | None = None
     razorpay_amount_annual_paise: int | None = None
+    # Razorpay Subscriptions (auto-renewing). A period with a plan id uses Subscriptions
+    # instead of a one-time Payment Link.
+    razorpay_plan_monthly: str | None = None
+    razorpay_plan_annual: str | None = None
     billing_razorpay_enabled: bool = False
     billing_razorpay_android_enabled: bool = False
     # Skip Play User Choice token/area requirements — Razorpay opens directly (no Google choice sheet).
@@ -192,13 +196,24 @@ class Settings(BaseSettings):
         return None
 
     @property
+    def razorpay_subscription_plans(self) -> dict[str, str]:
+        """Billing period → Razorpay plan id, for periods sold as subscriptions."""
+        plans = {
+            "monthly": (self.razorpay_plan_monthly or "").strip(),
+            "annual": (self.razorpay_plan_annual or "").strip(),
+        }
+        return {period: plan for period, plan in plans.items() if plan}
+
+    def razorpay_plan_for_period(self, period: str) -> str | None:
+        return self.razorpay_subscription_plans.get(period)
+
+    @property
     def razorpay_configured(self) -> bool:
-        return bool(
-            self.razorpay_key_id
-            and self.razorpay_key_secret
-            and self.razorpay_amount_monthly_paise
-            and self.razorpay_amount_annual_paise
-        )
+        if not (self.razorpay_key_id and self.razorpay_key_secret):
+            return False
+        if self.razorpay_subscription_plans:
+            return True
+        return bool(self.razorpay_amount_monthly_paise and self.razorpay_amount_annual_paise)
 
     @property
     def razorpay_test_bypass_active(self) -> bool:
