@@ -86,23 +86,39 @@ async def get_intent_by_subscription(
     return await client.select_one(TABLE, filters={"razorpay_subscription_id": subscription_id})
 
 
-async def get_latest_paid_subscription_intent(
-    settings: Settings, *, supabase_user_id: str | None, session_id: str
-) -> dict[str, Any] | None:
-    """Most recent paid Razorpay subscription for the account (falls back to session)."""
+async def list_paid_subscription_intents(
+    settings: Settings, *, supabase_user_id: str | None, session_id: str | None
+) -> list[dict[str, Any]]:
+    """Paid Razorpay subscription intents for the account and/or session, newest first."""
     client = rest_client(settings)
     if client is None:
-        return None
+        return []
     filters_list: list[dict[str, str]] = []
     if supabase_user_id:
         filters_list.append({"supabase_user_id": str(supabase_user_id), "status": "paid"})
-    filters_list.append({"session_id": session_id, "status": "paid"})
+    if session_id:
+        filters_list.append({"session_id": session_id, "status": "paid"})
+    seen: set[str] = set()
+    out: list[dict[str, Any]] = []
     for filters in filters_list:
-        rows = await client.select_many(TABLE, filters=filters, limit=10, order="created_at.desc")
+        rows = await client.select_many(TABLE, filters=filters, limit=20, order="created_at.desc")
         for row in rows:
-            if row.get("razorpay_subscription_id"):
-                return row
-    return None
+            sub_id = row.get("razorpay_subscription_id")
+            if sub_id and sub_id not in seen:
+                seen.add(sub_id)
+                out.append(row)
+    out.sort(key=lambda r: str(r.get("created_at") or ""), reverse=True)
+    return out
+
+
+async def get_latest_paid_subscription_intent(
+    settings: Settings, *, supabase_user_id: str | None, session_id: str | None
+) -> dict[str, Any] | None:
+    """Most recent paid Razorpay subscription for the account (falls back to session)."""
+    rows = await list_paid_subscription_intents(
+        settings, supabase_user_id=supabase_user_id, session_id=session_id
+    )
+    return rows[0] if rows else None
 
 
 async def get_intent_by_id(settings: Settings, intent_id: str) -> dict[str, Any] | None:

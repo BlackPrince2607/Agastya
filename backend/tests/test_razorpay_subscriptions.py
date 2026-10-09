@@ -291,7 +291,7 @@ def test_cancel_subscription_at_cycle_end(client, monkeypatch):
     captured: dict = {}
 
     async def fake_latest(*_a, **_k):
-        return _intent(status="paid")
+        return [_intent(status="paid")]
 
     async def fake_fetch_sub(*_a, **_k):
         return {"id": SUB_ID, "status": "active", "current_end": CURRENT_END}
@@ -301,7 +301,7 @@ def test_cancel_subscription_at_cycle_end(client, monkeypatch):
         return {"id": SUB_ID, "status": "active", "current_end": CURRENT_END}
 
     monkeypatch.setattr(
-        "app.services.billing_intents.get_latest_paid_subscription_intent", fake_latest
+        "app.services.billing_intents.list_paid_subscription_intents", fake_latest
     )
     monkeypatch.setattr("app.services.razorpay_client.fetch_subscription", fake_fetch_sub)
     monkeypatch.setattr("app.services.razorpay_client.cancel_subscription", fake_cancel)
@@ -319,10 +319,10 @@ def test_cancel_subscription_at_cycle_end(client, monkeypatch):
 
 def test_cancel_subscription_404_without_subscription(client, monkeypatch):
     async def fake_latest(*_a, **_k):
-        return None
+        return []
 
     monkeypatch.setattr(
-        "app.services.billing_intents.get_latest_paid_subscription_intent", fake_latest
+        "app.services.billing_intents.list_paid_subscription_intents", fake_latest
     )
     _seed_bucket(is_premium=True)
     res = client.post(
@@ -355,6 +355,9 @@ def _patch_webhook_infra(monkeypatch, applied: list):
     async def fake_by_sub(*_a, **_k):
         return _intent(status="paid")
 
+    async def fake_latest_paid(*_a, **_k):
+        return _intent(status="paid")
+
     async def fake_apply(settings, session_id, user_id, is_premium, source, **kwargs):
         applied.append((session_id, user_id, is_premium, kwargs))
         return True
@@ -363,6 +366,9 @@ def _patch_webhook_infra(monkeypatch, applied: list):
     monkeypatch.setattr("app.routes.webhooks.billing_idempotency.complete_webhook_events", noop)
     monkeypatch.setattr("app.routes.webhooks.billing_idempotency.fail_webhook_events", noop)
     monkeypatch.setattr("app.services.billing_intents.get_intent_by_subscription", fake_by_sub)
+    monkeypatch.setattr(
+        "app.services.billing_intents.get_latest_paid_subscription_intent", fake_latest_paid
+    )
     monkeypatch.setattr("app.routes.webhooks._apply_premium_to_ids", fake_apply)
 
 
@@ -435,3 +441,193 @@ def test_webhook_subscription_payment_captured_ignored(client, monkeypatch):
     assert res.status_code == 200
     assert res.json()["status"] == "ignored"
     assert applied == []
+
+
+def test_webhook_end_event_ignored_when_user_resubscribed(client, monkeypatch):
+    applied: list = []
+    _patch_webhook_infra(monkeypatch, applied)
+
+    async def newer_sub(*_a, **_k):
+        return _intent(status="paid", razorpay_subscription_id="sub_newer")
+
+    monkeypatch.setattr("app.services.billing_intents.get_latest_paid_subscription_intent", newer_sub)
+    res = _post_webhook(
+        client,
+        {
+            "event": "subscription.halted",
+            "payload": {"subscription": {"entity": {"id": SUB_ID, "status": "halted"}}},
+        },
+    )
+    assert res.status_code == 200
+    assert res.json()["status"] == "ignored"
+    assert applied == []
+
+
+# --- Edge cases ---------------------------------------------------------------
+
+
+def test_create_checkout_rejected_when_already_premium(client, monkeypatch):
+    async def fail(*_a, **_k):
+        raise AssertionError("no checkout should be created for a premium account")
+
+    monkeypatch.setattr("app.services.billing_intents.create_checkout_intent", fail)
+    b = _seed_bucket(is_premium=True)
+    b.premium_expires_at = datetime.fromtimestamp(CURRENT_END, tz=timezone.utc)
+
+    res = client.post(
+        "/v1/billing/razorpay/create-payment-link",
+        json={
+            "sessionId": SESSION_ID,
+            "deviceInstallId": DEVICE_ID,
+            "billingPeriod": "monthly",
+            "successUrl": "agastya://onboarding/paywall?checkout=success",
+            "cancelUrl": "agastya://onboarding/paywall?checkout=cancelled",
+            "platform": "android",
+        },
+    )
+    assert res.status_code == 409
+
+
+def test_confirm_finds_paid_subscription_from_another_device(client, monkeypatch):
+    granted: dict = {}
+    _patch_grant(monkeypatch, granted)
+    other = _intent(
+        status="paid",
+        session_id="00000000-0000-4000-8000-0000000009ff",
+        device_install_id="old-device",
+    )
+
+    async def none(*_a, **_k):
+        return None
+
+    async def fake_latest_paid(_settings, *, supabase_user_id, session_id):
+        assert supabase_user_id == USER_ID
+        return other
+
+    async def fake_fetch_sub(*_a, **_k):
+        return {"id": SUB_ID, "status": "active", "paid_count": 2, "current_end": CURRENT_END}
+
+    monkeypatch.setattr("app.services.billing_intents.get_latest_intent_for_session", none)
+    monkeypatch.setattr(
+        "app.services.billing_intents.get_latest_paid_subscription_intent", fake_latest_paid
+    )
+    monkeypatch.setattr("app.services.razorpay_client.fetch_subscription", fake_fetch_sub)
+    _seed_bucket()
+
+    res = client.post(
+        "/v1/billing/razorpay/confirm-payment",
+        json={"sessionId": SESSION_ID, "deviceInstallId": DEVICE_ID},
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["isPremium"] is True
+    assert granted["user"][0] == USER_ID
+
+
+def test_confirm_rejects_other_users_checkout(client, monkeypatch):
+    async def fake_get(*_a, **_k):
+        return _intent(
+            session_id="00000000-0000-4000-8000-0000000009ff",
+            supabase_user_id="00000000-0000-4000-8000-0000000009aa",
+        )
+
+    monkeypatch.setattr("app.services.billing_intents.get_intent_by_id", fake_get)
+    _seed_bucket()
+    res = client.post(
+        "/v1/billing/razorpay/confirm-payment",
+        json={"sessionId": SESSION_ID, "deviceInstallId": DEVICE_ID, "checkoutIntentId": INTENT_ID},
+    )
+    assert res.status_code == 404
+
+
+def test_cancel_cancels_every_active_subscription(client, monkeypatch):
+    cancelled: list = []
+
+    async def two_subs(*_a, **_k):
+        return [_intent(status="paid", razorpay_subscription_id="sub_b"), _intent(status="paid")]
+
+    async def fake_fetch_sub(_settings, subscription_id):
+        return {"id": subscription_id, "status": "active", "current_end": CURRENT_END}
+
+    async def fake_cancel(_settings, subscription_id, *, at_cycle_end):
+        cancelled.append(subscription_id)
+        return {"id": subscription_id, "status": "active", "current_end": CURRENT_END}
+
+    monkeypatch.setattr("app.services.billing_intents.list_paid_subscription_intents", two_subs)
+    monkeypatch.setattr("app.services.razorpay_client.fetch_subscription", fake_fetch_sub)
+    monkeypatch.setattr("app.services.razorpay_client.cancel_subscription", fake_cancel)
+    _seed_bucket(is_premium=True)
+
+    res = client.post(
+        "/v1/billing/razorpay/cancel-subscription",
+        json={"sessionId": SESSION_ID, "deviceInstallId": DEVICE_ID},
+    )
+    assert res.status_code == 200
+    assert cancelled == ["sub_b", SUB_ID]
+
+
+def test_cancel_skips_already_ended_subscription(client, monkeypatch):
+    async def one_sub(*_a, **_k):
+        return [_intent(status="paid")]
+
+    async def fake_fetch_sub(*_a, **_k):
+        return {"id": SUB_ID, "status": "cancelled", "current_end": CURRENT_END}
+
+    async def fail_cancel(*_a, **_k):
+        raise AssertionError("ended subscriptions must not be cancelled again")
+
+    monkeypatch.setattr("app.services.billing_intents.list_paid_subscription_intents", one_sub)
+    monkeypatch.setattr("app.services.razorpay_client.fetch_subscription", fake_fetch_sub)
+    monkeypatch.setattr("app.services.razorpay_client.cancel_subscription", fail_cancel)
+    _seed_bucket(is_premium=True)
+
+    res = client.post(
+        "/v1/billing/razorpay/cancel-subscription",
+        json={"sessionId": SESSION_ID, "deviceInstallId": DEVICE_ID},
+    )
+    assert res.status_code == 200
+    assert res.json()["status"] == "cancelled"
+
+
+def test_hosted_page_for_expired_checkout_returns_to_app(client, monkeypatch):
+    async def fake_get(*_a, **_k):
+        return _intent(status="expired")
+
+    monkeypatch.setattr("app.services.billing_intents.get_intent_by_id", fake_get)
+    res = client.get(f"/v1/billing/razorpay/subscribe/{INTENT_ID}")
+    assert res.status_code == 200
+    assert "checkout=cancelled" in res.text
+    assert "checkout.js" not in res.text
+
+
+def test_hosted_page_dismiss_returns_to_app(client, monkeypatch):
+    async def fake_get(*_a, **_k):
+        return _intent()
+
+    monkeypatch.setattr("app.services.billing_intents.get_intent_by_id", fake_get)
+    res = client.get(f"/v1/billing/razorpay/subscribe/{INTENT_ID}")
+    assert "ondismiss: function () { window.location.replace(cancelUrl); }" in res.text
+
+
+def test_delete_account_cancels_subscriptions_immediately(client, monkeypatch):
+    import asyncio
+
+    from app.routes import auth as auth_routes
+
+    calls: list = []
+
+    async def subs(*_a, **_k):
+        return [_intent(status="paid")]
+
+    async def fake_fetch_sub(*_a, **_k):
+        return {"id": SUB_ID, "status": "active", "current_end": CURRENT_END}
+
+    async def fake_cancel(_settings, subscription_id, *, at_cycle_end):
+        calls.append((subscription_id, at_cycle_end))
+        return {"id": subscription_id, "status": "cancelled"}
+
+    monkeypatch.setattr("app.services.billing_intents.list_paid_subscription_intents", subs)
+    monkeypatch.setattr("app.services.razorpay_client.fetch_subscription", fake_fetch_sub)
+    monkeypatch.setattr("app.services.razorpay_client.cancel_subscription", fake_cancel)
+
+    asyncio.run(auth_routes._cancel_razorpay_subscriptions(USER_ID, get_settings()))
+    assert calls == [(SUB_ID, False)]

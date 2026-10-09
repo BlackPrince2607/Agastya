@@ -9,7 +9,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any, Literal
 from urllib.parse import parse_qsl, quote, urlencode, urlparse, urlunparse
 
-import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
@@ -199,6 +198,8 @@ async def create_razorpay_payment_link(
             status_code=401,
             detail="Sign in required before starting checkout",
         )
+    if bkt.effectively_premium():
+        raise HTTPException(status_code=409, detail="Premium is already active on this account")
     billing_period = "annual" if body.billing_period == "lifetime" else body.billing_period
     plan_id = settings.razorpay_plan_for_period(billing_period)
     try:
@@ -316,13 +317,14 @@ async def _grant_razorpay_premium_from_intent(
         premium_expires_at=expires,
     )
     if supabase_user_id:
-        await session_repository.set_premium_by_user(
+        user_ok = await session_repository.set_premium_by_user(
             str(supabase_user_id),
             True,
             settings,
             premium_source="razorpay",
             premium_expires_at=expires,
         )
+        ok = ok or user_ok
 
     if not ok and not settings.supabase_enabled:
         # Local/dev without Supabase — still unlock in-memory session bucket.
@@ -396,16 +398,26 @@ async def confirm_razorpay_payment(
     if not intent:
         intent = await billing_intents.get_latest_intent_for_session(settings, body.session_id)
 
-    if not intent or str(intent.get("session_id") or "") != body.session_id:
+    session_user = bkt.meta.get("supabaseUserId")
+    if not intent and session_user:
+        # New device / reinstall: the paid subscription lives on an older session of this account.
+        intent = await billing_intents.get_latest_paid_subscription_intent(
+            settings, supabase_user_id=str(session_user), session_id=None
+        )
+    if not intent:
+        raise HTTPException(status_code=404, detail="Checkout intent not found")
+
+    intent_user = intent.get("supabase_user_id")
+    same_session = str(intent.get("session_id") or "") == body.session_id
+    same_user = bool(session_user and intent_user and str(session_user) == str(intent_user))
+    if not same_session and not same_user:
         raise HTTPException(status_code=404, detail="Checkout intent not found")
 
     intent_device = intent.get("device_install_id")
-    if intent_device and str(intent_device) != body.device_install_id:
+    if not same_user and intent_device and str(intent_device) != body.device_install_id:
         raise HTTPException(status_code=403, detail="Device mismatch for checkout intent")
 
     # Prefer the signed-in user on the live session when confirming.
-    session_user = bkt.meta.get("supabaseUserId")
-    intent_user = intent.get("supabase_user_id")
     if session_user and intent_user and str(session_user) != str(intent_user):
         raise HTTPException(status_code=403, detail="Checkout belongs to a different account")
     if session_user and not intent_user:
@@ -559,6 +571,10 @@ async def razorpay_subscription_checkout_page(
     cancel_url = str(intent.get("cancel_url") or success_url)
     if intent.get("status") == "paid":
         return _redirect_page(success_url, title="Premium is active", message="Returning to Agastya…")
+    if intent.get("status") in {"expired", "cancelled", "failed"}:
+        return _redirect_page(
+            cancel_url, title="This checkout has expired", message="Please start again from the app."
+        )
 
     origin = _public_api_origin(request, settings)
     callback_url = (
@@ -598,7 +614,13 @@ small{{display:block;margin-top:18px;color:#8f86a8;max-width:320px}}</style></he
 var cancelUrl = {cancel_js};
 var options = {options_js};
 options.modal = {{ ondismiss: function () {{ window.location.replace(cancelUrl); }} }};
-function openCheckout() {{ new Razorpay(options).open(); }}
+function openCheckout() {{
+  if (typeof Razorpay === "undefined") {{
+    alert("Could not load the payment page. Check your internet connection and try again.");
+    return;
+  }}
+  new Razorpay(options).open();
+}}
 document.getElementById("pay").onclick = openCheckout;
 document.getElementById("back").onclick = function (e) {{ e.preventDefault(); window.location.replace(cancelUrl); }};
 window.addEventListener("load", openCheckout);
@@ -680,36 +702,33 @@ async def cancel_razorpay_subscription(
         allow_rebind=False,
     )
     supabase_user_id = bkt.meta.get("supabaseUserId")
-    intent = await billing_intents.get_latest_paid_subscription_intent(
+    intents = await billing_intents.list_paid_subscription_intents(
         settings,
         supabase_user_id=str(supabase_user_id) if supabase_user_id else None,
         session_id=body.session_id,
     )
-    if not intent:
+    if not intents:
         raise HTTPException(status_code=404, detail="No active subscription found")
 
-    subscription_id = str(intent["razorpay_subscription_id"])
-    try:
-        sub = await razorpay_client.fetch_subscription(settings, subscription_id)
-        status = str(sub.get("status") or "")
-        if status not in razorpay_client.SUBSCRIPTION_ENDED_STATUSES:
-            try:
-                sub = await razorpay_client.cancel_subscription(
-                    settings, subscription_id, at_cycle_end=status != "created"
-                )
-            except httpx.HTTPStatusError as exc:
-                # 400 when cancellation is already scheduled for the cycle end.
-                if exc.response.status_code != 400:
-                    raise
-                logger.info("Razorpay cancel returned 400 (likely already scheduled): %s", exc)
-    except Exception as exc:
-        logger.warning("Razorpay cancel subscription failed: %s", exc)
-        raise HTTPException(status_code=502, detail="Could not cancel subscription") from exc
+    # Cancel every subscription on the account so a duplicate purchase cannot keep charging.
+    latest_sub: dict[str, Any] | None = None
+    access_until: datetime | None = None
+    for intent in intents:
+        subscription_id = str(intent["razorpay_subscription_id"])
+        try:
+            sub = await razorpay_client.cancel_subscription_if_active(settings, subscription_id)
+        except Exception as exc:
+            logger.warning("Razorpay cancel subscription %s failed: %s", subscription_id, exc)
+            raise HTTPException(status_code=502, detail="Could not cancel subscription") from exc
+        if latest_sub is None:
+            latest_sub = sub
+        until = razorpay_client.subscription_access_until(sub)
+        if until and (access_until is None or until > access_until):
+            access_until = until
 
-    access_until = razorpay_client.subscription_access_until(sub)
     return RazorpayCancelSubscriptionResponse(
         cancelled=True,
-        status=str(sub.get("status") or "unknown"),
+        status=str((latest_sub or {}).get("status") or "unknown"),
         access_until=access_until.isoformat() if access_until else None,
     )
 

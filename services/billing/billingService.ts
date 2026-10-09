@@ -28,7 +28,10 @@ export type BillingConfig = {
 
 export type CheckoutResult =
   | { ok: true; redirecting: true }
-  | { ok: false; reason: 'cancelled' | 'unavailable' | 'failed' | 'need_sign_in' };
+  | {
+      ok: false;
+      reason: 'cancelled' | 'unavailable' | 'failed' | 'need_sign_in' | 'already_premium';
+    };
 
 const CHECKOUT_PENDING_KEY = 'agastya.billing.checkoutPending';
 /** A browser checkout older than this is abandoned; stop auto-confirming it. */
@@ -142,8 +145,10 @@ export async function startRazorpayCheckout(options: {
 
   const { successUrl, cancelUrl } = checkoutReturnUrls();
 
+  let checkoutUrl: string;
+  let checkoutIntentId: string;
   try {
-    const { checkoutUrl, checkoutIntentId } = await createRazorpayPaymentLink({
+    ({ checkoutUrl, checkoutIntentId } = await createRazorpayPaymentLink({
       sessionId: snap.sessionId,
       deviceInstallId: snap.deviceInstallId,
       billingPeriod: options.period,
@@ -152,15 +157,23 @@ export async function startRazorpayCheckout(options: {
       externalTransactionToken: options.externalTransactionToken ?? undefined,
       administrativeArea: options.administrativeArea ?? undefined,
       platform: 'android',
-    });
-
-    await markCheckoutOpened(checkoutIntentId || null);
-
-    await Linking.openURL(checkoutUrl);
-    return { ok: true, redirecting: true };
-  } catch {
+    }));
+  } catch (err) {
+    const status = (err as { status?: number } | null)?.status;
+    if (status === 409) return { ok: false, reason: 'already_premium' };
+    if (status === 401) return { ok: false, reason: 'need_sign_in' };
     return { ok: false, reason: 'failed' };
   }
+
+  await markCheckoutOpened(checkoutIntentId || null);
+  try {
+    await Linking.openURL(checkoutUrl);
+  } catch {
+    // Browser never opened — do not leave the paywall waiting for a return that cannot happen.
+    clearLastCheckoutIntentId();
+    return { ok: false, reason: 'failed' };
+  }
+  return { ok: true, redirecting: true };
 }
 
 export type ConfirmRazorpayOptions = {

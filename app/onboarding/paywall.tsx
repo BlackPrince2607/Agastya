@@ -42,6 +42,8 @@ const TRUST_HIGHLIGHTS = [
 const MAX_RESUME_ATTEMPTS = 8;
 const RESUME_COOLDOWN_MS = 3500;
 const RESUME_POLL_MS = 4000;
+const QUIET_CHECK_WINDOW_MS = 15 * 60 * 1000;
+const QUIET_CHECK_COOLDOWN_MS = 10_000;
 
 export default function PaywallScreen() {
   const insets = useSafeAreaInsets();
@@ -83,6 +85,9 @@ export default function PaywallScreen() {
   /** Auto-confirm attempts after returning from browser checkout. */
   const resumeAttemptsRef = useRef(0);
   const lastResumeAtRef = useRef(0);
+  /** When the browser checkout was last opened — enables a quiet premium check on return. */
+  const checkoutOpenedAtRef = useRef(0);
+  const lastQuietCheckAtRef = useRef(0);
   const afterUnlockRef = useRef<() => void>(() => {});
   const confirmOptsRef = useRef({
     paymentLinkId: razorpay_payment_link_id,
@@ -239,6 +244,8 @@ export default function PaywallScreen() {
       setAwaitingCheckoutReturn(false);
       setBusy(false);
       setBusyLabel(null);
+      // Drop the param so a retry's browser return is confirmed normally.
+      router.setParams({ checkout: undefined, provider: undefined });
       Alert.alert('Checkout cancelled', 'No charge was completed. You can try again when ready.');
       return;
     }
@@ -257,6 +264,8 @@ export default function PaywallScreen() {
     const tryResumeAfterCheckout = async (bypassCooldown = false) => {
       if (enteredAfterUnlockRef.current) return;
       if (resumeInFlightRef.current) return;
+      // Still in the browser — an unpaid checkout there is in progress, not abandoned.
+      if (AppState.currentState === 'background') return;
       if (useSessionStore.getState().hasUnlockedPremium || hasPremiumAccess()) {
         afterUnlockRef.current();
         return;
@@ -302,9 +311,24 @@ export default function PaywallScreen() {
       }
     };
 
+    // User backed out of checkout but may have finished paying elsewhere (UPI app, another
+    // tab). Webhooks/callback grant server-side; pick that up when they come back.
+    const quietPremiumCheck = async () => {
+      if (enteredAfterUnlockRef.current || resumeInFlightRef.current) return;
+      const now = Date.now();
+      if (now - checkoutOpenedAtRef.current > QUIET_CHECK_WINDOW_MS) return;
+      if (now - lastQuietCheckAtRef.current < QUIET_CHECK_COOLDOWN_MS) return;
+      if (await isCheckoutReturnPending()) return;
+      lastQuietCheckAtRef.current = now;
+      const result = await checkPremiumStatus({ seed: mergedSeed });
+      if (result.ok || useSessionStore.getState().hasUnlockedPremium || hasPremiumAccess()) {
+        afterUnlockRef.current();
+      }
+    };
+
     const sub = AppState.addEventListener('change', (next) => {
       if (next === 'active') {
-        void tryResumeAfterCheckout(true);
+        void tryResumeAfterCheckout(true).then(() => quietPremiumCheck());
       }
     });
 
@@ -378,6 +402,8 @@ export default function PaywallScreen() {
         enteredAfterUnlockRef.current = false;
         resumeAttemptsRef.current = 0;
         lastResumeAtRef.current = 0;
+        checkoutOpenedAtRef.current = Date.now();
+        if (checkout) router.setParams({ checkout: undefined, provider: undefined });
         setAwaitingCheckoutReturn(true);
         setBusyLabel('Complete payment in browser…');
         setBusy(true);

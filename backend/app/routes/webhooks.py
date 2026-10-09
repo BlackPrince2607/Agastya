@@ -234,6 +234,21 @@ async def _handle_razorpay_subscription(
                 notify=event_type == "subscription.activated",
             )
         else:
+            latest = await billing_intents.get_latest_paid_subscription_intent(
+                settings,
+                supabase_user_id=str(supabase_user_id) if supabase_user_id else None,
+                session_id=str(session_id) if session_id else None,
+            )
+            if latest and latest.get("razorpay_subscription_id") != subscription_id:
+                # User re-subscribed; the newer subscription controls access.
+                logger.info(
+                    "Razorpay %s sub=%s superseded by %s — ignored",
+                    event_type,
+                    subscription_id,
+                    latest.get("razorpay_subscription_id"),
+                )
+                await billing_idempotency.complete_webhook_events("razorpay", claimed, settings)
+                return {"status": "ignored"}
             access_until = razorpay_client.subscription_access_until(sub_entity)
             now = datetime.now(timezone.utc)
             if event_type == "subscription.cancelled" and access_until and access_until > now:

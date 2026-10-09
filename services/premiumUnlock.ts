@@ -147,7 +147,10 @@ export function isRazorpayDirectCheckoutEnabled(): boolean {
 async function startDirectRazorpayCheckout(seed: string | undefined): Promise<UnlockResult> {
   const period = useSessionStore.getState().billingPeriod;
   const rz = await startRazorpayCheckout({ period });
-  if (!rz.ok) return mapCheckoutFailure(rz.reason);
+  if (!rz.ok) {
+    if (rz.reason === 'already_premium') return finalizeAfterEntitlement(seed, 'restore', false);
+    return mapCheckoutFailure(rz.reason);
+  }
   if (rz.redirecting) {
     return { ok: true, source: 'razorpay' };
   }
@@ -155,7 +158,7 @@ async function startDirectRazorpayCheckout(seed: string | undefined): Promise<Un
 }
 
 function mapCheckoutFailure(
-  reason: 'cancelled' | 'unavailable' | 'failed' | 'need_sign_in',
+  reason: 'cancelled' | 'unavailable' | 'failed' | 'need_sign_in' | 'already_premium',
 ): UnlockResult {
   if (reason === 'need_sign_in') return { ok: false, reason: 'need_sign_in' };
   if (reason === 'cancelled') return { ok: false, reason: 'cancelled' };
@@ -215,7 +218,10 @@ export async function unlockPremium(options: { seed?: string }): Promise<UnlockR
       externalTransactionToken: choice.externalTransactionToken,
       administrativeArea: area,
     });
-    if (!rz.ok) return mapCheckoutFailure(rz.reason);
+    if (!rz.ok) {
+      if (rz.reason === 'already_premium') return finalizeAfterEntitlement(seed, 'restore', false);
+      return mapCheckoutFailure(rz.reason);
+    }
     if (rz.redirecting) {
       return { ok: true, source: 'razorpay' };
     }

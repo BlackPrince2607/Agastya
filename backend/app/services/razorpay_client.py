@@ -217,6 +217,26 @@ async def cancel_subscription(
     )
 
 
+async def cancel_subscription_if_active(
+    settings: Settings, subscription_id: str, *, at_cycle_end: bool = True
+) -> dict[str, Any]:
+    """Cancel unless already ended. Never-paid ("created") subscriptions are cancelled immediately."""
+    sub = await fetch_subscription(settings, subscription_id)
+    status = str(sub.get("status") or "")
+    if status in SUBSCRIPTION_ENDED_STATUSES:
+        return sub
+    try:
+        return await cancel_subscription(
+            settings, subscription_id, at_cycle_end=at_cycle_end and status != "created"
+        )
+    except httpx.HTTPStatusError as exc:
+        # 400 when cancellation is already scheduled for the cycle end.
+        if exc.response.status_code != 400:
+            raise
+        logger.info("Razorpay cancel %s returned 400 (likely already scheduled)", subscription_id)
+        return await fetch_subscription(settings, subscription_id)
+
+
 def verify_subscription_signature(
     *, key_secret: str, payment_id: str, subscription_id: str, signature: str | None
 ) -> bool:
