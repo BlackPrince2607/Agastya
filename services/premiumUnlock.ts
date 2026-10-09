@@ -293,6 +293,10 @@ export async function finalizeRazorpayCheckout(
   if (confirmed.ok) {
     return grantPremium();
   }
+  if (confirmed.status === 'not_found') {
+    if (await syncPremiumFromServer()) return grantPremium();
+    return { ok: false, reason: 'not_entitled' };
+  }
 
   // Fallback: webhook may still be catching up — retry confirm + bootstrap.
   // Keep each call shorter; paywall polls multiple times after browser return.
@@ -306,7 +310,7 @@ export async function finalizeRazorpayCheckout(
       break;
     }
     entitled = await syncPremiumFromServer();
-    if (entitled) break;
+    if (entitled || retry.status === 'not_found') break;
   }
   if (!entitled) {
     // Already premium locally (e.g. race with another confirm) — still succeed.

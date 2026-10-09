@@ -285,10 +285,13 @@ export default function PaywallScreen() {
             !useSessionStore.getState().hasUnlockedPremium &&
             resumeAttemptsRef.current >= MAX_RESUME_ATTEMPTS,
         });
-        if (!unlocked && resumeAttemptsRef.current < MAX_RESUME_ATTEMPTS) {
+        const stillPending = !unlocked && (await isCheckoutReturnPending());
+        if (stillPending && resumeAttemptsRef.current < MAX_RESUME_ATTEMPTS) {
           setBusyLabel('Confirming payment...');
           setBusy(true);
         } else if (!unlocked) {
+          // Nothing left to confirm (or we gave up) — re-enable Unlock so the user can pay again.
+          setAwaitingCheckoutReturn(false);
           setBusy(false);
           setBusyLabel(null);
         }

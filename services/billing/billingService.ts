@@ -31,6 +31,8 @@ export type CheckoutResult =
   | { ok: false; reason: 'cancelled' | 'unavailable' | 'failed' | 'need_sign_in' };
 
 const CHECKOUT_PENDING_KEY = 'agastya.billing.checkoutPending';
+/** A browser checkout older than this is abandoned; stop auto-confirming it. */
+const CHECKOUT_PENDING_TTL_MS = 60 * 60 * 1000;
 
 let cachedConfig: { at: number; config: BillingConfig | null } | null = null;
 
@@ -54,7 +56,10 @@ async function markCheckoutOpened(intentId: string | null): Promise<void> {
   lastCheckoutIntentId = intentId;
   checkoutReturnPending = true;
   try {
-    await persistentStorage.setItem(CHECKOUT_PENDING_KEY, intentId || '1');
+    await persistentStorage.setItem(
+      CHECKOUT_PENDING_KEY,
+      JSON.stringify({ id: intentId, at: Date.now() }),
+    );
   } catch {
     /* ignore storage failures */
   }
@@ -65,10 +70,19 @@ async function hydrateCheckoutPending(): Promise<void> {
   try {
     const stored = await persistentStorage.getItem(CHECKOUT_PENDING_KEY);
     if (!stored) return;
-    checkoutReturnPending = true;
-    if (stored !== '1') {
-      lastCheckoutIntentId = stored;
+    let parsed: { id?: string | null; at?: number } | null = null;
+    try {
+      parsed = JSON.parse(stored);
+    } catch {
+      parsed = null;
     }
+    // Legacy plain-string entries carry no timestamp — treat them as abandoned.
+    if (!parsed || typeof parsed.at !== 'number' || Date.now() - parsed.at > CHECKOUT_PENDING_TTL_MS) {
+      await persistentStorage.removeItem(CHECKOUT_PENDING_KEY);
+      return;
+    }
+    checkoutReturnPending = true;
+    lastCheckoutIntentId = parsed.id || null;
   } catch {
     /* ignore */
   }
@@ -186,7 +200,12 @@ export async function confirmRazorpayCheckout(
       return { ok: true };
     }
     return { ok: false, status: result.status };
-  } catch {
+  } catch (err) {
+    if ((err as { status?: number } | null)?.status === 404) {
+      // Server has no checkout for this session — stop waiting so the user can pay again.
+      clearLastCheckoutIntentId();
+      return { ok: false, status: 'not_found' };
+    }
     return { ok: false };
   }
 }
