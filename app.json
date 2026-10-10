@@ -33,7 +33,7 @@
     },
     "android": {
       "package": "com.agastya.app",
-      "versionCode": 18,
+      "versionCode": 19,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
